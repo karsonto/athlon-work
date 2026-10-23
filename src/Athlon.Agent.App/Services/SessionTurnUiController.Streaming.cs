@@ -88,10 +88,12 @@ public sealed partial class SessionTurnUiController
     /// then creates a second card that repeats those files.
     /// </summary>
     private bool HasLiveTurnSurface =>
-        _modifiedFilesTracker.HasCurrentTurnPaths
-        || _turnActivityTracker.HasSegmentContent
-        || _streaming.ActiveAssistantBubble is not null
-        || _streaming.ToolBubblesByIndex.Count > 0;
+        _turnLifecycle.IsLive
+        && (
+            _modifiedFilesTracker.HasCurrentTurnPaths
+            || _turnActivityTracker.HasSegmentContent
+            || _streaming.ActiveAssistantBubble is not null
+            || _streaming.ToolBubblesByIndex.Count > 0);
 
     private void DispatchIncrementalChatItem(ChatMessageViewModel message)
     {

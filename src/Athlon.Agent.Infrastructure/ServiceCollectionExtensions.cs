@@ -151,7 +151,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPlanArtifactStore, Athlon.Agent.Infrastructure.Plan.FilePlanArtifactStore>();
         services.AddSingleton<IPlanTurnOrchestrator, PlanTurnOrchestrator>();
         services.AddSingleton<IUserQuestionState, UserQuestionState>();
-        services.AddSingleton<AgentTurnForceCompactBridge>();
+        services.AddSingleton<AgentTurnForceCompactBridge>(sp =>
+            new AgentTurnForceCompactBridge(() => sp.GetRequiredService<IAgentRuntime>()));
         services.AddSingleton<IAgentTurnForceCompact>(sp => sp.GetRequiredService<AgentTurnForceCompactBridge>());
         services.AddSingleton<ToolInvocationPipeline>(sp =>
         {
@@ -289,7 +290,11 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IPlanPhaseAccessor>(),
                 sp.GetRequiredService<WorkspaceGuard>(),
                 sp.GetRequiredService<Athlon.Agent.Core.Browser.IBrowserWorkspaceState>(),
-                sp.GetRequiredService<Athlon.Agent.Core.Terminal.ITerminalWorkspaceState>())));
+                sp.GetRequiredService<Athlon.Agent.Core.Terminal.ITerminalWorkspaceState>(),
+                sp.GetRequiredService<Athlon.Agent.Core.Tools.IToolAvailabilityContextFactory>(),
+                sp.GetRequiredService<Athlon.Agent.Infrastructure.Tools.McpAdvertisementPolicy>(),
+                sp.GetService<IRuntimeDiagnosticEventSink>(),
+                sp.GetService<IAppLogger>())));
         services.AddSingleton<SubAgentSystemPromptOrchestrator>();
         services.AddSingleton<ISubAgentSessionStore, FileSubAgentSessionStore>();
         services.AddSingleton<ISubAgentRegistry, FileSubAgentRegistry>();

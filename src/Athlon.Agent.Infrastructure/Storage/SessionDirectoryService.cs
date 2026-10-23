@@ -48,6 +48,11 @@ public sealed class SessionDirectoryService(IAppPathProvider paths, IAgentRunCon
             runContextAccessor.Current?.Kind ?? AgentRunKind.Root);
     }
 
-    public void TryForgetEnsuredDir(string sessionId) =>
+    public void TryForgetEnsuredDir(string sessionId)
+    {
+        // Ensure caches the effective session directory (may be nested for sub-agents). Forget that
+        // key; also drop the top-level layout key in case Ensure ran under a different run context.
+        _ensuredSessionDirs.TryRemove(GetSessionDirectory(sessionId), out _);
         _ensuredSessionDirs.TryRemove(Path.Combine(paths.SessionsPath, sessionId), out _);
+    }
 }

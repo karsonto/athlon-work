@@ -212,10 +212,9 @@ public sealed partial class SessionTurnUiController
 
         // Idle / history hydrate: replay owns the per-turn cards. Keep live paths only while a turn
         // is still in flight so the mid-turn re-publish can rewrite the replayed entry in place.
-        var liveTurnActive = preserveActiveTurn
-            || _streaming.ActiveAssistantBubble is not null
-            || _streaming.ToolBubblesByIndex.Count > 0
-            || _turnActivityTracker.HasSegmentContent;
+        // Align with HasLiveTurnSurface (incl. files paths + lifecycle Phase) so mid-turn rebuild
+        // and reload gates share one definition of "live".
+        var liveTurnActive = preserveActiveTurn || HasLiveTurnSurface;
         if (!liveTurnActive)
         {
             _modifiedFilesTracker.Clear();
