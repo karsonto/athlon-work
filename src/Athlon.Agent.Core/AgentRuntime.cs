@@ -10,39 +10,27 @@ using Athlon.Agent.Core.RuntimeDiagnostics;
 namespace Athlon.Agent.Core;
 
 public sealed partial class AgentRuntime(
-    IAgentModelClient modelClient,
     IFileStorageService storage,
     IToolRouter toolRouter,
     ISystemPromptOrchestrator systemPromptOrchestrator,
-    IToolResultEvictor toolResultEvictor,
-    ITokenEstimatorCalibrator tokenEstimatorCalibrator,
     ISessionUsageAccumulator sessionUsageAccumulator,
-    IPromptPressureStore promptPressureStore,
     IActiveAgentSessionContext activeSessionContext,
     IAgentRunContextAccessor runContextAccessor,
     AgentTurnMiddlewarePipeline turnPipeline,
     CompactionTurnMiddleware compactionMiddleware,
     AppSettings settings,
     IAppLogger logger,
-    IRuntimeDiagnosticEventSink runtimeDiagnosticEventSink,
-    IEventManager? eventManager = null,
-    IConversationTranscriptWriter? transcriptWriter = null) : IAgentRuntime
+    IConversationTranscriptWriter transcriptWriter,
+    ToolInvocationPipeline toolPipeline,
+    AgentTurnCoordinator turnCoordinator,
+    IEventManager? eventManager = null) : IAgentRuntime, IAgentTurnForceCompact
 {
     private readonly IAppLogger _logger = logger.ForContext("AgentRuntime");
     private readonly IEventManager _eventManager = eventManager ?? NullEventManager.Instance;
-    private readonly ToolInvocationPipeline _toolPipeline = new(
-        storage,
-        toolResultEvictor,
-        () => runContextAccessor.Current?.ToolRouter ?? toolRouter,
-        runContextAccessor,
-        () => settings.ToolPermissions.ApprovalEnabled,
-        logger,
-        eventManager,
-        runtimeDiagnosticEventSink);
-    private readonly IConversationTranscriptWriter _transcript =
-        transcriptWriter ?? new ImmediateConversationTranscriptWriter(storage);
+    private readonly ToolInvocationPipeline _toolPipeline = toolPipeline;
+    private readonly IConversationTranscriptWriter _transcript = transcriptWriter;
+    private readonly AgentTurnCoordinator _turnCoordinator = turnCoordinator;
     private TrainingData.ITrainingDataCollector? _trainingDataCollector;
-    private AgentTurnCoordinator? _turnCoordinator;
 
     private TrainingData.ITrainingDataCollector? ResolveTrainingDataCollector()
     {
@@ -55,18 +43,8 @@ public sealed partial class AgentRuntime(
         _trainingDataCollector = new TrainingData.TrainingSampleStore(settings.TrainingData, logger);
         return _trainingDataCollector;
     }
-    private AgentTurnCoordinator TurnCoordinator => _turnCoordinator ??= new AgentTurnCoordinator(
-        modelClient,
-        tokenEstimatorCalibrator,
-        sessionUsageAccumulator,
-        promptPressureStore,
-        storage,
-        settings,
-        runContextAccessor,
-        RunForceCompactPreCompletionAsync,
-        logger,
-        _eventManager,
-        runtimeDiagnosticEventSink);
+
+    private AgentTurnCoordinator TurnCoordinator => _turnCoordinator;
 
     public async Task<AgentSession> SendAsync(
         AgentSession session,
@@ -426,6 +404,25 @@ public sealed partial class AgentRuntime(
             await onSessionUpdated(session).ConfigureAwait(false);
         }
     }
+
+    Task<(AgentSession Session, string? TokenBudgetNotice)> IAgentTurnForceCompact.RunAsync(
+        AgentSession session,
+        AgentTurnCallbacks? callbacks,
+        PreCompletionOptions options,
+        string environmentPrompt,
+        string? runtimeContext,
+        IReadOnlyList<ToolDefinition> tools,
+        ContextPressureLevel pressure,
+        CancellationToken cancellationToken) =>
+        RunForceCompactPreCompletionAsync(
+            session,
+            callbacks,
+            options,
+            environmentPrompt,
+            runtimeContext,
+            tools,
+            pressure,
+            cancellationToken);
 
     private async Task<(AgentSession Session, string? TokenBudgetNotice)> RunForceCompactPreCompletionAsync(
         AgentSession session,

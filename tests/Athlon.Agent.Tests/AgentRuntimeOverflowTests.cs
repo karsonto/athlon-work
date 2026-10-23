@@ -135,22 +135,19 @@ public sealed class AgentRuntimeOverflowTests
         var logger = new NoOpLogger();
         var (turnPipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
             pipeline, storage, new TokenEstimatorCalibrator(settings), settings, logger);
-        return new AgentRuntime(
+        return AgentRuntimeTestFactory.CreateRuntimeFromMiddleware(
             modelClient,
             storage,
             new NoOpToolRouter(),
             PromptTestHelpers.CreateStaticOrchestrator(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
-            new SessionUsageAccumulator(),
-            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             turnPipeline,
             compaction,
             settings,
-            logger,
-            new NullRuntimeDiagnosticEventSink());
+            logger);
     }
 
     private sealed class OverflowThenSuccessModelClient : IAgentModelClient

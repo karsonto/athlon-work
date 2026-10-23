@@ -20,22 +20,19 @@ public sealed class AgentRuntimeToolFailureTests
         var logger = new NoOpLogger();
         var (pipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
             new NoOpPreCompletionPipeline(), storage, new TokenEstimatorCalibrator(settings), settings, logger);
-        var runtime = new AgentRuntime(
+        var runtime = AgentRuntimeTestFactory.CreateRuntimeFromMiddleware(
             modelClient,
             storage,
             new ThrowingToolRouter(),
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
-            new SessionUsageAccumulator(),
-            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             pipeline,
             compaction,
             settings,
-            logger,
-            new NullRuntimeDiagnosticEventSink());
+            logger);
 
         var session = AgentSession.Create("tool-failure-test");
         var result = await runtime.SendAsync(session, "run tool", null);

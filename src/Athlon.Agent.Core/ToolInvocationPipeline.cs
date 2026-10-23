@@ -9,9 +9,9 @@ using Athlon.Agent.Core.RuntimeDiagnostics;
 
 namespace Athlon.Agent.Core;
 
-internal sealed record ToolInvocationOutcome(ToolResult Result, long ElapsedMilliseconds);
+public sealed record ToolInvocationOutcome(ToolResult Result, long ElapsedMilliseconds);
 
-internal sealed class ToolInvocationPipeline(
+public sealed class ToolInvocationPipeline(
     IFileStorageService storage,
     IToolResultEvictor toolResultEvictor,
     Func<IToolRouter> resolveToolRouter,

@@ -312,22 +312,19 @@ public sealed class SessionDiskLogTests
             new TokenEstimatorCalibrator(settings),
             settings,
             runtimeLogger);
-        var runtime = new AgentRuntime(
+        var runtime = AgentRuntimeTestFactory.CreateRuntimeFromMiddleware(
             modelClient,
             storage,
             new EmptyToolRouter(),
             PromptTestHelpers.CreateStaticOrchestrator(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
-            new SessionUsageAccumulator(),
-            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             turnPipeline,
             compaction,
             settings,
-            runtimeLogger,
-            new NullRuntimeDiagnosticEventSink());
+            runtimeLogger);
 
         var session = AgentSession.Create("cancel-persist");
 

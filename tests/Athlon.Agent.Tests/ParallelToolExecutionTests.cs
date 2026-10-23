@@ -450,22 +450,19 @@ public sealed class ParallelToolExecutionTests
             new TokenEstimatorCalibrator(settings),
             settings,
             logger);
-        return new AgentRuntime(
+        return AgentRuntimeTestFactory.CreateRuntimeFromMiddleware(
             modelClient,
             storage,
             toolRouter,
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
-            new SessionUsageAccumulator(),
-            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             pipeline,
             compaction,
             settings,
-            logger,
-            new NullRuntimeDiagnosticEventSink());
+            logger);
     }
 
     private static string FileReadToolName() =>

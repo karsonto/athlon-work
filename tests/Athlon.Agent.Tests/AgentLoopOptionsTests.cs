@@ -20,22 +20,19 @@ public sealed class AgentLoopOptionsTests
             new NoOpTokenEstimator(),
             settings,
             logger);
-        var runtime = new AgentRuntime(
+        var runtime = AgentRuntimeTestFactory.CreateRuntimeFromMiddleware(
             model,
             storage,
             toolRouter,
             new LoopTestPrompt(),
             new NoOpToolResultEvictor(),
             new NoOpTokenEstimator(),
-            new SessionUsageAccumulator(),
-            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             pipeline,
             compaction,
             settings,
-            logger,
-            new NullRuntimeDiagnosticEventSink());
+            logger);
 
         var session = AgentSession.Create("loop-test");
         session = await runtime.SendAsync(

@@ -11,7 +11,7 @@ using Athlon.Agent.Core.RuntimeDiagnostics;
 
 namespace Athlon.Agent.Core;
 
-internal sealed class AgentTurnCoordinator(
+public sealed class AgentTurnCoordinator(
     IAgentModelClient modelClient,
     ITokenEstimatorCalibrator tokenEstimatorCalibrator,
     ISessionUsageAccumulator sessionUsageAccumulator,
@@ -19,7 +19,7 @@ internal sealed class AgentTurnCoordinator(
     IFileStorageService storage,
     AppSettings settings,
     IAgentRunContextAccessor runContextAccessor,
-    Func<AgentSession, AgentTurnCallbacks?, PreCompletionOptions, string, string?, IReadOnlyList<ToolDefinition>, ContextPressureLevel, CancellationToken, Task<(AgentSession Session, string? TokenBudgetNotice)>> runPreCompletionPipelineAsync,
+    IAgentTurnForceCompact forceCompact,
     IAppLogger logger,
     IEventManager? eventManager = null,
     IRuntimeDiagnosticEventSink runtimeDiagnosticEventSink = null!)
@@ -89,7 +89,7 @@ internal sealed class AgentTurnCoordinator(
                     ["failed_tokens"] = failedTokens
                 });
 
-            var compacted = await runPreCompletionPipelineAsync(
+            var compacted = await forceCompact.RunAsync(
                 session,
                 callbacks,
                 PreCompletionOptions.ForceCompact,

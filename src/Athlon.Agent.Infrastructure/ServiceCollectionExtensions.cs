@@ -151,7 +151,35 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPlanArtifactStore, Athlon.Agent.Infrastructure.Plan.FilePlanArtifactStore>();
         services.AddSingleton<IPlanTurnOrchestrator, PlanTurnOrchestrator>();
         services.AddSingleton<IUserQuestionState, UserQuestionState>();
-        services.AddSingleton<IAgentRuntime, AgentRuntime>();
+        services.AddSingleton<AgentTurnForceCompactBridge>();
+        services.AddSingleton<IAgentTurnForceCompact>(sp => sp.GetRequiredService<AgentTurnForceCompactBridge>());
+        services.AddSingleton<ToolInvocationPipeline>(sp =>
+        {
+            var storage = sp.GetRequiredService<IFileStorageService>();
+            var toolResultEvictor = sp.GetRequiredService<IToolResultEvictor>();
+            var toolRouter = sp.GetRequiredService<IToolRouter>();
+            var runContextAccessor = sp.GetRequiredService<IAgentRunContextAccessor>();
+            var settings = sp.GetRequiredService<AppSettings>();
+            var logger = sp.GetRequiredService<IAppLogger>();
+            return new ToolInvocationPipeline(
+                storage,
+                toolResultEvictor,
+                () => runContextAccessor.Current?.ToolRouter ?? toolRouter,
+                runContextAccessor,
+                () => settings.ToolPermissions.ApprovalEnabled,
+                logger,
+                sp.GetService<IEventManager>(),
+                sp.GetRequiredService<IRuntimeDiagnosticEventSink>());
+        });
+        services.AddSingleton<AgentTurnCoordinator>();
+        services.AddSingleton<AgentRuntime>(sp =>
+        {
+            var bridge = sp.GetRequiredService<AgentTurnForceCompactBridge>();
+            var runtime = ActivatorUtilities.CreateInstance<AgentRuntime>(sp);
+            bridge.Attach(runtime);
+            return runtime;
+        });
+        services.AddSingleton<IAgentRuntime>(sp => sp.GetRequiredService<AgentRuntime>());
         services.AddSingleton<IImageAttachmentReader, ImageAttachmentReader>();
         services.AddSingleton<IImageAttachmentStore, ImageAttachmentStore>();
         services.AddSingleton<IChatDocumentAttachmentExtractor, ChatDocumentAttachmentExtractor>();

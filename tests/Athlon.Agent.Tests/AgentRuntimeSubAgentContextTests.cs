@@ -25,22 +25,19 @@ public sealed class AgentRuntimeSubAgentContextTests
             settings,
             logger);
 
-        var runtime = new AgentRuntime(
+        var runtime = AgentRuntimeTestFactory.CreateRuntimeFromMiddleware(
             new FixedModelClient("done"),
             storage,
             rootRouter,
             rootPrompt,
             new NoOpToolResultEvictor(),
             new NoOpTokenEstimator(),
-            new SessionUsageAccumulator(),
-            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             accessor,
             pipeline,
             compaction,
             settings,
-            logger,
-            new NullRuntimeDiagnosticEventSink());
+            logger);
 
         var session = AgentSession.Create("sub-1");
         var child = AgentRunContext.CreateRoot(
