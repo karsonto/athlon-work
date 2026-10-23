@@ -75,11 +75,35 @@ public sealed partial class ConversationCompactor(
             return new ConversationCompactResult(session, false);
         }
 
+        var pressure = request.Plan?.Pressure ?? ContextPressureLevel.Normal;
+        if (request.RuntimeContext?.Budget is { } budgetSnap
+            && ContextPressureEvaluator.IsFixedOverheadDominating(budgetSnap, cfg))
+        {
+            CompactionDecisionLog.Write(
+                _logger,
+                _runtimeDiagnosticEventSink,
+                session.Id,
+                outcome: "skipped",
+                reason: "fixed_overhead_dominates",
+                pressure: pressure,
+                tokensBefore: estimatedTokens,
+                keepBudget: request.Plan?.KeepTokenBudget);
+            return new ConversationCompactResult(session, false);
+        }
+
         // The semantic planner is the only path that can advance the cutoff past the user message
         // that opened the current turn, so it is used whenever the caller supplied a keep budget or
         // semantic cutoff is on. Without it, only the legacy message/token windows apply.
         var keepTokenBudget = request.Plan?.KeepTokenBudget;
-        var cutPlan = ResolveCutPlan(conversation, cfg, estimatedTokens, keepTokenBudget);
+        var summaryMaxHint = ResolveSummaryMaxTokens(cfg, pressure, request.Force);
+        var cutPlan = ResolveCutPlan(
+            conversation,
+            cfg,
+            estimatedTokens,
+            keepTokenBudget,
+            pressure,
+            summaryMaxHint);
+        var degraded = false;
         if (cutPlan.SummarizedEnd <= 0 && isManualCompact)
         {
             cutPlan = SemanticCutoffPlanner.CreatePlanForCutoff(
@@ -100,10 +124,67 @@ public sealed partial class ConversationCompactor(
                 conversation.Count - keepCount);
         }
 
+        if (cutPlan.SummarizedEnd <= 0
+            && CompactionCutoffDegrader.ShouldDegrade(cfg, pressure, request.Force))
+        {
+            var degradedResult = CompactionCutoffDegrader.TryDegrade(conversation, cfg);
+            if (degradedResult is { } d)
+            {
+                cutPlan = d.Plan;
+                conversation = d.Conversation.ToList();
+                degraded = true;
+                CompactionDecisionLog.Write(
+                    _logger,
+                    _runtimeDiagnosticEventSink,
+                    session.Id,
+                    outcome: "degraded",
+                    reason: "cutoff_degraded",
+                    pressure: pressure,
+                    cutoff: cutPlan.SummarizedEnd,
+                    keepBudget: keepTokenBudget);
+            }
+        }
+
+        // Critical/Overflow: iterate cut planning until projected payload fits keep budget (single LLM call later).
+        if (cutPlan.SummarizedEnd > 0
+            && keepTokenBudget is > 0
+            && pressure is ContextPressureLevel.Critical or ContextPressureLevel.Overflow)
+        {
+            var iterations = Math.Max(1, cfg.MaxCutPlanIterations);
+            for (var i = 0; i < iterations; i++)
+            {
+                var advanced = SemanticCutoffPlanner.ShrinkCutoffToKeepBudget(
+                    conversation,
+                    cfg,
+                    cutPlan.SummarizedEnd,
+                    keepTokenBudget.Value,
+                    summaryMaxHint,
+                    maxIterations: 1);
+                if (advanced == cutPlan.SummarizedEnd)
+                {
+                    break;
+                }
+
+                cutPlan = SemanticCutoffPlanner.CreatePlanForCutoff(conversation, advanced);
+                if (cutPlan.IsEmpty)
+                {
+                    break;
+                }
+            }
+        }
+
         var cutoff = cutPlan.SummarizedEnd;
         if (cutoff <= 0)
         {
-            _logger.Debug("Compaction triggered but safe cutoff is 0 — skipping");
+            CompactionDecisionLog.Write(
+                _logger,
+                _runtimeDiagnosticEventSink,
+                session.Id,
+                outcome: "skipped",
+                reason: "cutoff_zero",
+                pressure: pressure,
+                tokensBefore: estimatedTokens,
+                keepBudget: keepTokenBudget);
             return new ConversationCompactResult(session, false);
         }
 
@@ -117,31 +198,44 @@ public sealed partial class ConversationCompactor(
         var reattachedUser = cutPlan.NeedsUserReattach
             ? conversation[cutPlan.UserAnchorIndex!.Value]
             : null;
+        if (reattachedUser is not null
+            && pressure == ContextPressureLevel.Overflow
+            && keepTokenBudget is > 0)
+        {
+            reattachedUser = SemanticCutoffPlanner.TruncateUserForOverflowReattach(reattachedUser, cfg);
+        }
+
         var originalCount = conversation.Count;
         var tokensBefore = estimatedTokens;
+        var projectedAfter = EstimateProjectedAfterTokens(
+            tail,
+            reattachedPlan,
+            reattachedUser,
+            cfg,
+            summaryMaxHint);
 
-        // Idle guard: compaction must not spend a summary round trip when the projected payload
-        // barely shrinks. This is checked on the projected post-state (summary upper bound + tail)
-        // so a no-op pass costs nothing. Manual compaction is explicit user intent, so it is exempt,
-        // and non-dynamic mode keeps its historical behaviour.
+        // Idle guard: skip no-op LLM calls. Overflow/Force are exempt. Critical may skip only after
+        // cut iteration when savings still miss MinCompactionSavingsTokens.
+        var exemptSavings = request.Force || pressure == ContextPressureLevel.Overflow;
         if (cfg.DynamicCompaction.Enabled
             && !isManualCompact
-            && !request.Force
+            && !exemptSavings
             && cfg.MinCompactionSavingsTokens > 0)
         {
-            var projectedAfter = EstimateProjectedAfterTokens(
-                tail,
-                reattachedPlan,
-                reattachedUser,
-                cfg,
-                ResolveSummaryMaxTokens(cfg, request.Plan?.Pressure, request.Force));
             if (tokensBefore - projectedAfter < cfg.MinCompactionSavingsTokens)
             {
-                _logger.Debug(
-                    "Skipped conversation compact for session {SessionId}: projected savings {Savings} < {Minimum}",
+                CompactionDecisionLog.Write(
+                    _logger,
+                    _runtimeDiagnosticEventSink,
                     session.Id,
-                    tokensBefore - projectedAfter,
-                    cfg.MinCompactionSavingsTokens);
+                    outcome: "skipped",
+                    reason: "savings_or_budget_skip",
+                    pressure: pressure,
+                    cutoff: cutoff,
+                    tailMessages: tail.Count,
+                    tokensBefore: tokensBefore,
+                    projectedAfter: projectedAfter,
+                    keepBudget: keepTokenBudget);
                 return new ConversationCompactResult(session, false);
             }
         }
@@ -190,31 +284,19 @@ public sealed partial class ConversationCompactor(
             if (string.IsNullOrWhiteSpace(summary))
             {
                 _logger.Warning(
-                    "Summarization returned empty content for session {SessionId}; aborting compaction",
+                    "Summarization returned empty content for session {SessionId}",
                     session.Id);
-                var context = _runContextAccessor.Current;
-                var evt = new RuntimeDiagnosticEvent(
-                    eventId: "",
-                    ts: default,
-                    sequence: 0,
-                    sessionId: session.Id,
-                    runId: context?.RunId,
-                    turnId: null,
-                    attemptId: summaryAttemptId,
-                    parentAttemptId: null,
-                    toolCallId: null,
-                    messageId: null,
-                    component: RuntimeDiagnosticComponent.Compaction,
-                    phase: RuntimeDiagnosticPhase.Persist,
-                    eventType: "compaction.summary_failed",
-                    severity: RuntimeDiagnosticSeverity.Error,
-                    errorCode: RuntimeDiagnosticErrorCodes.CompactionSummaryFailed,
-                    message: "Empty summary");
-                if (_runtimeDiagnosticEventSink is { } sink)
+                if (!TryBuildTemplateSummary(
+                        session.Id,
+                        prefix,
+                        cfg,
+                        pressure,
+                        request.Force,
+                        mustPreserve,
+                        out summary))
                 {
-                    await sink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
+                    return new ConversationCompactResult(session, false);
                 }
-                return new ConversationCompactResult(session, false);
             }
         }
         catch (OperationCanceledException)
@@ -240,7 +322,7 @@ public sealed partial class ConversationCompactor(
                     promptTokens, 0, "failure",
                     ex.GetType().Name, summaryStopwatch.ElapsedMilliseconds),
                 CancellationToken.None).ConfigureAwait(false);
-            _logger.Error(ex, "Summarization LLM call failed for session {SessionId}; aborting compaction", session.Id);
+            _logger.Error(ex, "Summarization LLM call failed for session {SessionId}", session.Id);
 
             var evt = new RuntimeDiagnosticEvent(
                 eventId: "",
@@ -263,7 +345,18 @@ public sealed partial class ConversationCompactor(
             {
                 await sink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
             }
-            return new ConversationCompactResult(session, false);
+
+            if (!TryBuildTemplateSummary(
+                    session.Id,
+                    prefix,
+                    cfg,
+                    pressure,
+                    request.Force,
+                    mustPreserve,
+                    out summary!))
+            {
+                return new ConversationCompactResult(session, false);
+            }
         }
 
         var summaryMessage = SummaryMessageBuilder.CreateSummaryPlaceholder(
@@ -284,7 +377,6 @@ public sealed partial class ConversationCompactor(
             layers.Insert(0, CompactionLayer.ToolResultEviction);
         }
 
-        var pressure = request.Plan?.Pressure;
         var utilization = request.RuntimeContext?.Budget.TotalUtilization;
 
         if (request.EmitAudit)
@@ -368,8 +460,55 @@ public sealed partial class ConversationCompactor(
             request.Kind,
             request.Force);
 
+        CompactionDecisionLog.Write(
+            _logger,
+            _runtimeDiagnosticEventSink,
+            session.Id,
+            outcome: degraded ? "degraded" : "compacted",
+            reason: degraded ? "cutoff_degraded" : "ok",
+            pressure: pressure,
+            cutoff: cutoff,
+            tailMessages: tail.Count,
+            tokensBefore: tokensBefore,
+            projectedAfter: tokensAfterPreview,
+            keepBudget: keepTokenBudget);
+
         return new ConversationCompactResult(session, true);
     }
 
+    private bool TryBuildTemplateSummary(
+        string sessionId,
+        IReadOnlyList<ChatMessage> prefix,
+        ContextCompactionSettings cfg,
+        ContextPressureLevel pressure,
+        bool force,
+        string? mustPreserve,
+        out string summary)
+    {
+        summary = string.Empty;
+        if (!cfg.EnableTemplateSummaryOnOverflowFailure)
+        {
+            return false;
+        }
 
+        if (!force && pressure != ContextPressureLevel.Overflow)
+        {
+            return false;
+        }
+
+        summary = TemplateSummaryBuilder.Build(prefix, cfg, mustPreserve);
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            return false;
+        }
+
+        CompactionDecisionLog.Write(
+            _logger,
+            _runtimeDiagnosticEventSink,
+            sessionId,
+            outcome: "template",
+            reason: "summary_failed",
+            pressure: pressure);
+        return true;
+    }
 }

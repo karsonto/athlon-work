@@ -28,7 +28,9 @@ public static class SemanticCutoffPlanner
     public static ConversationCutPlan DetermineCutPlan(
         IReadOnlyList<ChatMessage> conversation,
         ContextCompactionSettings settings,
-        int keepTokenBudget)
+        int keepTokenBudget,
+        ContextPressureLevel pressure = ContextPressureLevel.Normal,
+        int summaryMaxTokensHint = 0)
     {
         if (conversation.Count == 0 || keepTokenBudget <= 0)
         {
@@ -36,7 +38,7 @@ public static class SemanticCutoffPlanner
         }
 
         var anchorIndex = FindProtectedTailStart(conversation);
-        var protectedStart = ApplyProtectedTailCap(conversation, anchorIndex, settings);
+        var protectedStart = ApplyProtectedTailCap(conversation, anchorIndex, settings, pressure);
         var tokenKeepStart = FindTokenBasedTailStart(
             conversation,
             keepTokenBudget,
@@ -48,10 +50,101 @@ public static class SemanticCutoffPlanner
         // tool_call also guarantees the retained tail cannot start on an orphaned tool result.
         var summarizedEnd = ConversationCutoffPlanner.FindSafeCutoffPoint(conversation, rawCutoff);
         summarizedEnd = SnapToRetainedTailBoundary(conversation, summarizedEnd);
+        summarizedEnd = ShrinkCutoffToKeepBudget(
+            conversation,
+            settings,
+            summarizedEnd,
+            keepTokenBudget,
+            summaryMaxTokensHint > 0 ? summaryMaxTokensHint : Math.Max(128, settings.SummaryMaxTokens / 2));
         var userAnchor = ResolveUserAnchorIndex(conversation, settings, anchorIndex, summarizedEnd);
         var planAnchor = ResolvePlanAnchorIndex(conversation, summarizedEnd);
 
         return new ConversationCutPlan(summarizedEnd, summarizedEnd, userAnchor, planAnchor);
+    }
+
+    /// <summary>
+    /// Iteratively advances <paramref name="summarizedEnd"/> until the retained tail (+ summary slack
+    /// + reattach anchors) fits <paramref name="keepTokenBudget"/>. Pairing-safe at each step.
+    /// </summary>
+    public static int ShrinkCutoffToKeepBudget(
+        IReadOnlyList<ChatMessage> conversation,
+        ContextCompactionSettings settings,
+        int summarizedEnd,
+        int keepTokenBudget,
+        int summaryMaxTokensHint,
+        int maxIterations = 5)
+    {
+        if (summarizedEnd <= 0 || keepTokenBudget <= 0 || conversation.Count == 0)
+        {
+            return summarizedEnd;
+        }
+
+        maxIterations = Math.Max(1, maxIterations);
+        for (var iteration = 0; iteration < maxIterations; iteration++)
+        {
+            var projected = EstimateRetainedTokens(
+                conversation,
+                settings,
+                summarizedEnd,
+                summaryMaxTokensHint);
+            if (projected <= keepTokenBudget)
+            {
+                return summarizedEnd;
+            }
+
+            if (summarizedEnd >= conversation.Count - 1)
+            {
+                break;
+            }
+
+            var next = summarizedEnd + 1;
+            next = ConversationCutoffPlanner.FindSafeCutoffPoint(conversation, next);
+            next = SnapToRetainedTailBoundary(conversation, next);
+            if (next <= summarizedEnd || next <= 0)
+            {
+                break;
+            }
+
+            summarizedEnd = next;
+        }
+
+        return summarizedEnd;
+    }
+
+    public static ChatMessage TruncateUserForOverflowReattach(
+        ChatMessage userMessage,
+        ContextCompactionSettings settings)
+    {
+        var maxChars = Math.Max(256, settings.OverflowReattachUserMaxChars);
+        if (string.IsNullOrEmpty(userMessage.Content) || userMessage.Content.Length <= maxChars)
+        {
+            return userMessage;
+        }
+
+        return userMessage with
+        {
+            Content = userMessage.Content[..maxChars] + "\n...(truncated for overflow reattach)"
+        };
+    }
+
+    private static int EstimateRetainedTokens(
+        IReadOnlyList<ChatMessage> conversation,
+        ContextCompactionSettings settings,
+        int summarizedEnd,
+        int summaryMaxTokensHint)
+    {
+        const int SummaryEnvelopeSlackTokens = 128;
+        var total = summaryMaxTokensHint + SummaryEnvelopeSlackTokens;
+        var remainingScreenshots = Math.Max(0, settings.MaxToolScreenshotsInModelContext);
+        for (var i = summarizedEnd; i < conversation.Count; i++)
+        {
+            total += ContextTokenEstimator.EstimateMessage(
+                conversation[i],
+                settings.IncludeReasoningInModelContext,
+                ref remainingScreenshots);
+        }
+
+        return total;
     }
 
     /// <summary>
@@ -179,9 +272,18 @@ public static class SemanticCutoffPlanner
     private static int ApplyProtectedTailCap(
         IReadOnlyList<ChatMessage> conversation,
         int anchorIndex,
-        ContextCompactionSettings settings)
+        ContextCompactionSettings settings,
+        ContextPressureLevel pressure = ContextPressureLevel.Normal)
     {
         var cap = settings.ProtectedTailMaxMessages;
+        if (pressure == ContextPressureLevel.Overflow
+            && settings.OverflowProtectedTailMaxMessages > 0)
+        {
+            cap = cap < 1
+                ? settings.OverflowProtectedTailMaxMessages
+                : Math.Min(cap, settings.OverflowProtectedTailMaxMessages);
+        }
+
         if (cap < 1 || anchorIndex >= conversation.Count)
         {
             return anchorIndex;

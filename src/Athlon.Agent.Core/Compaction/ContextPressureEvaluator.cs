@@ -71,8 +71,66 @@ public static class ContextPressureEvaluator
             : dynamic.PostCompactionUtilization;
         var targetHistory = (int)Math.Floor(keepTargetUtil * budget.UsablePromptWindow - budget.FixedOverhead);
         var dynamicKeep = Math.Max(0, targetHistory);
+        var floor = Math.Max(512, EstimateAnchorFloorTokens(conversation, settings));
+
+        // Critical/Overflow compact must honor the post-compaction utilization target. Applying
+        // staticKeep as a Max floor re-inflates the tail and undoes overflow recovery.
+        if (includesConversationCompact
+            && pressure is ContextPressureLevel.Critical or ContextPressureLevel.Overflow)
+        {
+            return Math.Min(budget.HistoryBudget, Math.Max(dynamicKeep, floor));
+        }
 
         return Math.Min(budget.HistoryBudget, Math.Max(dynamicKeep, staticKeep));
+    }
+
+    /// <summary>
+    /// True when fixed prompt overhead alone consumes so much of the usable window that history
+    /// compaction cannot meaningfully free space.
+    /// </summary>
+    public static bool IsFixedOverheadDominating(
+        ContextBudgetSnapshot budget,
+        ContextCompactionSettings settings)
+    {
+        if (budget.UsablePromptWindow <= 0)
+        {
+            return true;
+        }
+
+        var ratio = settings.FixedOverheadDominatesRatio;
+        if (ratio <= 0)
+        {
+            ratio = 0.85;
+        }
+
+        return budget.FixedOverhead >= budget.UsablePromptWindow * ratio;
+    }
+
+    private static int EstimateAnchorFloorTokens(
+        IReadOnlyList<ChatMessage> conversation,
+        ContextCompactionSettings settings)
+    {
+        if (conversation.Count == 0)
+        {
+            return 0;
+        }
+
+        var total = 0;
+        var remainingScreenshots = Math.Max(0, settings.MaxToolScreenshotsInModelContext);
+        for (var i = conversation.Count - 1; i >= 0; i--)
+        {
+            var message = conversation[i];
+            if (message.Role == MessageRole.User && !SummaryMessageBuilder.IsSummaryMessage(message))
+            {
+                total += ContextTokenEstimator.EstimateMessage(
+                    message,
+                    settings.IncludeReasoningInModelContext,
+                    ref remainingScreenshots);
+                break;
+            }
+        }
+
+        return total;
     }
 
     public static bool ShouldApplyTruncateArgs(

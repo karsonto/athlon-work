@@ -7,14 +7,16 @@ public static class PrefixToolResultReEvictor
     public static (IReadOnlyList<ChatMessage> Messages, bool Changed) Apply(
         IReadOnlyList<ChatMessage> messages,
         ContextCompactionSettings settings,
-        int prefixCutoffExclusive)
+        int prefixCutoffExclusive,
+        int? previewCharsOverride = null)
     {
         if (prefixCutoffExclusive <= 0)
         {
             return (messages, false);
         }
 
-        var previewChars = Math.Max(256, settings.ToolResultEviction.PreviewChars / 2);
+        var previewChars = previewCharsOverride
+            ?? Math.Max(256, settings.ToolResultEviction.PreviewChars / 2);
         var changed = false;
         var updated = new List<ChatMessage>(messages.Count);
 

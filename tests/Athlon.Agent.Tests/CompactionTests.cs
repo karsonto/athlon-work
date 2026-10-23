@@ -1033,8 +1033,9 @@ public sealed class CompactionTests
     }
 
     [Fact]
-    public void ResolveKeepTokenBudget_NeverBelowStaticKeepTokens()
+    public void ResolveKeepTokenBudget_CriticalCompact_IgnoresInflatingStaticKeepTokens()
     {
+        // Critical/Overflow compact must honor post-compaction utilization, not Max(staticKeep).
         var settings = CreateDynamicCompactionSettings(s => s.KeepTokens = 80_000);
         var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
         var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
@@ -1046,7 +1047,11 @@ public sealed class CompactionTests
             settings,
             includesConversationCompact: true);
 
-        Assert.True(keep >= 80_000);
+        var expected = (int)Math.Floor(
+            settings.DynamicCompaction.PostCompactionUtilization * budget.UsablePromptWindow
+            - budget.FixedOverhead);
+        Assert.Equal(Math.Max(512, expected), keep);
+        Assert.True(keep < 80_000);
     }
 
     [Fact]
@@ -1067,7 +1072,7 @@ public sealed class CompactionTests
             settings.DynamicCompaction.PostCompactionUtilization * budget.UsablePromptWindow
             - budget.FixedOverhead);
 
-        Assert.Equal(expected, keep);
+        Assert.Equal(Math.Max(512, expected), keep);
     }
 
     [Fact]

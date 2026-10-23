@@ -114,11 +114,66 @@ internal sealed class AgentTurnCoordinator(
             var allowToolCalls = ScheduleTurnScope.Current?.AllowToolCalls ?? true;
             if (retryTokens >= failedTokens)
             {
+                // Outbound-only aggressive prune (does not rewrite session). May unlock the retry.
+                var outboundSession = ApplyOutboundOverflowPrune(session, settings.ContextCompaction);
+                if (!ReferenceEquals(outboundSession.Messages, session.Messages))
+                {
+                    modelMessageCache?.Invalidate();
+                    var outboundResult = ModelMessagesForApiBuilder.Build(
+                        modelMessageCache,
+                        frozenPrompt.Text,
+                        outboundSession.Messages,
+                        settings.ContextCompaction,
+                        runtimeContext,
+                        tokenBudgetNotice: compacted.TokenBudgetNotice);
+                    var outboundTokens = RequestHistoryHygiene.EstimatePayloadTokens(outboundResult.Messages);
+                    if (outboundTokens < failedTokens)
+                    {
+                        CompactionDecisionLog.Write(
+                            _logger,
+                            _runtimeDiagnosticEventSink,
+                            session.Id,
+                            outcome: "compacted",
+                            reason: "outbound_prune_reduced",
+                            pressure: ContextPressureLevel.Overflow,
+                            tokensBefore: failedTokens,
+                            projectedAfter: outboundTokens);
+                        var outboundRequest = new AgentModelRequest(
+                            outboundResult.Messages,
+                            tools,
+                            AllowToolCalls: allowToolCalls);
+                        var outboundResponse = await CompleteRecordedAsync(
+                            session,
+                            callbacks,
+                            streamAdapter,
+                            assistantMessageId,
+                            outboundRequest,
+                            environmentPrompt,
+                            runtimeContext,
+                            contextSavingsTokens,
+                            IdGen.NewId(),
+                            ParentAttemptId: initialAttemptId,
+                            cancellationToken).ConfigureAwait(false);
+                        return (session, outboundResponse);
+                    }
+
+                    retryTokens = outboundTokens;
+                }
+
                 _logger.Warning(
                     "Overflow compact did not reduce payload for session {SessionId} (failed={FailedTokens}, retry={RetryTokens}); skipping retry",
                     session.Id,
                     failedTokens,
                     retryTokens);
+                CompactionDecisionLog.Write(
+                    _logger,
+                    _runtimeDiagnosticEventSink,
+                    session.Id,
+                    outcome: "skipped",
+                    reason: "payload_not_reduced",
+                    pressure: ContextPressureLevel.Overflow,
+                    tokensBefore: failedTokens,
+                    projectedAfter: retryTokens);
                 _eventManager.Record(
                     BehaviorEventIds.Context,
                     BehaviorEventTypes.Event,
@@ -410,5 +465,31 @@ internal sealed class AgentTurnCoordinator(
         }
 
         await AgentRuntime.PublishStreamEventsAsync(callbacks, events).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Aggressive Overflow prune on a message clone. Never writes back to the live session.
+    /// </summary>
+    private static AgentSession ApplyOutboundOverflowPrune(AgentSession session, ContextCompactionSettings cfg)
+    {
+        var truncate = new TruncateArgsService();
+        var messages = truncate.ApplyToMessages(
+            session.Messages,
+            cfg,
+            out var truncated,
+            keepTokenBudgetOverride: 0,
+            maxArgLengthOverride: PressurePrune.ResolveMaxArgLength(cfg, ContextPressureLevel.Overflow));
+        var (reevicted, reevictedChanged) = PressurePrune.ApplyReEvict(
+            messages,
+            cfg,
+            prefixCutoffExclusive: ConversationMessageFilters.WithoutCompactionAudits(messages).Count,
+            ContextPressureLevel.Overflow,
+            retryOutbound: true);
+        if (!truncated && !reevictedChanged)
+        {
+            return session;
+        }
+
+        return session with { Messages = reevicted };
     }
 }

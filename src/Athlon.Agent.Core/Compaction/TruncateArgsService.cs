@@ -16,7 +16,8 @@ public sealed class TruncateArgsService
         IReadOnlyList<ChatMessage> messages,
         ContextCompactionSettings settings,
         out bool changed,
-        int? keepTokenBudgetOverride = null)
+        int? keepTokenBudgetOverride = null,
+        int? maxArgLengthOverride = null)
     {
         changed = false;
         var truncateSettings = settings.TruncateArgs;
@@ -24,6 +25,8 @@ public sealed class TruncateArgsService
         {
             return messages;
         }
+
+        var maxArgLength = maxArgLengthOverride ?? truncateSettings.MaxArgLength;
 
         var conversation = ConversationMessageFilters.WithoutCompactionAudits(messages);
         if (conversation.Count == 0)
@@ -95,7 +98,7 @@ public sealed class TruncateArgsService
             {
                 var truncatedJson = TruncateToolCallsJson(
                     message.ToolCallsJson,
-                    truncateSettings.MaxArgLength,
+                    maxArgLength,
                     truncateSettings.TruncationText,
                     preservePublishPlanBody: approvedPlanIndex < i);
 

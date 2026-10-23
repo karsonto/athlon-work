@@ -224,7 +224,9 @@ public sealed partial class ConversationCompactor
         IReadOnlyList<ChatMessage> conversation,
         ContextCompactionSettings cfg,
         int estimatedTokens,
-        int? keepTokenBudget)
+        int? keepTokenBudget,
+        ContextPressureLevel pressure = ContextPressureLevel.Normal,
+        int summaryMaxTokensHint = 0)
     {
         var semanticCutoffEnabled = cfg.DynamicCompaction.Enabled
             && cfg.DynamicCompaction.EnableSemanticCutoff;
@@ -235,7 +237,9 @@ public sealed partial class ConversationCompactor
                 cfg,
                 keepTokenBudget is > 0
                     ? keepTokenBudget.Value
-                    : ResolveSemanticKeepBudget(conversation, cfg, estimatedTokens));
+                    : ResolveSemanticKeepBudget(conversation, cfg, estimatedTokens),
+                pressure,
+                summaryMaxTokensHint);
             if (plan.SummarizedEnd > 0)
             {
                 return plan;

@@ -61,6 +61,7 @@ public sealed class PreCompletionPipeline(
             budget,
             cfg.DynamicCompaction,
             runtimeContext.ForceOverflow);
+        var entryPressure = pressure;
 
         if (!isManualCompact
             && !force
@@ -69,6 +70,20 @@ public sealed class PreCompletionPipeline(
             && budget.TotalUtilization < ContextPressureEvaluator.ResolveTruncateThreshold(cfg.DynamicCompaction))
         {
             return session;
+        }
+
+        if (ContextPressureEvaluator.IsFixedOverheadDominating(budget, cfg)
+            && (force || pressure is ContextPressureLevel.Critical or ContextPressureLevel.Overflow))
+        {
+            CompactionDecisionLog.Write(
+                _logger,
+                sink: null,
+                session.Id,
+                outcome: "skipped",
+                reason: "fixed_overhead_dominates",
+                pressure: pressure,
+                tokensBefore: budget.EstimatedHistory);
+            // Still allow truncate/re-evict below; skip only empty LLM hopes later in compactor.
         }
 
         var plan = DynamicCompactionPlan.Create(
@@ -85,6 +100,7 @@ public sealed class PreCompletionPipeline(
 
         var truncateApplied = false;
         var reEvictApplied = false;
+        var maxArgLength = PressurePrune.ResolveMaxArgLength(cfg, pressure);
 
         if (plan.ApplyTruncateArgs && options.AllowTruncateArgs)
         {
@@ -92,7 +108,8 @@ public sealed class PreCompletionPipeline(
                 session.Messages,
                 cfg,
                 out truncateApplied,
-                plan.KeepTokenBudget);
+                plan.KeepTokenBudget,
+                maxArgLength);
             if (truncateApplied)
             {
                 session = session with { Messages = truncatedConversation };
@@ -125,10 +142,12 @@ public sealed class PreCompletionPipeline(
                     plan.KeepTokenBudget,
                     cfg.IncludeReasoningInModelContext,
                     cfg.MaxToolScreenshotsInModelContext);
-            var (updatedMessages, changed) = PrefixToolResultReEvictor.Apply(
+            var (updatedMessages, changed) = PressurePrune.ApplyReEvict(
                 session.Messages,
                 cfg,
-                prefixCutoff);
+                prefixCutoff,
+                pressure,
+                retryOutbound: false);
             if (changed)
             {
                 reEvictApplied = true;
@@ -153,6 +172,10 @@ public sealed class PreCompletionPipeline(
         pressure = ContextPressureEvaluator.Evaluate(budget, cfg.DynamicCompaction, forceOverflow: false);
         var stillNeedsCompact = isManualCompact
             || options.ApplyEvenWhenBelowThreshold
+            || force
+            || entryPressure == ContextPressureLevel.Overflow
+            || (entryPressure == ContextPressureLevel.Critical
+                && budget.TotalUtilization >= ContextPressureEvaluator.ResolveCompactThreshold(cfg.DynamicCompaction))
             || ContextPressureEvaluator.ShouldCompact(
                 budget,
                 conversation,
@@ -160,14 +183,20 @@ public sealed class PreCompletionPipeline(
                 pressure,
                 force: false);
 
+        // Overflow/Force: always continue to compact even if prune dropped utilization.
+        // Critical: only if still at/above compact threshold after prune (avoid summary storms).
         if (!stillNeedsCompact)
         {
             if (plan.ApplyConversationCompact)
             {
-                _logger.Information(
-                    "Skipped conversation compact for session {SessionId} after prune (utilization {Utilization:P0})",
+                CompactionDecisionLog.Write(
+                    _logger,
+                    sink: null,
                     session.Id,
-                    budget.TotalUtilization);
+                    outcome: "skipped",
+                    reason: "after_prune_skip",
+                    pressure: entryPressure,
+                    tokensBefore: budget.EstimatedHistory);
             }
 
             return session;
@@ -217,7 +246,11 @@ public sealed class PreCompletionPipeline(
     {
         if (cfg.DynamicCompaction.EnableSemanticCutoff && plan.KeepTokenBudget > 0)
         {
-            var cutPlan = SemanticCutoffPlanner.DetermineCutPlan(conversation, cfg, plan.KeepTokenBudget);
+            var cutPlan = SemanticCutoffPlanner.DetermineCutPlan(
+                conversation,
+                cfg,
+                plan.KeepTokenBudget,
+                plan.Pressure);
             if (cutPlan.SummarizedEnd > 0)
             {
                 return cutPlan.SummarizedEnd;

@@ -81,10 +81,53 @@ public sealed class ContextCompactionSettings
     public int ProtectedTailMaxMessages { get; set; } = 40;
 
     /// <summary>
+    /// Overflow-only hard cap on protected-tail length. Effective cap is
+    /// <c>min(ProtectedTailMaxMessages, OverflowProtectedTailMaxMessages)</c> when pressure is Overflow.
+    /// Values below 1 disable the overflow-specific cap.
+    /// </summary>
+    public int OverflowProtectedTailMaxMessages { get; set; } = 12;
+
+    /// <summary>
+    /// When re-attaching the user anchor under Overflow budget pressure, truncate content to this many
+    /// characters (full text still flows through must_preserve when present).
+    /// </summary>
+    public int OverflowReattachUserMaxChars { get; set; } = 2_000;
+
+    /// <summary>Divide ToolResultEviction.PreviewChars by this when pressure is Critical (persist).</summary>
+    public int CriticalPreviewDivisor { get; set; } = 2;
+
+    /// <summary>Divide ToolResultEviction.PreviewChars by this for Overflow compact-path prune.</summary>
+    public int OverflowPreviewDivisor { get; set; } = 4;
+
+    /// <summary>Divide PreviewChars by this for Overflow retry outbound-only prune.</summary>
+    public int OverflowRetryPreviewDivisor { get; set; } = 8;
+
+    /// <summary>MaxArgLength used when pressure is Overflow.</summary>
+    public int OverflowMaxArgLength { get; set; } = 500;
+
+    /// <summary>When true, Overflow/Force may degrade unsafe cutoffs instead of skipping.</summary>
+    public bool EnableCutoffDegradeOnOverflow { get; set; } = true;
+
+    /// <summary>When true, Critical may degrade unsafe cutoffs (default off — high regression risk).</summary>
+    public bool EnableCutoffDegradeOnCritical { get; set; }
+
+    /// <summary>When true, Overflow summary LLM failure falls back to a deterministic template summary.</summary>
+    public bool EnableTemplateSummaryOnOverflowFailure { get; set; } = true;
+
+    /// <summary>
+    /// When FixedOverhead / UsablePromptWindow is at or above this ratio, history compaction cannot
+    /// free the window; callers should skip empty LLM summary attempts.
+    /// </summary>
+    public double FixedOverheadDominatesRatio { get; set; } = 0.85;
+
+    /// <summary>Max cut-plan iterations before a single summary call under budget pressure.</summary>
+    public int MaxCutPlanIterations { get; set; } = 5;
+
+    /// <summary>
     /// Minimum token reduction required before paying for an LLM summarization call. When the
     /// projected post-compaction payload does not shrink by at least this much, compaction is
     /// skipped (and reported as not compacted) instead of burning a summary round trip.
-    /// Values below 0 are treated as 0.
+    /// Values below 0 are treated as 0. Exempt for Overflow/Force.
     /// </summary>
     public int MinCompactionSavingsTokens { get; set; } = 2_000;
 
