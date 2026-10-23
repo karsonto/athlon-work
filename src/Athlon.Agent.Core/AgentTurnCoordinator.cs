@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http;
 using System.Diagnostics;
 using System.Text.Json;
-using System.Collections.Concurrent;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Prompt;
@@ -28,7 +27,6 @@ internal sealed class AgentTurnCoordinator(
     private readonly IAppLogger _logger = logger.ForContext("AgentTurnCoordinator");
     private readonly IEventManager _eventManager = eventManager ?? NullEventManager.Instance;
     private readonly IRuntimeDiagnosticEventSink _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
-    private static readonly ConcurrentDictionary<string, int> MiddleCutAttemptsByRun = new(StringComparer.Ordinal);
 
     public async Task<(AgentSession Session, AgentModelResponse Response)> CompleteWithOverflowRetryAsync(
         AgentSession session,
@@ -114,54 +112,8 @@ internal sealed class AgentTurnCoordinator(
             var allowToolCalls = ScheduleTurnScope.Current?.AllowToolCalls ?? true;
             if (retryTokens >= failedTokens)
             {
-                // Outbound-only aggressive prune (does not rewrite session). May unlock the retry.
-                var outboundSession = ApplyOutboundOverflowPrune(session, settings.ContextCompaction);
-                if (!ReferenceEquals(outboundSession.Messages, session.Messages))
-                {
-                    modelMessageCache?.Invalidate();
-                    var outboundResult = ModelMessagesForApiBuilder.Build(
-                        modelMessageCache,
-                        frozenPrompt.Text,
-                        outboundSession.Messages,
-                        settings.ContextCompaction,
-                        runtimeContext,
-                        tokenBudgetNotice: compacted.TokenBudgetNotice);
-                    var outboundTokens = RequestHistoryHygiene.EstimatePayloadTokens(outboundResult.Messages);
-                    if (outboundTokens < failedTokens)
-                    {
-                        CompactionDecisionLog.Write(
-                            _logger,
-                            _runtimeDiagnosticEventSink,
-                            session.Id,
-                            outcome: "compacted",
-                            reason: "outbound_prune_reduced",
-                            pressure: ContextPressureLevel.Overflow,
-                            tokensBefore: failedTokens,
-                            projectedAfter: outboundTokens);
-                        var outboundRequest = new AgentModelRequest(
-                            outboundResult.Messages,
-                            tools,
-                            AllowToolCalls: allowToolCalls);
-                        var outboundResponse = await CompleteRecordedAsync(
-                            session,
-                            callbacks,
-                            streamAdapter,
-                            assistantMessageId,
-                            outboundRequest,
-                            environmentPrompt,
-                            runtimeContext,
-                            contextSavingsTokens,
-                            IdGen.NewId(),
-                            ParentAttemptId: initialAttemptId,
-                            cancellationToken).ConfigureAwait(false);
-                        return (session, outboundResponse);
-                    }
-
-                    retryTokens = outboundTokens;
-                }
-
                 _logger.Warning(
-                    "Overflow compact did not reduce payload for session {SessionId} (failed={FailedTokens}, retry={RetryTokens}); skipping retry",
+                    "Overflow checkpoint did not reduce payload for session {SessionId} (failed={FailedTokens}, retry={RetryTokens}); skipping retry",
                     session.Id,
                     failedTokens,
                     retryTokens);
@@ -218,71 +170,9 @@ internal sealed class AgentTurnCoordinator(
                     eventType: "compaction.retry_skipped",
                     severity: RuntimeDiagnosticSeverity.Warning,
                     errorCode: RuntimeDiagnosticErrorCodes.CompactionRetrySkipped,
-                    message: $"Retry skipped because compacted payload was not reduced (failed={failedTokens}, retry={retryTokens}).");
+                    message: $"Retry skipped because checkpointed payload was not reduced (failed={failedTokens}, retry={retryTokens}).");
                 await _runtimeDiagnosticEventSink.EnqueueAsync(skipEvt, CancellationToken.None).ConfigureAwait(false);
-                if (!settings.ContextCompaction.MiddleCutOnRetrySkipped)
-                {
-                    throw;
-                }
-
-                var runId = skipContext?.RunId;
-                if (!string.IsNullOrWhiteSpace(runId))
-                {
-                    var attempts = MiddleCutAttemptsByRun.GetOrAdd(runId, 0);
-                    if (attempts >= Math.Max(1, settings.ContextCompaction.MiddleCutMaxPerRun))
-                    {
-                        throw;
-                    }
-
-                    MiddleCutAttemptsByRun[runId] = attempts + 1;
-                }
-
-                var middleCut = await runPreCompletionPipelineAsync(
-                    session,
-                    callbacks,
-                    new PreCompletionOptions
-                    {
-                        AllowTruncateArgs = true,
-                        AllowConversationCompact = true,
-                        ForceConversationCompact = true,
-                        EmitCompactionAudit = true,
-                        Strategy = CompactionStrategy.MiddleCutOnRetrySkipped
-                    },
-                    environmentPrompt,
-                    runtimeContext,
-                    tools,
-                    ContextPressureLevel.Overflow,
-                    cancellationToken).ConfigureAwait(false);
-                var middleCutSession = middleCut.Session;
-
-                modelMessageCache?.Invalidate();
-                var middleCutResult = ModelMessagesForApiBuilder.Build(
-                    modelMessageCache,
-                    frozenPrompt.Text,
-                    middleCutSession.Messages,
-                    settings.ContextCompaction,
-                    runtimeContext,
-                    tokenBudgetNotice: middleCut.TokenBudgetNotice);
-                var middleRetryTokens = RequestHistoryHygiene.EstimatePayloadTokens(middleCutResult.Messages);
-                if (middleRetryTokens >= failedTokens)
-                {
-                    throw;
-                }
-
-                var middleCutRequest = new AgentModelRequest(middleCutResult.Messages, tools, AllowToolCalls: allowToolCalls);
-                var middleCutResponse = await CompleteRecordedAsync(
-                    middleCutSession,
-                    callbacks,
-                    streamAdapter,
-                    assistantMessageId,
-                    middleCutRequest,
-                    environmentPrompt,
-                    runtimeContext,
-                    middleCutResult.EstimatedSavingsTokens,
-                    IdGen.NewId(),
-                    ParentAttemptId: initialAttemptId,
-                    cancellationToken).ConfigureAwait(false);
-                return (middleCutSession, middleCutResponse);
+                throw;
             }
 
             var request = new AgentModelRequest(retryResult.Messages, tools, AllowToolCalls: allowToolCalls);
@@ -467,29 +357,4 @@ internal sealed class AgentTurnCoordinator(
         await AgentRuntime.PublishStreamEventsAsync(callbacks, events).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Aggressive Overflow prune on a message clone. Never writes back to the live session.
-    /// </summary>
-    private static AgentSession ApplyOutboundOverflowPrune(AgentSession session, ContextCompactionSettings cfg)
-    {
-        var truncate = new TruncateArgsService();
-        var messages = truncate.ApplyToMessages(
-            session.Messages,
-            cfg,
-            out var truncated,
-            keepTokenBudgetOverride: 0,
-            maxArgLengthOverride: PressurePrune.ResolveMaxArgLength(cfg, ContextPressureLevel.Overflow));
-        var (reevicted, reevictedChanged) = PressurePrune.ApplyReEvict(
-            messages,
-            cfg,
-            prefixCutoffExclusive: ConversationMessageFilters.WithoutCompactionAudits(messages).Count,
-            ContextPressureLevel.Overflow,
-            retryOutbound: true);
-        if (!truncated && !reevictedChanged)
-        {
-            return session;
-        }
-
-        return session with { Messages = reevicted };
-    }
 }

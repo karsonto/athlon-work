@@ -40,23 +40,6 @@ public sealed class CompactionTests
         Assert.True(ConversationCutoffPlanner.ShouldCompact(messages, effective, settings, force: false));
     }
 
-    [Fact]
-    public void ContextCompactionSettings_UsesAgentScopeDefaults()
-    {
-        var settings = new ContextCompactionSettings();
-
-        Assert.True(settings.Enabled);
-        Assert.True(settings.DynamicCompaction.Enabled);
-        Assert.Equal(0.45, settings.DynamicCompaction.PostCompactionUtilization);
-        Assert.Equal(131_072, settings.ContextWindowTokens);
-        Assert.Equal("128K", TokenCountDisplay.FormatWindow(settings.ContextWindowTokens));
-        Assert.Equal(50, settings.TriggerMessages);
-        Assert.Equal(80_000, settings.TriggerTokens);
-        Assert.Equal(20, settings.KeepMessages);
-        Assert.Equal(2_000, settings.TruncateArgs.MaxArgLength);
-        Assert.Equal(80_000, settings.ToolResultEviction.MaxResultChars);
-        Assert.Equal(0.7, settings.CompactTriggerRatio);
-    }
 
     [Fact]
     public void ResolveCompactTriggerTokens_UsesMaxOfFixedAndWindowRatio()
@@ -244,42 +227,6 @@ public sealed class CompactionTests
         Assert.Equal(3, tail.Count(message => message.Role == MessageRole.Tool));
     }
 
-    [Fact]
-    public void TruncateArgsCutoff_DoesNotTruncateKeptToolBatch()
-    {
-        var longArg = new string('x', 80);
-        var first = ChatMessage.Create(
-            MessageRole.Assistant,
-            string.Empty,
-            toolCalls: [new AgentToolCall("a", "file_read", new Dictionary<string, string> { ["path"] = longArg })]);
-        var firstResult = ChatMessage.Create(MessageRole.Tool, "ToolCallId: a\nok");
-        var second = ChatMessage.Create(
-            MessageRole.Assistant,
-            string.Empty,
-            toolCalls: [new AgentToolCall("b", "file_read", new Dictionary<string, string> { ["path"] = longArg })]);
-        var secondResult = ChatMessage.Create(MessageRole.Tool, "ToolCallId: b\nok");
-        var messages = new[] { first, firstResult, second, secondResult };
-
-        var settings = new ContextCompactionSettings
-        {
-            TruncateArgs = new TruncateArgsSettings
-            {
-                Enabled = true,
-                MaxArgLength = 8,
-                TruncationText = "...(truncated)",
-                TriggerMessages = 1,
-                KeepMessages = 1
-            }
-        };
-
-        var updated = new TruncateArgsService().ApplyToMessages(messages, settings, out var changed);
-
-        Assert.True(changed);
-        var firstCalls = AssistantToolCallsCodec.Deserialize(updated[0].ToolCallsJson);
-        var secondCalls = AssistantToolCallsCodec.Deserialize(updated[2].ToolCallsJson);
-        Assert.Contains("...(truncated)", firstCalls![0].Arguments.GetString("path"));
-        Assert.Equal(longArg, secondCalls![0].Arguments.GetString("path"));
-    }
 
     [Fact]
     public void SummaryMessageBuilder_FiltersOldSummaryMessages()
@@ -399,7 +346,6 @@ public sealed class CompactionTests
         var compactor = new FakeConversationCompactor(settings);
         var pipeline = new PreCompletionPipeline(
             compactor,
-            new TruncateArgsService(),
             settings,
             new NoOpLogger());
 
@@ -433,7 +379,6 @@ public sealed class CompactionTests
         var compactor = new FakeConversationCompactor(settings);
         var pipeline = new PreCompletionPipeline(
             compactor,
-            new TruncateArgsService(),
             settings,
             new NoOpLogger());
 
@@ -466,7 +411,6 @@ public sealed class CompactionTests
         var compactor = new FakeConversationCompactor(settings);
         var pipeline = new PreCompletionPipeline(
             compactor,
-            new TruncateArgsService(),
             settings,
             new NoOpLogger());
 
@@ -513,7 +457,6 @@ public sealed class CompactionTests
                 settings,
                 new FakeModelClient("summary text"),
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger());
 
@@ -580,7 +523,6 @@ public sealed class CompactionTests
                 settings,
                 new FakeModelClient("summary text"),
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger());
 
@@ -642,7 +584,6 @@ public sealed class CompactionTests
                 settings,
                 new CancellingModelClient(),
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger());
 
@@ -700,7 +641,6 @@ public sealed class CompactionTests
                 settings,
                 new FakeModelClient("summary text"),
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger());
 
@@ -754,7 +694,6 @@ public sealed class CompactionTests
                 settings,
                 new FakeModelClient("summary text"),
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger());
 
@@ -878,46 +817,6 @@ public sealed class CompactionTests
             budget.FixedOverhead);
     }
 
-    [Fact]
-    public void ContextBudgetCalculator_DoesNotAllocateHistoryWhenFixedContextExceedsWindow()
-    {
-        var settings = new ContextCompactionSettings
-        {
-            ContextWindowTokens = 1000,
-            DynamicCompaction = new DynamicCompactionSettings { Enabled = true }
-        };
-        var budget = ContextBudgetCalculator.Compute(
-            "system",
-            [],
-            [],
-            settings,
-            new ModelSettings { MaxTokens = 500 },
-            runtimeContext: new string('r', 10_000));
-
-        Assert.Equal(0, budget.HistoryBudget);
-        Assert.True(budget.FixedOverhead + budget.ReservedOutput > budget.TotalWindow);
-        Assert.Equal(
-            0,
-            ContextPressureEvaluator.ResolveKeepTokenBudget(
-                budget,
-                ContextPressureLevel.Overflow,
-                [],
-                settings,
-                includesConversationCompact: true));
-
-        var conversation = new[]
-        {
-            ChatMessage.Create(MessageRole.User, "old question"),
-            ChatMessage.Create(MessageRole.Assistant, "old answer")
-        };
-        Assert.Equal(
-            conversation.Length,
-            ConversationCutoffPlanner.DetermineCutoffIndex(
-                conversation,
-                ContextTokenEstimator.Estimate(conversation),
-                settings,
-                keepTokenBudgetOverride: 0));
-    }
 
     [Fact]
     public void ContextBudgetSnapshot_TotalUtilization_IncludesFixedOverhead()
@@ -943,46 +842,7 @@ public sealed class CompactionTests
         Assert.Equal(ContextPressureLevel.Elevated, ContextPressureEvaluator.Evaluate(elevatedBudget, dynamic));
     }
 
-    [Fact]
-    public void DynamicCompactionPlan_DoesNotTruncateBeforeStaticBaseline()
-    {
-        var settings = new ContextCompactionSettings();
-        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 10_000, 0.1);
-        var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
 
-        var plan = DynamicCompactionPlan.Create(
-            ContextPressureEvaluator.Evaluate(budget, settings.DynamicCompaction),
-            budget,
-            conversation,
-            settings,
-            force: false);
-
-        Assert.False(plan.ApplyTruncateArgs);
-        Assert.False(plan.ApplyConversationCompact);
-    }
-
-    [Fact]
-    public void DynamicCompactionPlan_TruncatesWhenStaticThresholdReached()
-    {
-        var settings = CreateDynamicCompactionSettings();
-        var conversation = Enumerable.Range(0, 30)
-            .Select(index => ChatMessage.Create(MessageRole.User, $"message-{index}"))
-            .ToList();
-        var estimated = ContextTokenEstimator.Estimate(conversation);
-        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 180_000, estimated, 0.2);
-
-        Assert.True(ContextPressureEvaluator.MeetsStaticTruncateThreshold(conversation, settings));
-
-        var plan = DynamicCompactionPlan.Create(
-            ContextPressureEvaluator.Evaluate(budget, settings.DynamicCompaction),
-            budget,
-            conversation,
-            settings,
-            force: false);
-
-        Assert.True(plan.ApplyTruncateArgs);
-        Assert.False(plan.ApplyConversationCompact);
-    }
 
     [Fact]
     public void DynamicCompactionPlan_DoesNotCompactOnStaticMessageCountWhenUtilizationLow()
@@ -1032,163 +892,12 @@ public sealed class CompactionTests
         Assert.True(plan.ApplyConversationCompact);
     }
 
-    [Fact]
-    public void ResolveKeepTokenBudget_CriticalCompact_IgnoresInflatingStaticKeepTokens()
-    {
-        // Critical/Overflow compact must honor post-compaction utilization, not Max(staticKeep).
-        var settings = CreateDynamicCompactionSettings(s => s.KeepTokens = 80_000);
-        var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
-        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
 
-        var keep = ContextPressureEvaluator.ResolveKeepTokenBudget(
-            budget,
-            ContextPressureLevel.Critical,
-            conversation,
-            settings,
-            includesConversationCompact: true);
 
-        var expected = (int)Math.Floor(
-            settings.DynamicCompaction.PostCompactionUtilization * budget.UsablePromptWindow
-            - budget.FixedOverhead);
-        Assert.Equal(Math.Max(512, expected), keep);
-        Assert.True(keep < 80_000);
-    }
 
-    [Fact]
-    public void ResolveKeepTokenBudget_AfterFullPassTargetsPostCompactionUtilization()
-    {
-        var settings = CreateDynamicCompactionSettings();
-        var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
-        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
 
-        var keep = ContextPressureEvaluator.ResolveKeepTokenBudget(
-            budget,
-            ContextPressureLevel.Critical,
-            conversation,
-            settings,
-            includesConversationCompact: true);
 
-        var expected = (int)Math.Floor(
-            settings.DynamicCompaction.PostCompactionUtilization * budget.UsablePromptWindow
-            - budget.FixedOverhead);
 
-        Assert.Equal(Math.Max(512, expected), keep);
-    }
-
-    [Fact]
-    public void ResolveKeepTokenBudget_TruncateOnlyUsesStaticKeepFloor()
-    {
-        var settings = CreateDynamicCompactionSettings();
-        var conversation = Enumerable.Range(0, 25)
-            .Select(index => ChatMessage.Create(MessageRole.User, $"message-{index}"))
-            .ToList();
-        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
-
-        var keep = ContextPressureEvaluator.ResolveKeepTokenBudget(
-            budget,
-            ContextPressureLevel.High,
-            conversation,
-            settings,
-            includesConversationCompact: false);
-
-        var staticKeep = ContextTokenEstimator.EstimateSuffix(
-            conversation,
-            Math.Max(0, conversation.Count - settings.KeepMessages));
-
-        Assert.Equal(Math.Max(staticKeep, 512), keep);
-    }
-
-    [Fact]
-    public void ResolveKeepTokenBudget_OverflowUsesReducedPostCompactionTarget()
-    {
-        var settings = CreateDynamicCompactionSettings();
-        var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
-        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
-        var dynamic = settings.DynamicCompaction;
-
-        var keep = ContextPressureEvaluator.ResolveKeepTokenBudget(
-            budget,
-            ContextPressureLevel.Overflow,
-            conversation,
-            settings,
-            includesConversationCompact: true);
-
-        var expected = (int)Math.Floor(
-            dynamic.OverflowPostCompactionUtilization * budget.UsablePromptWindow
-            - budget.FixedOverhead);
-
-        Assert.Equal(Math.Max(512, expected), keep);
-    }
-
-    [Fact]
-    public void DynamicCompactionPlan_Elevated_ReEvictsWithoutTruncateOrCompact()
-    {
-        var settings = CreateDynamicCompactionSettings();
-        var conversation = Enumerable.Range(0, 30)
-            .Select(index => ChatMessage.Create(MessageRole.User, $"message-{index}"))
-            .ToList();
-        var estimated = ContextTokenEstimator.Estimate(conversation);
-        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, estimated, 0.6);
-
-        Assert.True(ContextPressureEvaluator.MeetsStaticTruncateThreshold(conversation, settings));
-
-        var plan = DynamicCompactionPlan.Create(
-            ContextPressureLevel.Elevated,
-            budget,
-            conversation,
-            settings,
-            force: false);
-
-        Assert.False(plan.ApplyTruncateArgs);
-        Assert.True(plan.ApplyPrefixReEvict);
-        Assert.False(plan.ApplyConversationCompact);
-    }
-
-    [Fact]
-    public void SemanticCutoffPlanner_BuildMustPreserveAppendix_IncludesUserMessages()
-    {
-        var settings = new ContextCompactionSettings();
-        var conversation = new[]
-        {
-            ChatMessage.Create(MessageRole.User, "Implement src/Foo.cs"),
-            ChatMessage.Create(MessageRole.Assistant, "ok"),
-            ChatMessage.Create(MessageRole.User, "latest"),
-            ChatMessage.Create(MessageRole.Assistant, "working")
-        };
-
-        var appendix = SemanticCutoffPlanner.BuildMustPreserveAppendix(conversation, settings, keepTokenBudget: 30);
-
-        Assert.NotNull(appendix);
-        Assert.Contains("<must_preserve>", appendix, StringComparison.Ordinal);
-        Assert.Contains("Foo.cs", appendix, StringComparison.Ordinal);
-        Assert.DoesNotContain("[Assistant]", appendix, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void SemanticCutoffPlanner_BuildMustPreserveAppendix_SkipsReadToolResults()
-    {
-        var settings = new ContextCompactionSettings();
-        var read = AgentRuntime.FormatToolResult(
-            new AgentToolCall("read-1", "file_read", new Dictionary<string, string> { ["path"] = "src/Foo.cs" }),
-            ToolResult.Success("ok", "entire file body that should not be pinned"));
-        var write = AgentRuntime.FormatToolResult(
-            new AgentToolCall("write-1", "file_write", new Dictionary<string, string> { ["path"] = "src/Foo.cs" }),
-            ToolResult.Success("wrote", "updated Foo"));
-        var conversation = new[]
-        {
-            ChatMessage.Create(MessageRole.User, "change Foo"),
-            ChatMessage.Create(MessageRole.Tool, read),
-            ChatMessage.Create(MessageRole.Tool, write),
-            ChatMessage.Create(MessageRole.User, "latest"),
-            ChatMessage.Create(MessageRole.Assistant, "working")
-        };
-
-        var appendix = SemanticCutoffPlanner.BuildMustPreserveAppendix(conversation, settings, keepTokenBudget: 20);
-
-        Assert.NotNull(appendix);
-        Assert.Contains("file_write", appendix, StringComparison.Ordinal);
-        Assert.DoesNotContain("entire file body", appendix, StringComparison.Ordinal);
-    }
 
     [Fact]
     public void SummaryToolTrace_CollapsesReadResultsAndKeepsWrites()
@@ -1212,31 +921,6 @@ public sealed class CompactionTests
         Assert.Contains("full write body", traced[1].Content, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void DetermineCutPlan_ReattachesApprovedPlanInsideSummarizedSpan()
-    {
-        var settings = new ContextCompactionSettings
-        {
-            ProtectedTailMaxMessages = 2,
-            ReattachLatestUserMessage = true,
-            DynamicCompaction = new DynamicCompactionSettings { EnableSemanticCutoff = true }
-        };
-        var planMessage = ChatMessage.Create(MessageRole.User, ApprovedPlanPrompt.BuildUserMessage("# Plan\n\n## Steps\n1. Do it\n\n## Acceptance\n- [ ] Done"));
-        var conversation = new[]
-        {
-            planMessage,
-            ChatMessage.Create(MessageRole.Assistant, "working"),
-            ChatMessage.Create(MessageRole.User, "continue the implementation"),
-            ChatMessage.Create(MessageRole.Assistant, new string('z', 4_000)),
-            ChatMessage.Create(MessageRole.Assistant, new string('y', 4_000))
-        };
-
-        var plan = SemanticCutoffPlanner.DetermineCutPlan(conversation, settings, keepTokenBudget: 1);
-
-        Assert.True(plan.SummarizedEnd > plan.PlanAnchorIndex);
-        Assert.Equal(0, plan.PlanAnchorIndex);
-        Assert.True(plan.NeedsPlanReattach);
-    }
 
     [Fact]
     public void TokenEstimatorCalibrator_UpdatesMultiplierFromUsage()
@@ -1280,7 +964,6 @@ public sealed class CompactionTests
         var compactor = new FakeConversationCompactor(settings);
         var pipeline = new PreCompletionPipeline(
             compactor,
-            new TruncateArgsService(),
             settings,
             new NoOpLogger());
 
@@ -1289,73 +972,7 @@ public sealed class CompactionTests
         Assert.Equal(1, compactor.CallCount);
     }
 
-    [Fact]
-    public void SemanticCutoffPlanner_SkipsSummaryPlaceholderAsProtectedUser()
-    {
-        var settings = new ContextCompactionSettings
-        {
-            DynamicCompaction = new DynamicCompactionSettings { EnableSemanticCutoff = true }
-        };
-        // Legacy User+marker must not anchor the protected tail.
-        var legacySummary = ChatMessage.Create(
-            MessageRole.User,
-            ConversationCompactionDefaults.SummaryMessageMarker + "\nprior summary about Foo");
-        var conversation = new List<ChatMessage>
-        {
-            legacySummary,
-            ChatMessage.Create(MessageRole.Assistant, "working on it"),
-            ChatMessage.Create(MessageRole.Assistant, "still going")
-        };
 
-        var cutoff = SemanticCutoffPlanner.DetermineCutoffIndex(conversation, settings, keepTokenBudget: 1);
-
-        // Tiny keep budget + no real user → cutoff at end (not 0, which would keep from the summary).
-        Assert.Equal(conversation.Count, cutoff);
-
-        var roleSummary = SummaryMessageBuilder.CreateSummaryPlaceholder("prior summary about Foo", null);
-        var withRole = new List<ChatMessage>
-        {
-            roleSummary,
-            ChatMessage.Create(MessageRole.Assistant, "working on it"),
-            ChatMessage.Create(MessageRole.User, "continue"),
-            ChatMessage.Create(MessageRole.Assistant, "still going")
-        };
-        var roleCutoff = SemanticCutoffPlanner.DetermineCutoffIndex(withRole, settings, keepTokenBudget: 1);
-        Assert.True(roleCutoff > 0);
-        Assert.True(roleCutoff < withRole.Count);
-        Assert.True(roleCutoff >= 2); // real user index — never treat Summary role as protected user
-    }
-
-    [Fact]
-    public void TruncateArgsService_HonorsZeroKeepBudgetWithoutStaticGate()
-    {
-        var settings = new ContextCompactionSettings
-        {
-            TruncateArgs = new TruncateArgsSettings
-            {
-                Enabled = true,
-                TriggerMessages = 100,
-                TriggerTokens = 1_000_000,
-                KeepMessages = 20,
-                MaxArgLength = 10,
-                TruncationText = "...(truncated)"
-            }
-        };
-        var longArg = new string('x', 200);
-        var messages = new List<ChatMessage>
-        {
-            ChatMessage.Create(
-                MessageRole.Assistant,
-                string.Empty,
-                toolCalls: [new AgentToolCall("t1", "file_write", new Dictionary<string, string> { ["content"] = longArg })])
-        };
-
-        var updated = new TruncateArgsService().ApplyToMessages(messages, settings, out var changed, keepTokenBudgetOverride: 0);
-
-        Assert.True(changed);
-        Assert.DoesNotContain(longArg, updated[0].ToolCallsJson, StringComparison.Ordinal);
-        Assert.Contains("...(truncated)", updated[0].ToolCallsJson, StringComparison.Ordinal);
-    }
 
     [Fact]
     public void CompactionAuditDisplay_Parse_IncludesPressureAndUtilization()
@@ -1436,7 +1053,6 @@ public sealed class CompactionTests
                 settings,
                 new ThrowingModelClient(),
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger());
 
@@ -1496,7 +1112,6 @@ public sealed class CompactionTests
                 settings,
                 new FakeModelClient("   \n\t  "),
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger()).CompactIfNeededAsync(
                 session,
@@ -1554,7 +1169,6 @@ public sealed class CompactionTests
                 settings,
                 capturing,
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger()).CompactIfNeededAsync(
                 session,
@@ -1586,7 +1200,6 @@ public sealed class CompactionTests
                 settings,
                 capturing,
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger()).CompactIfNeededAsync(
                 grown,
@@ -1648,7 +1261,6 @@ public sealed class CompactionTests
         var compactor = new CountingConversationCompactor();
         var pipeline = new PreCompletionPipeline(
             compactor,
-            new TruncateArgsService(),
             settings,
             new NoOpLogger());
 
@@ -1669,7 +1281,6 @@ public sealed class CompactionTests
         var compactor = new CountingConversationCompactor();
         var pipeline = new PreCompletionPipeline(
             compactor,
-            new TruncateArgsService(),
             settings,
             new NoOpLogger());
 
@@ -1688,7 +1299,6 @@ public sealed class CompactionTests
         var compactor = new CountingConversationCompactor();
         var pipeline = new PreCompletionPipeline(
             compactor,
-            new TruncateArgsService(),
             settings,
             new NoOpLogger());
 
@@ -1766,62 +1376,6 @@ public sealed class CompactionTests
         Assert.Equal(unpairedRaw, unpairedClamped);
     }
 
-    [Fact]
-    public void Budget_HugeToolResult_NoLongerReportsCriticalPressure()
-    {
-        var compaction = CreateDynamicCompactionSettings(s =>
-        {
-            s.Enabled = true;
-            s.ContextWindowTokens = 120_000;
-            s.KeepMessages = 20;
-            s.TriggerMessages = 10_000;
-            s.TriggerTokens = 10_000_000;
-        });
-        var toolResult = "ToolCallId: c1\n" + string.Join(
-            '\n',
-            Enumerable.Range(0, 40).Select(i => $"src/bundle.min.js:{i}:{new string('x', 50_000)}"));
-        var messages = new List<ChatMessage>
-        {
-            ChatMessage.Create(MessageRole.User, "search minified assets"),
-            ChatMessage.Create(
-                MessageRole.Assistant,
-                "searching",
-                toolCalls: [new AgentToolCall("c1", "grep_files", new Dictionary<string, string>())]),
-            ChatMessage.Create(MessageRole.Tool, toolResult)
-        };
-        var model = new ModelSettings { MaxTokens = 4_096 };
-
-        var rawEstimate = ContextTokenEstimator.Estimate(
-            messages,
-            compaction.IncludeReasoningInModelContext,
-            maxToolScreenshots: compaction.MaxToolScreenshotsInModelContext);
-        Assert.True(
-            (double)rawEstimate / 120_000 > 0.9,
-            $"raw estimate {rawEstimate} should look critical before the fix");
-
-        var budget = ContextBudgetCalculator.Compute(
-            "system",
-            [],
-            messages,
-            compaction,
-            model);
-
-        Assert.True(
-            budget.TotalUtilization < 0.80,
-            $"hygiene-aware utilization was {budget.TotalUtilization:F3}");
-        Assert.False(ContextPressureEvaluator.ShouldCompact(
-            budget,
-            messages,
-            compaction,
-            ContextPressureLevel.Normal,
-            force: false));
-        Assert.False(ContextPressureEvaluator.ShouldApplyTruncateArgs(
-            budget,
-            messages,
-            compaction,
-            ContextPressureLevel.Normal,
-            force: false));
-    }
 
     [Fact]
     public async Task ConversationCompactor_PrefixReplay_ReusesEnvironmentPromptAndTools()
@@ -1867,7 +1421,6 @@ public sealed class CompactionTests
                 settings,
                 capturing,
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger()).CompactIfNeededAsync(
                 session,
@@ -1937,7 +1490,6 @@ public sealed class CompactionTests
                 settings,
                 capturing,
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger()).CompactIfNeededAsync(
                 session,
@@ -2008,7 +1560,6 @@ public sealed class CompactionTests
                 settings,
                 capturing,
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger()).CompactIfNeededAsync(
                 session,
@@ -2038,7 +1589,6 @@ public sealed class CompactionTests
                 settings,
                 capturing,
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger()).CompactIfNeededAsync(
                 grown,
@@ -2067,86 +1617,6 @@ public sealed class CompactionTests
         }
     }
 
-    [Fact]
-    public async Task ConversationCompactor_Overflow_UsesMoreAggressiveSummaryBudgets()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
-        var paths = new TestAppPathProvider(root);
-        paths.EnsureCreated();
-
-        try
-        {
-            var tools = new[]
-            {
-                new ToolDefinition("file_read", "Read files", ToolSchema.Object().String("path", "path", required: true).Build())
-            };
-            var settings = new AppSettings
-            {
-                ContextCompaction = new ContextCompactionSettings
-                {
-                    TriggerMessages = 2,
-                    KeepMessages = 1,
-                    SummaryMaxTokens = 1024,
-                    MaxConversationCharsForSummary = 20_000,
-                    OffloadBeforeCompact = false
-                }
-            };
-            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
-            var capturing = new CapturingModelClient("summary text");
-            var toolCall = new AgentToolCall("t1", "file_read", new Dictionary<string, string>());
-            var session = AgentSession.Create("overflow-compact")
-                .WithMessages(
-                [
-                    ChatMessage.Create(MessageRole.User, "old"),
-                    ChatMessage.Create(MessageRole.Assistant, string.Empty, toolCalls: [toolCall]),
-                    ChatMessage.Create(
-                        MessageRole.Tool,
-                        AgentRuntime.FormatToolResult(toolCall, ToolResult.Success("ok", new string('x', 30_000)))),
-                    ChatMessage.Create(MessageRole.User, "continue"),
-                    ChatMessage.Create(MessageRole.Assistant, "ok")
-                ]);
-            var runtime = new CompactionRuntimeContext(
-                new ContextBudgetSnapshot(100_000, 1_000, 1_000, 90_000, 50_000, 0.5),
-                "You are Athlon.",
-                tools,
-                PressureOverride: ContextPressureLevel.Overflow);
-
-            var result = await new ConversationCompactor(
-                settings,
-                capturing,
-                storage,
-                new TruncateArgsService(),
-                new SessionUsageAccumulator(),
-                new NoOpLogger()).CompactIfNeededAsync(
-                session,
-                new CompactionExecutionRequest(
-                    CompactionKind.ConversationCompact,
-                    Force: false,
-                    EmitAudit: true,
-                    RuntimeContext: runtime,
-                    Plan: new DynamicCompactionPlan(
-                        ContextPressureLevel.Overflow,
-                        ApplyTruncateArgs: true,
-                        ApplyPrefixReEvict: false,
-                        ApplyConversationCompact: true,
-                        KeepTokenBudget: 0,
-                        MustPreserveAppendix: null)));
-
-            Assert.True(result.Compacted);
-            Assert.NotNull(capturing.LastRequest);
-            Assert.Equal(512, capturing.LastRequest!.MaxTokens);
-            var toolMessage = Assert.Single(capturing.LastRequest.Messages, message => message.Role == "tool");
-            var content = Assert.IsType<string>(toolMessage.Content);
-            Assert.Contains("[cache hygiene:", content, StringComparison.Ordinal);
-        }
-        finally
-        {
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, true);
-            }
-        }
-    }
 
     [Fact]
     public void ConversationCutoffPlanner_FindSafeCutoff_AllowsSummaryInsideCompactedPrefix()
@@ -2254,126 +1724,6 @@ public sealed class CompactionTests
                 PressureOverride: pressureOverride));
     }
 
-    private sealed class CountingConversationCompactor : IConversationCompactor
-    {
-        public int CallCount { get; private set; }
-
-        public Task<ConversationCompactResult> CompactIfNeededAsync(
-            AgentSession session,
-            CompactionExecutionRequest request,
-            CancellationToken cancellationToken = default)
-        {
-            CallCount++;
-            return Task.FromResult(new ConversationCompactResult(session, false));
-        }
-    }
-
-    private sealed class FakeConversationCompactor(AppSettings settings) : IConversationCompactor
-    {
-        public int CallCount { get; private set; }
-
-        public Task<ConversationCompactResult> CompactIfNeededAsync(
-            AgentSession session,
-            CompactionExecutionRequest request,
-            CancellationToken cancellationToken = default)
-        {
-            var conversation = session.Messages.Where(message => message.Role != MessageRole.Compaction).ToList();
-            var cfg = settings.ContextCompaction;
-
-            if (!ConversationCutoffPlanner.ShouldCompact(
-                    conversation,
-                    ContextTokenEstimator.Estimate(conversation, cfg.IncludeReasoningInModelContext),
-                    cfg,
-                    request.Force))
-            {
-                return Task.FromResult(new ConversationCompactResult(session, false));
-            }
-
-            CallCount++;
-            var audit = CompactionMessageContent.CreateCompactionMessage(
-                CompactionMessageContent.CreateConversationCompact(1, 1, conversation.Count, "fake.jsonl", "summary"));
-            return Task.FromResult(new ConversationCompactResult(
-                session.WithMessages(new[]
-                {
-                    audit,
-                    SummaryMessageBuilder.CreateSummaryPlaceholder("summary", null)
-                }),
-                true));
-        }
-    }
-
-    [Fact]
-    public async Task ConversationCompactor_AppendsMustPreserveFactMissingFromSummary()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
-        var paths = new TestAppPathProvider(root);
-        paths.EnsureCreated();
-
-        try
-        {
-            const string fact = "- [User] preserve-token-alpha-bravo-charlie-delta-echo";
-            var settings = new AppSettings
-            {
-                ContextCompaction = new ContextCompactionSettings
-                {
-                    TriggerMessages = 2,
-                    KeepMessages = 1,
-                    SummaryMaxTokens = 512,
-                    MaxConversationCharsForSummary = 10_000,
-                    OffloadBeforeCompact = false
-                }
-            };
-            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
-            var capturing = new CapturingModelClient("short summary");
-            var session = AgentSession.Create("missing-fact")
-                .WithMessages(
-                [
-                    ChatMessage.Create(MessageRole.User, "implement Foo.cs"),
-                    ChatMessage.Create(MessageRole.Assistant, "done"),
-                    ChatMessage.Create(MessageRole.User, "continue"),
-                    ChatMessage.Create(MessageRole.Assistant, "ok")
-                ]);
-            var runtime = new CompactionRuntimeContext(
-                new ContextBudgetSnapshot(100_000, 1_000, 1_000, 90_000, 50_000, 0.5),
-                "You are Athlon.",
-                []);
-            var plan = new DynamicCompactionPlan(
-                ContextPressureLevel.Critical,
-                ApplyTruncateArgs: false,
-                ApplyPrefixReEvict: false,
-                ApplyConversationCompact: true,
-                KeepTokenBudget: 0,
-                MustPreserveAppendix: "<must_preserve>\n" + fact + "\n</must_preserve>");
-
-            var result = await new ConversationCompactor(
-                settings,
-                capturing,
-                storage,
-                new TruncateArgsService(),
-                new SessionUsageAccumulator(),
-                new NoOpLogger()).CompactIfNeededAsync(
-                session,
-                new CompactionExecutionRequest(
-                    CompactionKind.ConversationCompact,
-                    Force: true,
-                    EmitAudit: true,
-                    RuntimeContext: runtime,
-                    Plan: plan));
-
-            Assert.True(result.Compacted);
-            var saved = string.Join("\n", result.Session.Messages.Select(message => message.Content));
-            Assert.Contains("Missing from summary:", saved, StringComparison.Ordinal);
-            Assert.Contains(fact, saved, StringComparison.Ordinal);
-        }
-        finally
-        {
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, true);
-            }
-        }
-    }
-
     private sealed class FakeModelClient(string content) : IAgentModelClient
     {
         public Task<AgentModelResponse> CompleteAsync(
@@ -2473,5 +1823,54 @@ public sealed class CompactionTests
             string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path)
                 ? path
                 : Path.Combine(SkillsPath, path);
+    }
+
+
+    private sealed class CountingConversationCompactor : IConversationCompactor
+    {
+        public int CallCount { get; private set; }
+
+        public Task<ConversationCompactResult> CompactIfNeededAsync(
+            AgentSession session,
+            CompactionExecutionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(new ConversationCompactResult(session, false));
+        }
+    }
+
+    private sealed class FakeConversationCompactor(AppSettings settings) : IConversationCompactor
+    {
+        public int CallCount { get; private set; }
+
+        public Task<ConversationCompactResult> CompactIfNeededAsync(
+            AgentSession session,
+            CompactionExecutionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            var conversation = session.Messages.Where(message => message.Role != MessageRole.Compaction).ToList();
+            var cfg = settings.ContextCompaction;
+
+            if (!ConversationCutoffPlanner.ShouldCompact(
+                    conversation,
+                    ContextTokenEstimator.Estimate(conversation, cfg.IncludeReasoningInModelContext),
+                    cfg,
+                    request.Force))
+            {
+                return Task.FromResult(new ConversationCompactResult(session, false));
+            }
+
+            CallCount++;
+            var audit = CompactionMessageContent.CreateCompactionMessage(
+                CompactionMessageContent.CreateConversationCompact(1, 1, conversation.Count, "fake.jsonl", "summary"));
+            return Task.FromResult(new ConversationCompactResult(
+                session.WithMessages(new[]
+                {
+                    audit,
+                    SummaryMessageBuilder.CreateSummaryPlaceholder("summary", null)
+                }),
+                true));
+        }
     }
 }

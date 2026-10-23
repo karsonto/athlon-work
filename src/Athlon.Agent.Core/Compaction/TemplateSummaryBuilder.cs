@@ -15,12 +15,12 @@ public static class TemplateSummaryBuilder
             Math.Max(128, Math.Min(settings.SummaryMaxTokens, settings.SummaryMaxTokens / 2))));
 
         var builder = new StringBuilder();
-        builder.AppendLine("## Conversation summary (template fallback)");
+        builder.AppendLine("## CONTEXT CHECKPOINT (template fallback)");
         builder.AppendLine();
-        builder.AppendLine("### SESSION INTENT");
-        AppendLatestUser(builder, prefix, settings.OverflowReattachUserMaxChars);
+        builder.AppendLine("## SESSION INTENT");
+        AppendLatestUser(builder, prefix, maxChars: 2_000);
         builder.AppendLine();
-        builder.AppendLine("### Must preserve");
+        builder.AppendLine("## CONSTRAINTS / PREFERENCES");
         if (!string.IsNullOrWhiteSpace(mustPreserveAppendix))
         {
             builder.AppendLine(mustPreserveAppendix.Trim());
@@ -31,10 +31,10 @@ public static class TemplateSummaryBuilder
         }
 
         builder.AppendLine();
-        builder.AppendLine("### Change / shell tool trail");
+        builder.AppendLine("## ARTIFACTS");
         AppendChangeTrail(builder, prefix);
         builder.AppendLine();
-        builder.AppendLine("### NEXT STEPS");
+        builder.AppendLine("## NEXT STEPS");
         builder.AppendLine("Continue from the retained tail after this summary.");
 
         var text = builder.ToString().Trim();

@@ -130,7 +130,6 @@ public sealed class ContextMemoryTests
             settings,
             model,
             storage,
-            new TruncateArgsService(),
             new SessionUsageAccumulator(),
             new NoOpLogger()).CompactIfNeededAsync(
             session,
@@ -212,7 +211,6 @@ public sealed class ContextMemoryTests
             settings,
             model,
             storage,
-            new TruncateArgsService(),
             new SessionUsageAccumulator(),
             new NoOpLogger()).CompactIfNeededAsync(
             session,

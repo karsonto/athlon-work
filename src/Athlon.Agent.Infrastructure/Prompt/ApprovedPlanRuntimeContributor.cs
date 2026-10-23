@@ -10,11 +10,9 @@ namespace Athlon.Agent.Infrastructure.Prompt;
 /// <summary>
 /// Re-injects the approved plan on every model round while the session is executing it.
 ///
-/// <para>Without this, the plan's only home is the approved-plan user message. Once the user sends
-/// another message that turn falls out of the compaction keep-window, and
-/// <c>SemanticCutoffPlanner</c> reduces it to a ~240 character appendix — so the model keeps
-/// "following" a plan whose details it can no longer read. This contributor makes the plan a
-/// first-class part of the runtime context instead.</para>
+/// <para>Without this, the plan's only home is the approved-plan user message. After a CONTEXT
+/// CHECKPOINT the history keeps recent user messages (not the full plan body), so this contributor
+/// re-injects the plan as first-class runtime context every model round.</para>
 ///
 /// <para>Runs before <see cref="TaskListPromptContributor"/> (35) so the task list lands directly
 /// after the plan it was seeded from.</para>

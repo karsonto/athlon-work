@@ -4,15 +4,10 @@ using Athlon.Agent.Core.Compaction;
 namespace Athlon.Agent.Infrastructure;
 
 /// <summary>
-/// Turn-prep orchestration: truncate args, re-evict tool results, then compact.
-/// Called from <see cref="Athlon.Agent.Core.Middleware.CompactionTurnMiddleware"/> via
-/// <see cref="IPreCompletionPipeline"/>. When DynamicCompaction is off, <c>RunLegacyAsync</c>
-/// uses message-count triggers; otherwise prune first and skip the compact LLM call if
-/// utilization already dropped.
+/// Turn-prep: single CONTEXT CHECKPOINT when utilization / force requires it.
 /// </summary>
 public sealed class PreCompletionPipeline(
     IConversationCompactor conversationCompactor,
-    TruncateArgsService truncateArgsService,
     AppSettings settings,
     IAppLogger logger) : IPreCompletionPipeline
 {
@@ -38,306 +33,115 @@ public sealed class PreCompletionPipeline(
             return session;
         }
 
-        if (!cfg.DynamicCompaction.Enabled)
-        {
-            return await RunLegacyAsync(session, options, runtimeContext, cancellationToken);
-        }
-
-        if (runtimeContext is null)
-        {
-            return session;
-        }
-
-        var budget = runtimeContext.Budget;
-        var rawHistoryEstimate = runtimeContext.RawHistoryEstimate;
         var conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
         if (conversation.Count == 0)
         {
             return session;
         }
 
-        var force = options.ForceConversationCompact || runtimeContext.ForceOverflow;
-        var pressure = ContextPressureEvaluator.Evaluate(
-            budget,
-            cfg.DynamicCompaction,
-            runtimeContext.ForceOverflow);
-        var entryPressure = pressure;
+        var force = options.ForceConversationCompact || runtimeContext?.ForceOverflow == true;
+        ContextPressureLevel pressure;
+        ContextBudgetSnapshot? budget = runtimeContext?.Budget;
 
-        if (!isManualCompact
-            && !force
-            && pressure == ContextPressureLevel.Normal
-            && !ContextPressureEvaluator.MeetsStaticTruncateThreshold(conversation, cfg, rawHistoryEstimate)
-            && budget.TotalUtilization < ContextPressureEvaluator.ResolveTruncateThreshold(cfg.DynamicCompaction))
+        if (cfg.DynamicCompaction.Enabled && budget is { } dynamicBudget)
         {
-            return session;
-        }
+            pressure = ContextPressureEvaluator.Evaluate(
+                dynamicBudget,
+                cfg.DynamicCompaction,
+                runtimeContext!.ForceOverflow);
 
-        if (ContextPressureEvaluator.IsFixedOverheadDominating(budget, cfg)
-            && (force || pressure is ContextPressureLevel.Critical or ContextPressureLevel.Overflow))
-        {
-            CompactionDecisionLog.Write(
-                _logger,
-                sink: null,
-                session.Id,
-                outcome: "skipped",
-                reason: "fixed_overhead_dominates",
-                pressure: pressure,
-                tokensBefore: budget.EstimatedHistory);
-            // Still allow truncate/re-evict below; skip only empty LLM hopes later in compactor.
-        }
-
-        var plan = DynamicCompactionPlan.Create(
-            pressure,
-            budget,
-            conversation,
-            cfg,
-            force,
-            rawHistoryEstimate);
-        if (isManualCompact)
-        {
-            plan = plan with { ApplyConversationCompact = true };
-        }
-
-        var truncateApplied = false;
-        var reEvictApplied = false;
-        var maxArgLength = PressurePrune.ResolveMaxArgLength(cfg, pressure);
-
-        if (plan.ApplyTruncateArgs && options.AllowTruncateArgs)
-        {
-            var truncatedConversation = truncateArgsService.ApplyToMessages(
-                session.Messages,
-                cfg,
-                out truncateApplied,
-                plan.KeepTokenBudget,
-                maxArgLength);
-            if (truncateApplied)
-            {
-                session = session with { Messages = truncatedConversation };
-                conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
-                budget = ContextBudgetCalculator.RecomputeHistory(
-                    budget,
-                    session.Messages,
-                    cfg,
-                    runtimeContext.CalibrationMultiplier);
-                rawHistoryEstimate = Math.Abs(runtimeContext.CalibrationMultiplier - 1.0) < 0.001
-                    ? budget.EstimatedHistory
-                    : ContextBudgetCalculator.EstimateRawHistory(session.Messages, cfg);
-                runtimeContext = runtimeContext with
-                {
-                    Budget = budget,
-                    RawHistoryEstimate = rawHistoryEstimate
-                };
-            }
-        }
-
-        if (plan.ApplyPrefixReEvict)
-        {
-            // Align the re-evict prefix with the cut the compactor will actually apply, so
-            // tightening targets the span that is about to be summarized and never reaches into
-            // the retained tail.
-            var prefixCutoff = plan.ApplyConversationCompact
-                ? ResolveAlignedPrefixCutoff(conversation, cfg, plan)
-                : ConversationCutoffPlanner.DetermineTruncateArgsCutoffFromKeepBudget(
+            if (!isManualCompact
+                && !force
+                && !ContextPressureEvaluator.ShouldCompact(
+                    dynamicBudget,
                     conversation,
-                    plan.KeepTokenBudget,
-                    cfg.IncludeReasoningInModelContext,
-                    cfg.MaxToolScreenshotsInModelContext);
-            var (updatedMessages, changed) = PressurePrune.ApplyReEvict(
-                session.Messages,
-                cfg,
-                prefixCutoff,
-                pressure,
-                retryOutbound: false);
-            if (changed)
-            {
-                reEvictApplied = true;
-                session = session with { Messages = updatedMessages };
-                conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
-                budget = ContextBudgetCalculator.RecomputeHistory(
-                    budget,
-                    session.Messages,
                     cfg,
-                    runtimeContext.CalibrationMultiplier);
-                rawHistoryEstimate = Math.Abs(runtimeContext.CalibrationMultiplier - 1.0) < 0.001
-                    ? budget.EstimatedHistory
-                    : ContextBudgetCalculator.EstimateRawHistory(session.Messages, cfg);
-                runtimeContext = runtimeContext with
-                {
-                    Budget = budget,
-                    RawHistoryEstimate = rawHistoryEstimate
-                };
+                    pressure,
+                    force: false))
+            {
+                return session;
             }
-        }
 
-        pressure = ContextPressureEvaluator.Evaluate(budget, cfg.DynamicCompaction, forceOverflow: false);
-        var stillNeedsCompact = isManualCompact
-            || options.ApplyEvenWhenBelowThreshold
-            || force
-            || entryPressure == ContextPressureLevel.Overflow
-            || (entryPressure == ContextPressureLevel.Critical
-                && budget.TotalUtilization >= ContextPressureEvaluator.ResolveCompactThreshold(cfg.DynamicCompaction))
-            || ContextPressureEvaluator.ShouldCompact(
-                budget,
-                conversation,
-                cfg,
-                pressure,
-                force: false);
-
-        // Overflow/Force: always continue to compact even if prune dropped utilization.
-        // Critical: only if still at/above compact threshold after prune (avoid summary storms).
-        if (!stillNeedsCompact)
-        {
-            if (plan.ApplyConversationCompact)
+            if (ContextPressureEvaluator.IsFixedOverheadDominating(dynamicBudget, cfg)
+                && (force || pressure is ContextPressureLevel.Critical or ContextPressureLevel.Overflow))
             {
                 CompactionDecisionLog.Write(
                     _logger,
                     sink: null,
                     session.Id,
                     outcome: "skipped",
-                    reason: "after_prune_skip",
-                    pressure: entryPressure,
-                    tokensBefore: budget.EstimatedHistory);
+                    reason: "fixed_overhead_dominates",
+                    pressure: pressure,
+                    tokensBefore: dynamicBudget.EstimatedHistory);
             }
 
+            var plan = DynamicCompactionPlan.Create(
+                pressure,
+                dynamicBudget,
+                conversation,
+                cfg,
+                force);
+            if (isManualCompact)
+            {
+                plan = plan with { ApplyConversationCompact = true };
+            }
+
+            if (!plan.ApplyConversationCompact)
+            {
+                return session;
+            }
+
+            var compactResult = await conversationCompactor.CompactIfNeededAsync(
+                session,
+                new CompactionExecutionRequest(
+                    options.CompactionKind,
+                    force,
+                    options.EmitCompactionAudit,
+                    options.Strategy,
+                    runtimeContext,
+                    plan),
+                cancellationToken).ConfigureAwait(false);
+
+            if (compactResult.Compacted)
+            {
+                _logger.Information(
+                    "Checkpoint applied for session {SessionId} at pressure {Pressure}",
+                    session.Id,
+                    pressure);
+            }
+
+            return compactResult.Session;
+        }
+
+        // Static thresholds when dynamic compaction is off.
+        var estimated = ContextTokenEstimator.Estimate(
+            conversation,
+            cfg.IncludeReasoningInModelContext,
+            maxToolScreenshots: cfg.MaxToolScreenshotsInModelContext,
+            hygiene: cfg.RequestHistoryHygiene);
+        if (!isManualCompact
+            && !force
+            && !ConversationCutoffPlanner.ShouldCompact(conversation, estimated, cfg, force: false))
+        {
             return session;
         }
 
-        plan = plan with
-        {
-            Pressure = pressure,
-            ApplyConversationCompact = true
-        };
+        pressure = force ? ContextPressureLevel.Overflow : ContextPressureLevel.Critical;
+        var staticPlan = new DynamicCompactionPlan(
+            pressure,
+            ApplyConversationCompact: true,
+            CheckpointHistoryBuilder.ResolveRetainUserTokenBudget(cfg, pressure, force));
 
-        var compactResult = await conversationCompactor.CompactIfNeededAsync(
+        var result = await conversationCompactor.CompactIfNeededAsync(
             session,
             new CompactionExecutionRequest(
                 options.CompactionKind,
                 force,
                 options.EmitCompactionAudit,
                 options.Strategy,
-                runtimeContext with { Budget = budget, RawHistoryEstimate = rawHistoryEstimate },
-                plan with
-                {
-                    ApplyTruncateArgs = truncateApplied,
-                    ApplyPrefixReEvict = reEvictApplied
-                }),
-            cancellationToken);
-
-        if (compactResult.Compacted)
-        {
-            _logger.Information(
-                "Dynamic compaction applied for session {SessionId} at pressure {Pressure} (utilization {Utilization:P0})",
-                session.Id,
-                plan.Pressure,
-                budget.TotalUtilization);
-        }
-
-        return compactResult.Session;
-    }
-
-    /// <summary>
-    /// Cutoff the compactor will actually summarize, so prefix tightening stays inside the
-    /// summarized span. Falls back to the keep-budget window when no semantic plan is available.
-    /// </summary>
-    private static int ResolveAlignedPrefixCutoff(
-        IReadOnlyList<ChatMessage> conversation,
-        ContextCompactionSettings cfg,
-        DynamicCompactionPlan plan)
-    {
-        if (cfg.DynamicCompaction.EnableSemanticCutoff && plan.KeepTokenBudget > 0)
-        {
-            var cutPlan = SemanticCutoffPlanner.DetermineCutPlan(
-                conversation,
-                cfg,
-                plan.KeepTokenBudget,
-                plan.Pressure);
-            if (cutPlan.SummarizedEnd > 0)
-            {
-                return cutPlan.SummarizedEnd;
-            }
-        }
-
-        return ConversationCutoffPlanner.DetermineTruncateArgsCutoffFromKeepBudget(
-            conversation,
-            plan.KeepTokenBudget,
-            cfg.IncludeReasoningInModelContext,
-            cfg.MaxToolScreenshotsInModelContext);
-    }
-
-    private async Task<AgentSession> RunLegacyAsync(
-        AgentSession session,
-        PreCompletionOptions options,
-        CompactionRuntimeContext? runtimeContext,
-        CancellationToken cancellationToken)
-    {
-        var cfg = settings.ContextCompaction;
-        var conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
-        var truncateApplied = false;
-        var reEvictApplied = false;
-
-        if (conversation.Count > 0
-            && ContextPressureEvaluator.MeetsStaticTruncateThreshold(conversation, cfg))
-        {
-            var truncatedMessages = truncateArgsService.ApplyToMessages(
-                session.Messages,
-                cfg,
-                out truncateApplied);
-            if (truncateApplied)
-            {
-                session = session with { Messages = truncatedMessages };
-                conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
-            }
-
-            var cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoff(
-                conversation,
-                cfg.TruncateArgs,
-                cfg.IncludeReasoningInModelContext,
-                cfg.MaxToolScreenshotsInModelContext);
-            var (updatedMessages, changed) = PrefixToolResultReEvictor.Apply(
-                session.Messages,
-                cfg,
-                cutoff);
-            if (changed)
-            {
-                reEvictApplied = true;
-                session = session with { Messages = updatedMessages };
-            }
-        }
-
-        var compactResult = await conversationCompactor.CompactIfNeededAsync(
-            session,
-            new CompactionExecutionRequest(
-                options.CompactionKind,
-                options.ForceConversationCompact,
-                options.EmitCompactionAudit,
-                options.Strategy,
                 runtimeContext,
-                reEvictApplied
-                    ? new DynamicCompactionPlan(
-                        ContextPressureLevel.Normal,
-                        ApplyTruncateArgs: truncateApplied,
-                        ApplyPrefixReEvict: true,
-                        ApplyConversationCompact: true,
-                        KeepTokenBudget: 0,
-                        MustPreserveAppendix: null)
-                    : truncateApplied
-                        ? new DynamicCompactionPlan(
-                            ContextPressureLevel.Normal,
-                            ApplyTruncateArgs: true,
-                            ApplyPrefixReEvict: false,
-                            ApplyConversationCompact: true,
-                            KeepTokenBudget: 0,
-                            MustPreserveAppendix: null)
-                        : null),
-            cancellationToken);
-
-        if (compactResult.Compacted)
-        {
-            _logger.Information(
-                "Conversation compact applied for session {SessionId}",
-                session.Id);
-        }
-
-        return compactResult.Session;
+                staticPlan),
+            cancellationToken).ConfigureAwait(false);
+        return result.Session;
     }
 }

@@ -271,7 +271,6 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IRuntimeContextContributor, SubAgentCompletionPromptContributor>();
         }
 
-        services.AddSingleton<TruncateArgsService>();
         services.AddSingleton<ITokenEstimatorCalibrator, TokenEstimatorCalibrator>();
         services.AddSingleton<ISessionUsageAccumulator, SessionUsageAccumulator>();
         services.AddSingleton<IPromptPressureStore, PromptPressureStore>();

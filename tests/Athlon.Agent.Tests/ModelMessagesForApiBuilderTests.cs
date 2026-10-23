@@ -193,24 +193,22 @@ public sealed class ModelMessagesForApiBuilderTests
         };
         cache.Build("sys", before, includeReasoningInModelContext: false);
 
-        var after = new TruncateArgsService().ApplyToMessages(
-            before,
-            new ContextCompactionSettings
+        // Simulate an in-place content rewrite (e.g. checkpoint / hygiene) that must invalidate cache.
+        var after = new List<ChatMessage>
+        {
+            before[0] with
             {
-                TruncateArgs = new TruncateArgsSettings
-                {
-                    Enabled = true,
-                    MaxArgLength = 10,
-                    TruncationText = "...(truncated)",
-                    TriggerMessages = 1
-                }
-            },
-            out var changed,
-            keepTokenBudgetOverride: 0);
+                ToolCallsJson = AssistantToolCallsCodec.Serialize(
+                [
+                    new AgentToolCall(
+                        "tc1",
+                        "file_write",
+                        new Dictionary<string, string> { ["content"] = "short...(truncated)" })
+                ])
+            }
+        };
 
-        Assert.True(changed);
         cache.NotePreCompletionResult(before, after);
-        // After invalidate, Build rebuilds from after history rather than appending stale prefix.
         var rebuilt = cache.Build("sys", after, includeReasoningInModelContext: false);
         var assistant = Assert.Single(rebuilt, message => message.Role == "assistant" && message.ToolCalls is { Count: > 0 });
         var contentArg = assistant.ToolCalls![0].Arguments["content"].GetString();

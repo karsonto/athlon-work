@@ -1,52 +1,46 @@
 # Context Compression
 
-Before each model call, `PreCompletionPipeline` runs a **budget-aware parameter adjuster** (when `contextCompaction.dynamicCompaction.enabled` is true, the default). Dynamic mode **raises LLM compact thresholds** toward **`targetUtilization` (default 0.80)** — static message/token compact limits do **not** apply while dynamic mode is on. Truncate/re-evict still honor static floors. After a full **3-level pass**, history lands near **`postCompactionUtilization` (default 0.45)**. Set `contextWindowTokens` to the real model window when it differs; the default is `131072` (128K tokens).
+Athlon uses a **single CONTEXT CHECKPOINT** path (Codex-style), not a multi-tier prune ladder.
 
-Pressure uses **`TotalUtilization`** = `(FixedOverhead + EstimatedHistory) / UsablePromptWindow` (full prompt vs usable window). Do not confuse it with **`HistoryUtilization`** = `EstimatedHistory / HistoryBudget`, which is informational only.
+Before each model call, `CompactionTurnMiddleware` → `PreCompletionPipeline` decides whether to checkpoint. When it does, `ConversationCompactor` replaces session history with:
 
-| Pressure | TotalUtilization vs target (default 80%) | Actions |
-|----------|------------------------------------------|---------|
-| Normal | &lt; ~55% absolute | none (no LLM compact) |
-| Elevated | ~55–72% absolute | prefix re-evict only (no truncateArgs, no LLM compact) |
-| High | ≥ 72% (= target × 0.90) | truncateArgs + prefix re-evict (static keep floor) |
-| Critical | ≥ 80% (= target) | prune (persist) + budget-capped tail + compact when still ≥ target → ~45% |
-| Overflow | API `context_length` error | force compact → ~20% + outbound-only retry prune → middle-cut |
+1. A summary placeholder (`SummaryResumePrefix` + CONTEXT CHECKPOINT body)
+2. Optional `[session-handoff]` note (file side-channel)
+3. Recent **real user** messages within `RetainRecentUserMaxTokens` (default 20 000; Overflow/Force uses `OverflowRetainRecentUserMaxTokens`, default 8 000)
+4. A pairing-safe open tool tail only when the conversation ends with unclosed `tool_calls`
 
-By default, `contextCompaction.enabled` and `dynamicCompaction.enabled` are **true**. A `settings.json` that explicitly sets either flag to `false` keeps proactive compaction off. API overflow retry still compacts when needed.
+System / runtime context are **not** stored in session messages. Each round still gets canonical context via `PrepareForTurn` + `BuildRuntimeContext` + `ModelMessagesForApiBuilder`.
 
-When dynamic compaction is disabled (but proactive compaction is enabled), only the static thresholds below apply.
+## When checkpoint runs
 
-## High-pressure behavior (Critical / Overflow)
-
-Designed so Overflow recovery can shrink history without orphaning tool pairs or permanently wrecking session previews on a failed retry.
-
-| Concern | Behavior |
+| Trigger | Behavior |
 |---------|----------|
-| KeepTokenBudget | Critical/Overflow compact uses **dynamic** keep only (no `Max(static KeepMessages)` inflate). Floor = `max(512, user/plan anchor tokens)`. |
-| Fixed overhead | If `FixedOverhead >= FixedOverheadDominatesRatio * UsablePromptWindow` (default 0.85), skip empty history compact (`reason=fixed_overhead_dominates`). |
-| MinCompactionSavingsTokens | **Exempt** for Overflow / Force. Critical may skip after cut-plan iteration (`savings_or_budget_skip`). |
-| After prune | Overflow/Force always continue to compact. Critical continues **only if** utilization still ≥ `targetUtilization`; otherwise `after_prune_skip` (avoids summary storms). |
-| Adaptive tail | Cut plan iterates (≤ `MaxCutPlanIterations`, default 5) so `tail + summary hint ≤ KeepTokenBudget`, then **one** summary call. Overflow may cap protected tail via `OverflowProtectedTailMaxMessages` (default 12). |
-| Cutoff degrade | Default **on** for Overflow (`EnableCutoffDegradeOnOverflow`), **off** for Critical. Prefer whole `assistant(tool_calls)+tool*` groups in the prefix; never leave orphan `tool_calls`. |
-| Overflow retry | Outbound-only aggressive prune (`OverflowRetryPreviewDivisor`, default 8) on a **clone** — does not rewrite `session.json` if compact fails. Then middle-cut. Hard-drop is **not** in v1. |
-| Template summary | On Overflow summary empty/exception (`EnableTemplateSummaryOnOverflowFailure`), deterministic template with hard cap from `SummaryMaxTokens` (`outcome=template`). |
+| Dynamic on + `TotalUtilization >= TargetUtilization` (default 80%) | Checkpoint |
+| Overflow (`context_length`) / Force / Manual | Checkpoint with tighter user retention |
+| `FixedOverhead >= 0.85 * UsablePromptWindow` | Skip empty history compact (`fixed_overhead_dominates`) |
 
-### `compaction.decision` reasons
+Pressure bands Elevated/High remain for UI metering only; they do **not** run truncate/re-evict before compact.
 
-Logged via `CompactionDecisionLog` (`eventType=compaction.decision`):
+## Summary
 
-`savings_or_budget_skip` · `after_prune_skip` · `cutoff_zero` · `cutoff_degraded` · `fixed_overhead_dominates` · `payload_not_reduced` · `outbound_prune_reduced` · `summary_failed` · `ok`
+- Built-in CONTEXT CHECKPOINT / handoff prompt (settings `summaryPrompt` is ignored).
+- Overflow/Force: LLM empty/failure → retry once → `TemplateSummaryBuilder`.
+- Critical: failure → skip (`summary_failed`).
+- `CompactionQualityWarnAfterCount` (default 2): warn when a session accumulates many summaries.
 
-## Static layers
+## Still orthogonal (kept)
 
-1. **truncateArgs** (non-LLM): when history reaches the truncate threshold (default: 25 messages / 40k estimated tokens), clips large tool argument strings on assistant messages outside the keep window (default: last 20 messages, max arg length 2000). Critical uses `CriticalPreviewDivisor` (default 2); Overflow uses `OverflowMaxArgLength` (default 500).
-2. **conversation compact**: when history reaches the compact threshold (default: 50 messages / 80k estimated tokens), archives the session to `sessions/<sessionId>/transcripts/transcript_<unix>.jsonl`, summarizes the prefix (including any prior `__compaction_summary__` placeholders), then replaces it with an optional `Compaction` audit message plus a summary user placeholder (`__compaction_summary__`) and the preserved tail. Overflow may fall back to a template summary when the LLM fails.
-3. **tool result eviction** (after each tool invoke): if a tool result exceeds 80k characters, the full body is written to `sessions/<sessionId>/evicted/<toolCallId>.txt` and only a head/tail preview is kept in the in-memory tool message. High pressure re-evicts with tighter preview divisors (`CriticalPreviewDivisor` / `OverflowPreviewDivisor` / `OverflowRetryPreviewDivisor`).
-
-**Send-boundary hygiene** (always on by default): before each model API call, `RequestHistoryHygiene` compacts oversized tool payloads in the outbound request only. `publish_plan` `body` stays verbatim until a later approved-plan message makes that copy redundant; the plan text is still reattached from the compaction anchor.
-
-Summary calls send no tool schemas. Read and search tool results in the summary input collapse to a one-line trace; write, edit, patch, and shell results keep a longer body. An approved plan that falls inside the summarized span is copied back after the summary. Runtime context updates append `Runtime context updated.` instead of replaying the previous context.
+- Per-tool `ToolResultEvictor` on tool return
+- `RequestHistoryHygiene` on the outbound API payload
+- `SessionHandoffNote` / `session_note_append`
 
 ## Configuration
 
-See `~/.athlon-agent/config/settings.json` under `contextCompaction`. High-pressure knobs include `OverflowProtectedTailMaxMessages`, `OverflowReattachUserMaxChars`, `CriticalPreviewDivisor`, `OverflowPreviewDivisor`, `OverflowRetryPreviewDivisor`, `OverflowMaxArgLength`, `EnableCutoffDegradeOnOverflow`, `EnableCutoffDegradeOnCritical`, `EnableTemplateSummaryOnOverflowFailure`, `FixedOverheadDominatesRatio`. Full example and field descriptions are in the [repository README](../../README.md#configuration) or copy from `src/Athlon.Agent.Core/AgentSettings.cs` / `ContextCompactionSettings`.
+`~/.athlon-agent/config/settings.json` → `contextCompaction`:
+
+- `retainRecentUserMaxTokens`, `overflowRetainRecentUserMaxTokens`
+- `compactionQualityWarnAfterCount`
+- `enableTemplateSummaryOnOverflowFailure`, `fixedOverheadDominatesRatio`
+- `dynamicCompaction.targetUtilization`, `contextWindowTokens`
+
+Removed (no longer used): middle-cut, pressure prune divisors, semantic protected-tail / must_preserve / plan-user reattach multi-path, PreCompletion truncateArgs.

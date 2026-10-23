@@ -15,7 +15,7 @@ public sealed class CompactionAuditDisplayTests
             "transcript.jsonl",
             "summary body",
             CompactionStrategy.ForceCompact,
-            [CompactionLayer.TruncateArgs, CompactionLayer.ConversationCompact]);
+            [CompactionLayer.ConversationCompact]);
 
         var display = CompactionAuditDisplay.Parse(content);
 

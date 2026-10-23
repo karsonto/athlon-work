@@ -95,7 +95,7 @@ public sealed partial class SessionTurnUiController
 
     private bool ShouldRefreshDisplayAfterSessionReplace(AgentSession session)
     {
-        // Model-driven compaction (ConversationCompact / ForceCompact / MiddleCutOnRetrySkipped)
+        // Model-driven compaction (ConversationCompact / ForceCompact checkpoint)
         // must not collapse the timeline. Its checkpoint audit arrives incrementally through
         // ChatMessageAppended, so the already-displayed history stays untouched and scrolling
         // back through it keeps working. Only manual compaction, which the user explicitly asked

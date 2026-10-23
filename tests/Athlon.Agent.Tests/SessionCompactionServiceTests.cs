@@ -70,10 +70,8 @@ public sealed class SessionCompactionServiceTests
                 settings,
                 new SummaryModelClient("manual summary"),
                 storage,
-                new TruncateArgsService(),
                 new SessionUsageAccumulator(),
                 new NoOpLogger()),
-            new TruncateArgsService(),
             settings,
             new NoOpLogger());
         var compactionMiddleware = new Athlon.Agent.Core.Middleware.CompactionTurnMiddleware(

@@ -49,16 +49,16 @@ public static class SummaryMessageBuilder
         var handoffHint = handoffAttached
             ? "The task skeleton is in the following [session-handoff] message. Read that first.\n\n"
             : string.Empty;
+        var resumePrefix = ConversationCompactionDefaults.SummaryResumePrefix.Trim() + "\n\n";
         if (!string.IsNullOrWhiteSpace(transcriptPath))
         {
             var fileName = Path.GetFileName(transcriptPath);
             return
-                "You are in the middle of a conversation that has been summarized.\n\n" +
-                "The summary is an outline. The full history was archived as transcript file " +
+                resumePrefix +
+                "The full history was archived as transcript file " +
                 fileName +
                 ". Use history_list_transcripts, history_read_transcript, or history_search_transcripts to recover details. Use history_read_evicted for truncated tool output.\n\n" +
                 handoffHint +
-                "A condensed summary follows:\n\n" +
                 "<summary>\n" +
                 trimmedSummary +
                 "\n</summary>\n\n" +
@@ -66,7 +66,7 @@ public static class SummaryMessageBuilder
         }
 
         return marker + "\n" +
-               "Here is a summary of the conversation to date:\n\n" +
+               resumePrefix +
                handoffHint +
                trimmedSummary;
     }

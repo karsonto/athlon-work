@@ -1,14 +1,9 @@
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Core.Plan;
-using Athlon.Agent.Infrastructure.BehaviorReport;
-using Athlon.Agent.Core.RuntimeDiagnostics;
-using System.Diagnostics;
 
 namespace Athlon.Agent.Infrastructure;
 
-/// <summary>Summary request, manual cutoff and handoff reload.</summary>
+/// <summary>Summary request and handoff reload.</summary>
 public sealed partial class ConversationCompactor
 {
     private async Task<ChatMessage?> LoadHandoffMessageAsync(string sessionId, CancellationToken cancellationToken)
@@ -17,56 +12,23 @@ public sealed partial class ConversationCompactor
         return string.IsNullOrWhiteSpace(note) ? null : SessionHandoffNote.CreateMessage(note);
     }
 
-    /// <summary>Token estimate of the payload actually written back after compaction.</summary>
     private static int EstimateCompactedTokens(
         ChatMessage summaryMessage,
-        ChatMessage? reattachedPlan,
-        ChatMessage? reattachedUser,
-        IReadOnlyList<ChatMessage> tail,
+        IReadOnlyList<ChatMessage> retainedTail,
         ContextCompactionSettings cfg,
         ChatMessage? handoffMessage = null)
     {
-        var messages = new List<ChatMessage>(tail.Count + 4) { summaryMessage };
+        var messages = new List<ChatMessage>(retainedTail.Count + 2) { summaryMessage };
         if (handoffMessage is not null)
         {
             messages.Add(handoffMessage);
         }
-        if (reattachedPlan is not null)
-        {
-            messages.Add(reattachedPlan);
-        }
 
-        if (reattachedUser is not null)
-        {
-            messages.Add(reattachedUser);
-        }
-
-        messages.AddRange(tail);
+        messages.AddRange(retainedTail);
         return ContextTokenEstimator.Estimate(
             messages,
             cfg.IncludeReasoningInModelContext,
             hygiene: cfg.RequestHistoryHygiene);
-    }
-
-    private static int ResolveManualCompactCutoff(
-        IReadOnlyList<ChatMessage> conversation,
-        ContextCompactionSettings cfg)
-    {
-        if (conversation.Count == 0)
-        {
-            return 0;
-        }
-
-        if (conversation.Count == 1)
-        {
-            return 1;
-        }
-
-        var keepCount = cfg.KeepMessages > 0
-            ? Math.Min(cfg.KeepMessages, conversation.Count - 1)
-            : 1;
-        keepCount = Math.Max(1, Math.Min(keepCount, conversation.Count - 1));
-        return ConversationCutoffPlanner.FindSafeCutoffPoint(conversation, conversation.Count - keepCount);
     }
 
     private static AgentModelRequest BuildSummaryRequest(
@@ -92,9 +54,6 @@ public sealed partial class ConversationCompactor
         summaryInputCharsAfter = null;
         hygieneSavingsEstimate = null;
 
-        // The formatted text only feeds the compaction audit display; the model payload is
-        // built from the structured messages below. Skip the whole formatting/hygiene pass
-        // unless an audit is actually emitted (the middle-cut path always skips it).
         if (computeAuditMetrics)
         {
             var formatted = ConversationSummaryFormatter.FormatMessages(prefix);
@@ -129,11 +88,10 @@ public sealed partial class ConversationCompactor
             hygieneSavingsEstimate ?? 0,
             built.EstimatedSavingsTokens + hygieneResult.EstimatedSavingsTokens);
 
-        // Keep the summary instruction stable so providers can reuse as much prompt prefix as possible.
         messages.Add(new AgentModelMessage(
             "user",
             BuildSummaryPrompt(
-                cfg.SummaryPrompt,
+                ConversationCompactionDefaults.DefaultSummaryPrompt,
                 ConversationCompactionDefaults.PrecedingMessagesPlaceholder,
                 mustPreserve,
                 handoffNotePresent)));

@@ -10,8 +10,8 @@ public sealed class ContextCompactionSettings
     public int ContextWindowTokens { get; set; } = 131_072;
 
     /// <summary>
-    /// When &gt; 0 with <see cref="ContextWindowTokens"/>, compaction also triggers when estimated
-    /// history tokens reach <c>ContextWindowTokens * CompactTriggerRatio</c> (whichever token threshold is higher vs <see cref="TriggerTokens"/>).
+    /// When &gt; 0 with <see cref="ContextWindowTokens"/>, static (non-dynamic) compaction also triggers when
+    /// estimated history tokens reach <c>ContextWindowTokens * CompactTriggerRatio</c>.
     /// </summary>
     public double CompactTriggerRatio { get; set; } = 0.7;
 
@@ -19,97 +19,44 @@ public sealed class ContextCompactionSettings
 
     public int TriggerTokens { get; set; } = 80_000;
 
+    /// <summary>Legacy keep message floor for static cutoff helpers; checkpoint path uses user token budgets.</summary>
     public int KeepMessages { get; set; } = 20;
 
-    public int KeepTokens { get; set; } = 0;
+    public int KeepTokens { get; set; }
 
     public bool OffloadBeforeCompact { get; set; } = true;
 
     /// <summary>
     /// When false (default), plain assistant replies omit <c>ReasoningContent</c> from API history
     /// and compaction token estimates. Assistant messages with <c>tool_calls</c> still include
-    /// reasoning so tool loops can continue. UI and <c>conversation.jsonl</c> persist reasoning for display.
+    /// reasoning so tool loops can continue.
     /// </summary>
     public bool IncludeReasoningInModelContext { get; set; }
 
-    /// <summary>
-    /// Max Computer Use tool screenshots kept in the model API payload (newest first).
-    /// User-uploaded images are not capped. Also used by history token pressure estimates.
-    /// Values below 0 are treated as 0.
-    /// </summary>
     public int MaxToolScreenshotsInModelContext { get; set; } = 2;
 
+    /// <summary>
+    /// Retained for settings.json deserialize compatibility only. Compaction always uses
+    /// <see cref="ConversationCompactionDefaults.DefaultSummaryPrompt"/>.
+    /// </summary>
     public string SummaryPrompt { get; set; } = ConversationCompactionDefaults.DefaultSummaryPrompt;
 
     public int MaxConversationCharsForSummary { get; set; } = 200_000;
 
     public int SummaryMaxTokens { get; set; } = 4_096;
 
-    public TruncateArgsSettings TruncateArgs { get; set; } = new();
+    /// <summary>Max approx tokens of recent real user messages retained after a checkpoint (Codex-style).</summary>
+    public int RetainRecentUserMaxTokens { get; set; } = 20_000;
+
+    /// <summary>Tighter user retention budget for Overflow / Force checkpoints.</summary>
+    public int OverflowRetainRecentUserMaxTokens { get; set; } = 8_000;
+
+    /// <summary>Warn when a session has at least this many compaction summaries (quality may degrade).</summary>
+    public int CompactionQualityWarnAfterCount { get; set; } = 2;
 
     public ToolResultEvictionSettings ToolResultEviction { get; set; } = new();
 
     public DynamicCompactionSettings DynamicCompaction { get; set; } = new();
-
-    /// <summary>
-    /// When true, if overflow retry is skipped (payload not reduced), perform a single
-    /// middle-cut compaction: keep head/tail windows and summarize the middle span.
-    /// </summary>
-    public bool MiddleCutOnRetrySkipped { get; set; } = true;
-
-    /// <summary>Number of earliest conversation messages to preserve during middle-cut compaction.</summary>
-    public int MiddleCutKeepHeadMessages { get; set; } = 2;
-
-    /// <summary>Number of latest conversation messages to preserve during middle-cut compaction.</summary>
-    public int MiddleCutKeepTailMessages { get; set; } = 12;
-
-    /// <summary>Max middle-cut attempts per run to avoid repeated reshaping.</summary>
-    public int MiddleCutMaxPerRun { get; set; } = 1;
-
-    /// <summary>
-    /// Upper bound on how many trailing messages the semantic cutoff protects.
-    ///
-    /// The protected tail is anchored at the last real user message, which is appended when a turn
-    /// <em>starts</em>. A long agentic turn therefore accumulates every tool result after that
-    /// anchor, and an unbounded protected tail would make those messages unsummarizable — compaction
-    /// would re-summarize an already summarized prefix forever without reducing the payload.
-    ///
-    /// Capping the protected tail lets the cutoff move forward inside a long turn while a short
-    /// conversation (fewer messages than this cap) keeps its existing behaviour exactly.
-    /// Values below 1 are treated as unbounded.
-    /// </summary>
-    public int ProtectedTailMaxMessages { get; set; } = 40;
-
-    /// <summary>
-    /// Overflow-only hard cap on protected-tail length. Effective cap is
-    /// <c>min(ProtectedTailMaxMessages, OverflowProtectedTailMaxMessages)</c> when pressure is Overflow.
-    /// Values below 1 disable the overflow-specific cap.
-    /// </summary>
-    public int OverflowProtectedTailMaxMessages { get; set; } = 12;
-
-    /// <summary>
-    /// When re-attaching the user anchor under Overflow budget pressure, truncate content to this many
-    /// characters (full text still flows through must_preserve when present).
-    /// </summary>
-    public int OverflowReattachUserMaxChars { get; set; } = 2_000;
-
-    /// <summary>Divide ToolResultEviction.PreviewChars by this when pressure is Critical (persist).</summary>
-    public int CriticalPreviewDivisor { get; set; } = 2;
-
-    /// <summary>Divide ToolResultEviction.PreviewChars by this for Overflow compact-path prune.</summary>
-    public int OverflowPreviewDivisor { get; set; } = 4;
-
-    /// <summary>Divide PreviewChars by this for Overflow retry outbound-only prune.</summary>
-    public int OverflowRetryPreviewDivisor { get; set; } = 8;
-
-    /// <summary>MaxArgLength used when pressure is Overflow.</summary>
-    public int OverflowMaxArgLength { get; set; } = 500;
-
-    /// <summary>When true, Overflow/Force may degrade unsafe cutoffs instead of skipping.</summary>
-    public bool EnableCutoffDegradeOnOverflow { get; set; } = true;
-
-    /// <summary>When true, Critical may degrade unsafe cutoffs (default off — high regression risk).</summary>
-    public bool EnableCutoffDegradeOnCritical { get; set; }
 
     /// <summary>When true, Overflow summary LLM failure falls back to a deterministic template summary.</summary>
     public bool EnableTemplateSummaryOnOverflowFailure { get; set; } = true;
@@ -120,40 +67,16 @@ public sealed class ContextCompactionSettings
     /// </summary>
     public double FixedOverheadDominatesRatio { get; set; } = 0.85;
 
-    /// <summary>Max cut-plan iterations before a single summary call under budget pressure.</summary>
-    public int MaxCutPlanIterations { get; set; } = 5;
-
-    /// <summary>
-    /// Minimum token reduction required before paying for an LLM summarization call. When the
-    /// projected post-compaction payload does not shrink by at least this much, compaction is
-    /// skipped (and reported as not compacted) instead of burning a summary round trip.
-    /// Values below 0 are treated as 0. Exempt for Overflow/Force.
-    /// </summary>
-    public int MinCompactionSavingsTokens { get; set; } = 2_000;
-
-    /// <summary>
-    /// When the cutoff advances past the last real user message, re-attach that message verbatim
-    /// after the summary so the active instruction survives the cut. Set false to rely on
-    /// <c>must_preserve</c> in the summary prompt alone.
-    /// </summary>
-    public bool ReattachLatestUserMessage { get; set; } = true;
-
     /// <summary>
     /// Prefer the provider-reported <c>prompt_tokens</c> over the character-based estimate when
-    /// resolving context utilization. The measured value is authoritative for what the API
-    /// actually received, so the composer occupancy meter and pressure levels track reality rather
-    /// than estimator drift. Set false to fall back to the "larger of measured and estimated"
-    /// (floor) semantics.
+    /// resolving context utilization.
     /// </summary>
     public bool PreferMeasuredPromptTokens { get; set; } = true;
 
     public RequestHistoryHygieneSettings RequestHistoryHygiene { get; set; } = CreateDefaultHistoryHygiene();
 
-    /// <summary>
-    /// Default per-tool hygiene budgets. Computer Use observations are large and expire quickly, so
-    /// they get a tighter result budget than the global default. Values live here (not only in
-    /// <see cref="ComputerUseSettings"/>) because hygiene runs in the Core request path.
-    /// </summary>
+    public ToolStormSettings ToolStorm { get; set; } = new();
+
     private static RequestHistoryHygieneSettings CreateDefaultHistoryHygiene()
     {
         var settings = new RequestHistoryHygieneSettings();
@@ -168,25 +91,6 @@ public sealed class ContextCompactionSettings
 
         return settings;
     }
-
-    public ToolStormSettings ToolStorm { get; set; } = new();
-}
-
-public sealed class TruncateArgsSettings
-{
-    public bool Enabled { get; set; } = true;
-
-    public int TriggerMessages { get; set; } = 25;
-
-    public int TriggerTokens { get; set; } = 40_000;
-
-    public int KeepMessages { get; set; } = 20;
-
-    public int KeepTokens { get; set; } = 0;
-
-    public int MaxArgLength { get; set; } = 2_000;
-
-    public string TruncationText { get; set; } = "...(argument truncated)";
 }
 
 public sealed class ToolResultEvictionSettings

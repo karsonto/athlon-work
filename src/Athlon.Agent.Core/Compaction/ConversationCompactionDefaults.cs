@@ -9,52 +9,69 @@ public static class ConversationCompactionDefaults
         "The conversation to summarize is in the preceding messages.";
 
     /// <summary>
+    /// Prefixed onto the compacted summary when it is re-injected for the continuing model
+    /// (Codex-style handoff framing).
+    /// </summary>
+    public const string SummaryResumePrefix =
+        """
+        Another language model was solving this problem and produced a handoff summary of its progress.
+        The retained messages after this summary are recent context; tool results in the tail are still available.
+        Build on that work — do not redo completed steps. Prefer the handoff for goals, decisions, constraints, and next steps.
+        """;
+
+    /// <summary>
     /// Appended when a handoff note will be reattached. Overrides the sections that duplicate the note.
     /// </summary>
     public const string HandoffPreservedSummaryOverride =
         """
         The session handoff note is stored separately and will be attached verbatim after your summary. Do not restate it.
         Write exactly None for SESSION INTENT.
-        Write exactly None for decisions and rejected options.
+        Write exactly None for KEY DECISIONS / REJECTED PATHS.
         Write exactly None for NEXT STEPS.
-        Keep ## SUMMARY as a narrative of what happened.
+        Keep ## PROGRESS as a narrative of what happened.
         Keep ## ARTIFACTS as file paths only.
+        Keep ## CONSTRAINTS / PREFERENCES only if they are not already in the handoff note.
         """;
 
+    /// <summary>
+    /// Dedicated CONTEXT CHECKPOINT prompt (Codex-style handoff). Sections stay structured so
+    /// must_preserve / session handoff overrides remain mechanical.
+    /// </summary>
     public const string DefaultSummaryPrompt =
         """
-        <role>
-        Context Extraction Assistant
-        </role>
+        You are performing a CONTEXT CHECKPOINT COMPACTION.
+        Create a handoff summary for another LLM that will resume this same coding task.
+        The conversation history below will be replaced by your summary plus a short retained tail.
+        Be concise, structured, and focused on seamless continuation — not a transcript paraphrase.
 
-        <primary_objective>
-        Your sole objective in this task is to extract the highest quality/most relevant context from the conversation history below.
-        </primary_objective>
+        Include only what the next model needs:
+        - Current progress and key decisions (and why)
+        - Important constraints, user preferences, and hard requirements
+        - Clear next steps (concrete, ordered)
+        - Critical paths, commands, examples, or references needed to continue
+        - What was already tried and rejected (so it is not repeated)
 
-        <objective_information>
-        You're nearing the total number of input tokens you can accept, so you must extract the highest quality/most relevant pieces of information from your conversation history.
-        This context will then overwrite the conversation history presented below. Because of this, ensure the context you extract is only the most important information to continue working toward your overall goal.
-        </objective_information>
-
-        <instructions>
-        The conversation history below will be replaced with the context you extract in this step. You want to ensure that you don't repeat any actions you've already completed, so the context you extract from the conversation history should be focused on the most important information to your overall goal.
-
-        Structure your summary using these sections (populate each or write "None"):
+        Structure your reply with these sections (populate each or write "None"):
 
         ## SESSION INTENT
-        What is the user's primary goal or request?
+        The user's primary goal or request in one or two sentences.
 
-        ## SUMMARY
-        The most important context, decisions, reasoning, and rejected options.
+        ## PROGRESS
+        What has been accomplished so far; current work-in-progress state.
+
+        ## KEY DECISIONS / REJECTED PATHS
+        Important decisions, reasoning, and approaches that failed or were ruled out.
+
+        ## CONSTRAINTS / PREFERENCES
+        User or project constraints that must survive compaction.
 
         ## ARTIFACTS
-        Files or resources created, modified, or accessed (with specific paths and changes).
+        Files or resources created, modified, or heavily referenced (paths + brief what changed).
 
         ## NEXT STEPS
-        Specific tasks remaining to achieve the session intent.
-        </instructions>
+        Specific remaining tasks to achieve the session intent. Do not invent new goals.
 
-        Carefully read through the entire conversation history below and extract the most important context. Respond ONLY with the extracted context.
+        Respond ONLY with the handoff sections above. Do not wrap in markdown fences.
 
         {must_preserve}
 

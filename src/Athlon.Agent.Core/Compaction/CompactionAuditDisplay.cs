@@ -130,7 +130,6 @@ public static class CompactionAuditDisplay
         {
             CompactionStrategy.ForceCompact => "force_compact",
             CompactionStrategy.ManualCompact => "manual_compact",
-            CompactionStrategy.MiddleCutOnRetrySkipped => "middle_cut_on_retry_skipped",
             _ => "conversation_compact",
         };
 
@@ -142,7 +141,6 @@ public static class CompactionAuditDisplay
                 .OrderBy(layer => layer)
                 .Select(layer => layer switch
                 {
-                    CompactionLayer.TruncateArgs => "truncate_args",
                     CompactionLayer.ToolResultEviction => "tool_result_eviction",
                     _ => "conversation_compact",
                 }));
@@ -163,7 +161,7 @@ public static class CompactionAuditDisplay
             {
                 "force_compact" => CompactionStrategy.ForceCompact,
                 "manual_compact" => CompactionStrategy.ManualCompact,
-                "middle_cut_on_retry_skipped" => CompactionStrategy.MiddleCutOnRetrySkipped,
+                "middle_cut_on_retry_skipped" => CompactionStrategy.ConversationCompact,
                 _ => CompactionStrategy.ConversationCompact,
             };
         }
@@ -196,7 +194,8 @@ public static class CompactionAuditDisplay
             switch (part.ToLowerInvariant())
             {
                 case "truncate_args":
-                    layers.Add(CompactionLayer.TruncateArgs);
+                    // Legacy audits; treat as conversation compact.
+                    layers.Add(CompactionLayer.ConversationCompact);
                     break;
                 case "tool_result_eviction":
                     layers.Add(CompactionLayer.ToolResultEviction);
@@ -223,8 +222,7 @@ public static class CompactionAuditDisplay
         {
             CompactionStrategy.ForceCompact => "触发：模型上下文超限后强制压缩",
             CompactionStrategy.ManualCompact => "触发：用户手动压缩",
-            CompactionStrategy.MiddleCutOnRetrySkipped => "触发：超限重试仍超限，中段摘要压缩",
-            _ => "触发：动态预算 / 消息数阈值",
+            _ => "触发：动态预算 checkpoint",
         };
 
         var layerText = string.Join(" → ", layers.Select(GetLayerLabel));
@@ -245,9 +243,8 @@ public static class CompactionAuditDisplay
     private static string GetLayerLabel(CompactionLayer layer) =>
         layer switch
         {
-            CompactionLayer.TruncateArgs => "② 工具参数截断",
             CompactionLayer.ToolResultEviction => "① 工具结果归档",
-            _ => "③ LLM 对话摘要",
+            _ => "③ CONTEXT CHECKPOINT",
         };
 
     private static int? TryParseInt(string text) =>

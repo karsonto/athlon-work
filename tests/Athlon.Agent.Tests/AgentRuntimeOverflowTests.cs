@@ -129,7 +129,6 @@ public sealed class AgentRuntimeOverflowTests
     {
         var pipeline = new PreCompletionPipeline(
             compactor,
-            new TruncateArgsService(),
             settings,
             new NoOpLogger());
         var storage = new NoOpStorage();
@@ -271,7 +270,7 @@ public sealed class AgentRuntimeOverflowTests
             CancellationToken cancellationToken = default)
         {
             CallCount++;
-            if (request.Strategy != CompactionStrategy.MiddleCutOnRetrySkipped)
+            if (request.Strategy != CompactionStrategy.ForceCompact)
             {
                 return Task.FromResult(new ConversationCompactResult(session, false));
             }

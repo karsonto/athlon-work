@@ -2,11 +2,7 @@ namespace Athlon.Agent.Core.Compaction;
 
 public static class ContextPressureEvaluator
 {
-    /// <summary>Utilization at which truncateArgs / prefix re-evict may begin (budget-adjusted).</summary>
-    public static double ResolveTruncateThreshold(DynamicCompactionSettings settings) =>
-        settings.TargetUtilization * settings.TruncateLeadRatio;
-
-    /// <summary>Utilization at which conversation compact may begin (budget-adjusted).</summary>
+    /// <summary>Utilization at which conversation checkpoint may begin.</summary>
     public static double ResolveCompactThreshold(DynamicCompactionSettings settings) =>
         settings.TargetUtilization;
 
@@ -28,7 +24,8 @@ public static class ContextPressureEvaluator
             return ContextPressureLevel.Critical;
         }
 
-        if (utilization >= ResolveTruncateThreshold(settings))
+        // Display bands only (no pre-checkpoint prune actions).
+        if (utilization >= target * 0.90)
         {
             return ContextPressureLevel.High;
         }
@@ -39,49 +36,6 @@ public static class ContextPressureEvaluator
         }
 
         return ContextPressureLevel.Normal;
-    }
-
-    /// <summary>
-    /// History keep budget after compaction. When a full 3-level pass includes LLM compact (or overflow),
-    /// targets <see cref="DynamicCompactionSettings.PostCompactionUtilization"/> (~45% window).
-    /// Truncate/re-evict-only passes fall back to the static keep floor.
-    /// </summary>
-    public static int ResolveKeepTokenBudget(
-        ContextBudgetSnapshot budget,
-        ContextPressureLevel pressure,
-        IReadOnlyList<ChatMessage> conversation,
-        ContextCompactionSettings settings,
-        bool includesConversationCompact)
-    {
-        var dynamic = settings.DynamicCompaction;
-        var staticKeep = ResolveStaticKeepTokenBudget(conversation, settings);
-
-        if (!dynamic.Enabled)
-        {
-            return staticKeep;
-        }
-
-        if (pressure != ContextPressureLevel.Overflow && !includesConversationCompact)
-        {
-            return Math.Min(budget.HistoryBudget, Math.Max(staticKeep, 512));
-        }
-
-        var keepTargetUtil = pressure == ContextPressureLevel.Overflow
-            ? dynamic.OverflowPostCompactionUtilization
-            : dynamic.PostCompactionUtilization;
-        var targetHistory = (int)Math.Floor(keepTargetUtil * budget.UsablePromptWindow - budget.FixedOverhead);
-        var dynamicKeep = Math.Max(0, targetHistory);
-        var floor = Math.Max(512, EstimateAnchorFloorTokens(conversation, settings));
-
-        // Critical/Overflow compact must honor the post-compaction utilization target. Applying
-        // staticKeep as a Max floor re-inflates the tail and undoes overflow recovery.
-        if (includesConversationCompact
-            && pressure is ContextPressureLevel.Critical or ContextPressureLevel.Overflow)
-        {
-            return Math.Min(budget.HistoryBudget, Math.Max(dynamicKeep, floor));
-        }
-
-        return Math.Min(budget.HistoryBudget, Math.Max(dynamicKeep, staticKeep));
     }
 
     /// <summary>
@@ -104,86 +58,6 @@ public static class ContextPressureEvaluator
         }
 
         return budget.FixedOverhead >= budget.UsablePromptWindow * ratio;
-    }
-
-    private static int EstimateAnchorFloorTokens(
-        IReadOnlyList<ChatMessage> conversation,
-        ContextCompactionSettings settings)
-    {
-        if (conversation.Count == 0)
-        {
-            return 0;
-        }
-
-        var total = 0;
-        var remainingScreenshots = Math.Max(0, settings.MaxToolScreenshotsInModelContext);
-        for (var i = conversation.Count - 1; i >= 0; i--)
-        {
-            var message = conversation[i];
-            if (message.Role == MessageRole.User && !SummaryMessageBuilder.IsSummaryMessage(message))
-            {
-                total += ContextTokenEstimator.EstimateMessage(
-                    message,
-                    settings.IncludeReasoningInModelContext,
-                    ref remainingScreenshots);
-                break;
-            }
-        }
-
-        return total;
-    }
-
-    public static bool ShouldApplyTruncateArgs(
-        ContextBudgetSnapshot budget,
-        IReadOnlyList<ChatMessage> conversation,
-        ContextCompactionSettings settings,
-        ContextPressureLevel pressure,
-        bool force,
-        int? knownRawHistoryEstimate = null)
-    {
-        if (force || pressure is ContextPressureLevel.Overflow)
-        {
-            return true;
-        }
-
-        // Elevated is the free band: tighten already-evicted tool previews only.
-        if (pressure == ContextPressureLevel.Elevated)
-        {
-            return false;
-        }
-
-        if (MeetsStaticTruncateThreshold(conversation, settings, knownRawHistoryEstimate))
-        {
-            return true;
-        }
-
-        return budget.TotalUtilization >= ResolveTruncateThreshold(settings.DynamicCompaction);
-    }
-
-    public static bool ShouldApplyPrefixReEvict(
-        ContextBudgetSnapshot budget,
-        IReadOnlyList<ChatMessage> conversation,
-        ContextCompactionSettings settings,
-        ContextPressureLevel pressure,
-        bool force,
-        bool? truncateArgsDecision = null,
-        int? knownRawHistoryEstimate = null)
-    {
-        if (pressure == ContextPressureLevel.Elevated)
-        {
-            return true;
-        }
-
-        var applyTruncate = truncateArgsDecision
-            ?? ShouldApplyTruncateArgs(budget, conversation, settings, pressure, force, knownRawHistoryEstimate);
-
-        if (force || pressure is ContextPressureLevel.Overflow or ContextPressureLevel.Critical)
-        {
-            return applyTruncate;
-        }
-
-        return applyTruncate
-            && budget.TotalUtilization >= ResolveTruncateThreshold(settings.DynamicCompaction);
     }
 
     public static bool ShouldCompact(
@@ -211,23 +85,6 @@ public static class ContextPressureEvaluator
         return budget.TotalUtilization >= ResolveCompactThreshold(settings.DynamicCompaction);
     }
 
-    public static bool MeetsStaticTruncateThreshold(
-        IReadOnlyList<ChatMessage> conversation,
-        ContextCompactionSettings settings,
-        int? knownRawHistoryEstimate = null)
-    {
-        var estimated = knownRawHistoryEstimate
-            ?? ContextTokenEstimator.Estimate(
-                conversation,
-                settings.IncludeReasoningInModelContext,
-                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext,
-                hygiene: settings.RequestHistoryHygiene);
-        return ConversationCutoffPlanner.ShouldTruncateArgs(
-            conversation,
-            estimated,
-            settings.TruncateArgs);
-    }
-
     public static bool MeetsStaticCompactThreshold(
         IReadOnlyList<ChatMessage> conversation,
         ContextCompactionSettings settings,
@@ -240,28 +97,5 @@ public static class ContextPressureEvaluator
                 maxToolScreenshots: settings.MaxToolScreenshotsInModelContext,
                 hygiene: settings.RequestHistoryHygiene);
         return ConversationCutoffPlanner.ShouldCompact(conversation, estimated, settings, force: false);
-    }
-
-    private static int ResolveStaticKeepTokenBudget(
-        IReadOnlyList<ChatMessage> conversation,
-        ContextCompactionSettings settings)
-    {
-        if (settings.KeepTokens > 0)
-        {
-            return settings.KeepTokens;
-        }
-
-        if (settings.KeepMessages <= 0 || conversation.Count == 0)
-        {
-            return 0;
-        }
-
-        var tailStart = Math.Max(0, conversation.Count - settings.KeepMessages);
-        return ContextTokenEstimator.EstimateSuffix(
-            conversation,
-            tailStart,
-            settings.IncludeReasoningInModelContext,
-            settings.MaxToolScreenshotsInModelContext,
-            settings.RequestHistoryHygiene);
     }
 }
