@@ -62,21 +62,16 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly PageViewFactory _pageViewFactory;
     private readonly ITaskListChangedNotifier _taskListChangedNotifier;
     private readonly ISessionTaskListStore _taskListStore;
-    private readonly IPlanRunStore _planRunStore;
-    private readonly IPlanArtifactStore _planArtifactStore;
     private readonly ISessionPlanArtifactsClearer _planArtifactsClearer;
-    private readonly IPlanContinuationTracker _planContinuationTracker;
+    private readonly PlanSurfaceCoordinator _planSurface;
+    private readonly SshWorkspaceCoordinator _sshWorkspace;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
-    private readonly SshWorkspaceConnectionService _sshConnection;
-    private readonly ICredentialStore _credentialStore;
-    private readonly ISshWorkspaceClient _sshClient;
     /// <summary>
     /// While a session is being deleted its directory must not be re-read: a pending task-list
     /// refresh would reopen tasks.json (or re-create the directory) and race the delete.
     /// </summary>
     private bool _suppressTaskListRefresh;
-    private readonly SshWorkspaceTransferService _sshTransfer;
     private readonly ILongTermMemory _longTermMemory;
     private readonly AthlonWebStaticServer _athlonWebServer;
 
@@ -131,19 +126,15 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         QuestionBarViewModel questionBar,
         ITaskListChangedNotifier taskListChangedNotifier,
         ISessionTaskListStore taskListStore,
-        IPlanRunStore planRunStore,
-        IPlanArtifactStore planArtifactStore,
         ISessionPlanArtifactsClearer planArtifactsClearer,
-        IPlanContinuationTracker planContinuationTracker,
+        PlanSurfaceCoordinator planSurface,
+        SshWorkspaceCoordinator sshWorkspace,
         PageViewFactory pageViewFactory,
         ChatPageViewModel chatPage,
         ScheduleViewModel schedulePageVm,
         SkillHubViewModel skillHubVm,
         ILocalizationService localization,
         IUserNotifier notifier,
-        SshWorkspaceConnectionService sshConnection,
-        ICredentialStore credentialStore,
-        ISshWorkspaceClient sshClient,
         ILongTermMemory longTermMemory,
         AppUpdateService updateService,
         AthlonWebStaticServer athlonWebServer,
@@ -167,16 +158,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _pageViewFactory = pageViewFactory;
         _taskListChangedNotifier = taskListChangedNotifier;
         _taskListStore = taskListStore;
-        _planRunStore = planRunStore;
-        _planArtifactStore = planArtifactStore;
         _planArtifactsClearer = planArtifactsClearer;
-        _planContinuationTracker = planContinuationTracker;
+        _planSurface = planSurface;
+        _sshWorkspace = sshWorkspace;
         _loc = localization;
         _notifier = notifier;
-        _sshConnection = sshConnection;
-        _credentialStore = credentialStore;
-        _sshClient = sshClient;
-        _sshTransfer = new SshWorkspaceTransferService(sshClient, notifier);
         _longTermMemory = longTermMemory;
         _athlonWebServer = athlonWebServer;
         _skillCatalog = skillCatalog;
@@ -185,7 +171,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _contextSidebarEdgeGutterWidth = 0;
         _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
         _displayedSessionId = _session.Id;
-        _sshConnection.SetDefaultSession(_displayedSessionId);
+        _sshWorkspace.SetDefaultSession(_displayedSessionId);
         _runtime.Attach(_session, hydrated: true);
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         WireSessionUsageUi(_activeUi);
@@ -213,16 +199,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             () => _session,
             () => _activeUi,
             ShowShellToast);
-        PlanBar.Configure(
-            () => _displayedSessionId,
-            () => _session,
-            session => _session = session,
-            ShowShellToast,
-            StartFromApprovedPlanAsync,
-            setComposerHint: SetComposerStatus,
-            onPlanTimeline: _ => RefreshPlanCard(),
-            onPlanTimelineCleared: () => _activeUi.ClearPlanReady(),
-            setComposerFocus: () => chatPage.RequestFocusComposer());
         QuestionBar.Configure(
             () => _displayedSessionId,
             ShowShellToast,
@@ -247,7 +223,20 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             TryCancelCompaction,
             CreateSlashCommandContext,
             EnsureDisplayedSessionReadyAsync);
-        ChatPage.PlanBuildRequested += OnPlanBuildRequested;
+        _planSurface.Configure(
+            () => _displayedSessionId,
+            () => _session,
+            session => _session = session,
+            () => _activeUi,
+            () => PlanBar,
+            () => ComposerHarness,
+            () => ChatPage,
+            ShowShellToast,
+            SetComposerStatus,
+            EnsureDisplayedSessionReadyAsync,
+            () => chatPage.RequestFocusComposer());
+        _planSurface.WirePlanBar(PlanBar);
+        _planSurface.WireChatPage(ChatPage);
         _onMcpConfigurationChanged = (_, _) => _ = RunGuardedAsync(RefreshMcpRuntimeAsync, "MCP runtime refresh");
         _onSkillConfigurationChanged = (_, _) => OnSkillConfigurationChanged();
         _onSettingsSaved = (_, _) => _ = RunGuardedAsync(OnSettingsSavedAsync, "settings saved handler");
@@ -268,6 +257,16 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 OnPropertyChanged(nameof(HasOpenEditorTabs));
             }
         };
+        _sshWorkspace.Configure(
+            () => _session,
+            session => _session = session,
+            () => HasSessionWorkspace,
+            () => FileEditor,
+            () => Sidebar,
+            ShowShellToast,
+            SaveCurrentSessionIfNeededAsync,
+            ApplySessionWorkspaceAsync,
+            NotifyRunOnWorkspacePropertiesChanged);
         _layout.ClampInitialLayout();
 
         UpdateBanner = new AppUpdateBannerViewModel(updateService, localization, ShowShellToast);
@@ -743,29 +742,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public string WorkspacePanelActionLabel =>
         HasSessionWorkspace ? _loc["Context_RemoveWorkspace"] : _loc["Common_Configure"];
 
-    public string RunOnDisplayName
-    {
-        get
-        {
-                if (!HasSessionWorkspace)
-                {
-                    return _loc["Shell_ChooseWorkspace"];
-                }
-
-            if (_workspaceContext.Kind == WorkspaceKind.Ssh)
-            {
-                var match = WorkspaceSessionResolver.FindMatch(_session, _appSettings);
-                if (match is not null)
-                {
-                    return FormatRemoteLabel(match);
-                }
-
-                return _workspaceContext.DisplayName ?? _loc["Shell_RunOnRemote"];
-            }
-
-            return _workspaceContext.DisplayName ?? _loc["Shell_RunOnThisPc"];
-        }
-    }
+    public string RunOnDisplayName => _sshWorkspace.GetRunOnDisplayName();
 
     public bool HasSessionWorkspace =>
         !string.IsNullOrWhiteSpace(_session.ActiveWorkspace);
@@ -938,20 +915,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private async Task ApplySessionWorkspaceAsync()
     {
         SyncWorkspaceContext();
-        if (_workspaceContext.Kind == WorkspaceKind.Ssh
-            && !string.IsNullOrWhiteSpace(_session.ActiveWorkspaceId))
-        {
-            try
-            {
-                await _sshConnection.SyncAsync(_session, _appSettings).ConfigureAwait(true);
-            }
-            catch
-            {
-                // Connection errors surface when tools run or when configuring workspace.
-            }
-        }
+        await _sshWorkspace.SyncSshConnectionIfNeededAsync().ConfigureAwait(true);
 
-        ActiveWorkspaceName = ResolveActiveWorkspaceName();
+        ActiveWorkspaceName = _sshWorkspace.ResolveActiveWorkspaceName();
         // Deliberately NOT reloadSkills: a session switch does not change the installed skills, and
         // the rescan walks every skill folder on the UI thread (measured ~8-10s). Skill changes have
         // their own handler (OnSkillConfigurationChanged), which already reloads the catalog.
@@ -962,7 +928,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         using (SessionSwitchProfiler.Measure(SessionSwitchPhases.WorkspaceTree))
         {
-            await RefreshWorkspaceTreeAsync().ConfigureAwait(true);
+            await _sshWorkspace.RefreshWorkspaceTreeAsync().ConfigureAwait(true);
         }
 
         ConfigureWorkspaceWatcher();
@@ -980,44 +946,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         OnPropertyChanged(nameof(RunOnDisplayName));
     }
 
-    private async Task RefreshWorkspaceTreeAsync()
+    private void NotifyRunOnWorkspacePropertiesChanged()
     {
-        if (_workspaceContext.Kind == WorkspaceKind.Ssh
-            && _sshClient.IsConnected
-            && !string.IsNullOrWhiteSpace(_workspaceContext.RootPath))
-        {
-            try
-            {
-                var entries = new List<SshEntry>();
-                await foreach (var entry in _sshClient.ListAsync(_workspaceContext.RootPath).ConfigureAwait(true))
-                {
-                    if (SshWorkspaceToolHelper.ShouldIgnore(entry.FullPath, _workspaceContext.IgnorePatterns))
-                    {
-                        continue;
-                    }
-
-                    entries.Add(entry);
-                    if (entries.Count >= 200)
-                    {
-                        break;
-                    }
-                }
-
-                Sidebar.RefreshRemoteWorkspaceTree(
-                    _workspaceContext.RootPath,
-                    _workspaceContext.DisplayName ?? _workspaceContext.RootPath,
-                    entries,
-                    _workspaceContext.IgnorePatterns);
-                return;
-            }
-            catch
-            {
-                Sidebar.RefreshWorkspaceTree(null, _workspaceContext.IgnorePatterns);
-                return;
-            }
-        }
-
-        Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
+        OnPropertyChanged(nameof(RunOnDisplayName));
+        OnPropertyChanged(nameof(HasSessionWorkspace));
+        OnPropertyChanged(nameof(WorkspacePanelActionLabel));
     }
 
     private void SyncWorkspaceContext() =>
@@ -1049,7 +982,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _workspaceBridge.Dispose();
         try
         {
-            await _sshConnection.DisconnectAllAsync(cancellationToken).ConfigureAwait(false);
+            await _sshWorkspace.DisconnectAllAsync(cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -1096,14 +1029,14 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         _sessionTurns.QueuedTurnPresenter.QueueChanged -= OnQueuedTurnsChanged;
+        _planSurface.UnwireChatPage(ChatPage);
         if (_savedChatView is not null)
         {
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
             _savedChatView.ForkChatRequested -= OnForkChatRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
-            _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
-            _savedChatView.PlanReviseRequested -= OnPlanReviseRequested;
+            _planSurface.DetachChatView(_savedChatView);
             _savedChatView.ReviewFilesRequested -= OnReviewFilesRequested;
         }
 
@@ -1195,7 +1128,15 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     /// Backs out of plan revision mode (the card's "Revise" button) when it is active. Returns
     /// false otherwise so Escape keeps its normal behavior in the composer.
     /// </summary>
-    public bool CancelPlanRevise() => PlanBar.CancelReviseMode();
+    public bool CancelPlanRevise() => _planSurface.CancelPlanRevise();
+
+    public bool CanAcceptRemoteFileDrop => _sshWorkspace.CanAcceptRemoteFileDrop;
+
+    public Task UploadLocalPathsToRemoteAsync(
+        IReadOnlyList<string> localPaths,
+        string? hitNodeFullPath,
+        bool hitNodeIsDirectory) =>
+        _sshWorkspace.UploadLocalPathsToRemoteAsync(localPaths, hitNodeFullPath, hitNodeIsDirectory);
 }
 
 public sealed record AtCompletionItemViewModel(

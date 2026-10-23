@@ -343,8 +343,7 @@ public partial class MainShellViewModel
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
             _savedChatView.ForkChatRequested -= OnForkChatRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
-            _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
-            _savedChatView.PlanReviseRequested -= OnPlanReviseRequested;
+            _planSurface.DetachChatView(_savedChatView);
             _savedChatView.ReviewFilesRequested -= OnReviewFilesRequested;
         }
 
@@ -353,8 +352,7 @@ public partial class MainShellViewModel
         chatView.ExternalLinkRequested += OnChatExternalLinkRequested;
         chatView.ForkChatRequested += OnForkChatRequested;
         chatView.ToolDetailRequested += OnToolDetailRequested;
-        chatView.PlanBuildRequested += OnPlanBuildRequested;
-        chatView.PlanReviseRequested += OnPlanReviseRequested;
+        _planSurface.AttachChatView(chatView);
         chatView.ReviewFilesRequested += OnReviewFilesRequested;
         _uiCache.AttachChatViewToAll(chatView);
         _activeUi.ChatView = chatView;

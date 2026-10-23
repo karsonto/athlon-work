@@ -106,29 +106,10 @@ public partial class MainShellViewModel
 
         if (to == SessionAgentMode.Plan)
         {
-            PlanBar.RefreshFromActiveRun();
-            RefreshPlanCard();
+            _planSurface.OnEnteredPlanMode();
         }
 
         QuestionBar.RefreshFromActiveSession();
-    }
-
-    /// <summary>
-    /// Re-emits the plan card for the displayed session. A plan card is not backed by the
-    /// transcript, so the timeline cannot restore it on its own; this is the single refresh path
-    /// that keeps it pinned to the run's <see cref="TimelineOrderPolicy.Plan"/> slot.
-    /// </summary>
-    private void RefreshPlanCard()
-    {
-        var run = PlanBar.GetActiveRun();
-        if (run is { Phase: PlanPhase.AwaitConfirm or PlanPhase.Done })
-        {
-            _activeUi.ShowPlanReady(run);
-        }
-        else
-        {
-            _activeUi.ClearPlanReady();
-        }
     }
 
     /// <summary>
@@ -148,114 +129,6 @@ public partial class MainShellViewModel
         _ = RunGuardedAsync(
             () => ChatPage.TrySubmitPlanInputAsync(text),
             "answer user question");
-    }
-
-    private void OnPlanBuildRequested(object? sender, EventArgs e)
-    {
-        if (PlanBar.BuildCommand.CanExecute(null))
-        {
-            PlanBar.BuildCommand.Execute(null);
-        }
-    }
-
-    private void OnPlanReviseRequested(object? sender, EventArgs e)
-    {
-        if (!PlanBar.EnterReviseMode())
-        {
-            ShowShellToast(_loc["Plan_BuildMissingPlan"], ShellToastKind.Error);
-        }
-    }
-
-    private async Task StartFromApprovedPlanAsync()
-    {
-        await EnsureDisplayedSessionReadyAsync().ConfigureAwait(true);
-        var sessionId = _displayedSessionId;
-        // The plan run lives in memory only and is the single source for this build.
-        var approved = await _planRunStore.LoadActiveAsync(sessionId).ConfigureAwait(true);
-        if (string.IsNullOrWhiteSpace(approved?.PlanMarkdown))
-        {
-            ShowShellToast(_loc["Plan_BuildMissingPlan"], ShellToastKind.Error);
-            return;
-        }
-
-        // Persist the plan before anything else can fail: from here on the plan must survive
-        // compaction and session switches, which is what ApprovedPlanRuntimeContributor reads.
-        await _planArtifactStore
-            .SaveAsync(sessionId, approved.PlanMarkdown, approved)
-            .ConfigureAwait(true);
-
-        // Seed with merge=true so a plan built on top of an existing list (for example a re-Build
-        // after a revision) updates items by id instead of silently replacing unrelated work.
-        // Existing items keep their status: re-building a plan must not reopen work already done.
-        var existingById = (await _taskListStore.GetAsync(sessionId).ConfigureAwait(true))
-            .Items
-            .ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
-        var seeds = approved.Todos
-            .Where(t => !string.IsNullOrWhiteSpace(t.Id) && !string.IsNullOrWhiteSpace(t.Content))
-            .Select(t => new AgentTaskItem
-            {
-                Id = t.Id,
-                Content = t.Content,
-                Status = existingById.TryGetValue(t.Id, out var existing)
-                    ? existing.Status
-                    : AgentTaskStatuses.Pending
-            })
-            .ToList();
-        if (seeds.Count > 0)
-        {
-            await _taskListStore.ApplyMergeAsync(sessionId, seeds, merge: true).ConfigureAwait(true);
-            _taskListChangedNotifier.Notify(sessionId);
-        }
-
-        // A fresh Build restarts the auto-continuation budget (including a previous manual stop).
-        _planContinuationTracker.Reset(sessionId);
-
-        // Switching modes before starting the turn matters: SessionTurnHost picks the Plan
-        // orchestrator while the harness state still says Plan.
-        if (ComposerHarness.SelectModeCommand.CanExecute(SessionAgentMode.Agent))
-        {
-            await ComposerHarness.SelectModeCommand.ExecuteAsync(SessionAgentMode.Agent).ConfigureAwait(true);
-        }
-
-        var ui = _sessionTurns.GetOrCreateUi(
-            sessionId,
-            _chatScroll.ScrollToBottom,
-            _chatScroll.ScrollToBottomImmediate);
-        ui.ResetForTurn();
-        // The plan travels as a regular user message so it is persisted and replayed like any
-        // other turn; ui.AddUserMessage is intentionally skipped because the UI hides this
-        // control message instead of showing a user bubble.
-        var error = _sessionTurns.TryStartTurn(
-            sessionId,
-            _session,
-            BuildApprovedPlanMessage(approved.PlanMarkdown, seeds.Count > 0),
-            Array.Empty<ImageAttachment>(),
-            ui,
-            appendUserMessage: true);
-        if (error is not null)
-        {
-            ShowShellToast(error, ShellToastKind.Error);
-            return;
-        }
-
-        // Consume the in-memory run only: the durable copy on disk is what keeps the plan in
-        // context for the rest of the session, and the timeline card is replaced by the
-        // execution state (the approved-plan message is hidden in the transcript).
-        await PlanBar.ClearActiveRunAsync().ConfigureAwait(true);
-    }
-
-    /// <summary>
-    /// Builds the hidden approved-plan message, appending the merge guidance the model needs to
-    /// update a pre-seeded list instead of overwriting it.
-    /// </summary>
-    private static string BuildApprovedPlanMessage(string markdown, bool taskListSeeded)
-    {
-        var message = ApprovedPlanPrompt.BuildUserMessage(markdown);
-        return taskListSeeded
-            ? message
-              + "\n\nThe session task list is already seeded from this plan. "
-              + "Update with todo_write merge=true only — merge=false would discard the seeded list."
-            : message;
     }
 
     private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)

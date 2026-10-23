@@ -479,7 +479,7 @@ public partial class MainShellViewModel
             () =>
             {
                 RefreshAtCompletionSources();
-                _ = RefreshWorkspaceTreeAsync();
+                _ = _sshWorkspace.RefreshWorkspaceTreeAsync();
             });
 
     private void SwitchDisplayedSession(AgentSession session)
@@ -497,7 +497,7 @@ public partial class MainShellViewModel
         // sessions stay put; explicit removal only happens on session delete.
         _displayedSessionId = session.Id;
         // Non-turn (UI) SSH callers resolve the slot of the session that is currently visible.
-        _sshConnection.SetDefaultSession(_displayedSessionId);
+        _sshWorkspace.SetDefaultSession(_displayedSessionId);
         _session = session;
         // Note: _runtime.Attach is intentionally NOT called here. Every caller (startup, new
         // session, switch, load) attaches first with the right SessionComplete flag; attaching
@@ -529,8 +529,7 @@ public partial class MainShellViewModel
         DebugBar.RefreshFromActiveRun();
         // The plan card belongs to the session being displayed: refresh re-publishes the new
         // session's active plan, or clears the card for one that has no active plan.
-        PlanBar.RefreshFromActiveRun();
-        RefreshPlanCard();
+        _planSurface.OnDisplayedSessionRefreshed();
         QuestionBar.RefreshFromActiveSession();
         RequestRefreshSessionHistory();
         RememberLastActiveSession(session);

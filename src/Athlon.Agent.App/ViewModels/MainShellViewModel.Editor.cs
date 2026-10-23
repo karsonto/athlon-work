@@ -41,25 +41,6 @@ namespace Athlon.Agent.App.ViewModels;
 /// </summary>
 public partial class MainShellViewModel
 {
-    private async Task RemoveSessionWorkspaceAsync()
-    {
-        if (!HasSessionWorkspace)
-        {
-            return;
-        }
-
-        if (!await FileEditor.TryCloseAllTabsAsync().ConfigureAwait(true))
-        {
-            return;
-        }
-
-        await _sshConnection.DisconnectSessionAsync(_session.Id).ConfigureAwait(true);
-        _session = _session.WithWorkspace(null, workspaceId: null);
-        await ApplySessionWorkspaceAsync().ConfigureAwait(true);
-        await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
-        ShowShellToast(_loc["Shell_WorkspaceRemoved"], ShellToastKind.Success);
-    }
-
     private async Task OnSettingsSavedAsync()
     {
         _uiCache.ApplyShowToolCalls();

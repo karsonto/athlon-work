@@ -53,6 +53,10 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<SessionHistoryCoordinator>();
 
+        services.AddSingleton<SshWorkspaceTransferService>();
+        services.AddSingleton<PlanSurfaceCoordinator>();
+        services.AddSingleton<SshWorkspaceCoordinator>();
+
         services.AddSingleton<SessionNavigationStore>();
         services.AddSingleton<SessionRuntimeStore>();
         services.AddSingleton<IConversationTranscriptWriter>(sp =>

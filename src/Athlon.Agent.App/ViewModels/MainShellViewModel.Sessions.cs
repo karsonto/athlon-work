@@ -370,7 +370,7 @@ public partial class MainShellViewModel
         _sessionTurns.QueuedTurnPresenter.RemoveSession(item.Id);
 
         _runtime.Remove(item.Id);
-        await _sshConnection.DisconnectSessionAsync(item.Id).ConfigureAwait(true);
+        await _sshWorkspace.DisconnectSessionAsync(item.Id).ConfigureAwait(true);
 
         string? workspaceKey = null;
         try
