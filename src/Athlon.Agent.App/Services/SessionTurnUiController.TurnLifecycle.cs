@@ -98,6 +98,7 @@ public sealed partial class SessionTurnUiController
             _bulkChatViewSyncDepth++;
             try
             {
+                _turnLifecycle.EnterFinalizing();
                 ApplyPersistedTurnMessages(persistedTurnMessages, timedOut, turnTimeoutMinutes, errorMessage);
             }
             finally
@@ -115,6 +116,7 @@ public sealed partial class SessionTurnUiController
                 // Overlay the still-open fold (activity between the last seal and turn end) onto the
                 // replayed fold, keyed by the same turn anchor and block index.
                 RestoreLiveTurnCardsAfterReload();
+                _turnLifecycle.EnterResting();
 
                 if (IsDisplayed)
                 {
@@ -147,11 +149,11 @@ public sealed partial class SessionTurnUiController
             _ = ChatView!.DispatchTurnActivityAsync(
                 summary,
                 upsert: false,
-                turnAnchorId: _currentTurnAnchorId,
-                activityBlockIndex: _activityBlockIndex);
+                turnAnchorId: _turnLifecycle.TurnAnchorId,
+                activityBlockIndex: _turnLifecycle.ActivityBlockIndex);
             // The block index tracks emitted activity folds, matching the replay's numbering, so it
             // only advances when a fold actually exists.
-            _activityBlockIndex++;
+            _turnLifecycle.IncrementActivityBlock();
         }
 
         _turnActivityTracker.BeginSegment();
@@ -174,8 +176,8 @@ public sealed partial class SessionTurnUiController
         _ = ChatView!.DispatchTurnActivityAsync(
             summary,
             upsert: upsert,
-            turnAnchorId: _currentTurnAnchorId,
-            activityBlockIndex: _activityBlockIndex);
+            turnAnchorId: _turnLifecycle.TurnAnchorId,
+            activityBlockIndex: _turnLifecycle.ActivityBlockIndex);
     }
 
     /// <summary>
@@ -204,11 +206,11 @@ public sealed partial class SessionTurnUiController
         _ = ChatView!.DispatchFilesChangedAsync(
             files,
             upsert: true,
-            turnAnchorId: _currentTurnAnchorId,
+            turnAnchorId: _turnLifecycle.TurnAnchorId,
             seq: CurrentTurnFilesSeq());
-        if (!string.IsNullOrWhiteSpace(_currentTurnAnchorId))
+        if (!string.IsNullOrWhiteSpace(_turnLifecycle.TurnAnchorId))
         {
-            TurnFilesPublished?.Invoke("files:" + _currentTurnAnchorId, files);
+            TurnFilesPublished?.Invoke("files:" + _turnLifecycle.TurnAnchorId, files);
         }
     }
 
@@ -218,7 +220,7 @@ public sealed partial class SessionTurnUiController
     /// </summary>
     private long? CurrentTurnFilesSeq()
     {
-        if (string.IsNullOrWhiteSpace(_currentTurnAnchorId))
+        if (string.IsNullOrWhiteSpace(_turnLifecycle.TurnAnchorId))
         {
             return null;
         }
@@ -230,7 +232,7 @@ public sealed partial class SessionTurnUiController
         foreach (var segment in segments)
         {
             turnIndex++;
-            if (!string.Equals(segment.TurnAnchorId, _currentTurnAnchorId, StringComparison.Ordinal))
+            if (!string.Equals(segment.TurnAnchorId, _turnLifecycle.TurnAnchorId, StringComparison.Ordinal))
             {
                 continue;
             }

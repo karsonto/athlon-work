@@ -153,7 +153,7 @@ public sealed partial class SessionTurnUiController
             ?? Messages.LastOrDefault(static message => message.IsUser)?.MessageId;
         if (!string.IsNullOrWhiteSpace(anchorId))
         {
-            _currentTurnAnchorId = anchorId;
+            _turnLifecycle.SetTurnAnchor(anchorId);
         }
     }
 
@@ -193,7 +193,7 @@ public sealed partial class SessionTurnUiController
         // The still-open live fold is block N of the current turn. Overlay its live reasoning onto
         // whatever the replay projected for block N, so the upsert rewrites that same entry instead
         // of stacking a card that merges every fold of the turn.
-        var replayed = TurnActivitySummaryBuilder.Build(CurrentReplayedActivityBlock(_activityBlockIndex));
+        var replayed = TurnActivitySummaryBuilder.Build(CurrentReplayedActivityBlock(_turnLifecycle.ActivityBlockIndex));
         var summary = TurnActivitySummaryBuilder.OverlayLiveThought(replayed, live);
         if (summary.HasContent)
         {
@@ -201,8 +201,8 @@ public sealed partial class SessionTurnUiController
             _ = ChatView!.DispatchTurnActivityAsync(
                 summary,
                 upsert: true,
-                turnAnchorId: _currentTurnAnchorId,
-                activityBlockIndex: _activityBlockIndex);
+                turnAnchorId: _turnLifecycle.TurnAnchorId,
+                activityBlockIndex: _turnLifecycle.ActivityBlockIndex);
         }
     }
 
@@ -212,7 +212,7 @@ public sealed partial class SessionTurnUiController
     /// </summary>
     private IReadOnlyList<ChatMessageViewModel> CurrentReplayedActivityBlock(int blockIndex)
     {
-        if (string.IsNullOrWhiteSpace(_currentTurnAnchorId))
+        if (string.IsNullOrWhiteSpace(_turnLifecycle.TurnAnchorId))
         {
             return Array.Empty<ChatMessageViewModel>();
         }
@@ -225,7 +225,7 @@ public sealed partial class SessionTurnUiController
         // previous turn's fold.
         for (var i = segments.Count - 1; i >= 0; i--)
         {
-            if (!string.Equals(segments[i].TurnAnchorId, _currentTurnAnchorId, StringComparison.Ordinal))
+            if (!string.Equals(segments[i].TurnAnchorId, _turnLifecycle.TurnAnchorId, StringComparison.Ordinal))
             {
                 continue;
             }

@@ -67,12 +67,7 @@ public sealed partial class SessionTurnUiController
     private readonly Dictionary<string, ChatMessageViewModel> _viewModelCache = new(StringComparer.Ordinal);
     private int _bulkChatViewSyncDepth;
     private int _syncChatViewGeneration;
-    /// <summary>
-    /// Message id of the user message that opened the turn currently being streamed. Used as the
-    /// activity/files entry key so a live card and the replayed card for the same turn collide
-    /// (and merge) instead of appearing twice.
-    /// </summary>
-    private string? _currentTurnAnchorId;
+    private readonly SessionTurnUiTurnLifecycleState _turnLifecycle = new();
     /// <summary>
     /// The plan run the timeline is currently showing a plan-ready card for. Kept here because the
     /// card is the one timeline entry the transcript cannot rebuild: <c>publish_plan</c> renders as
@@ -81,12 +76,6 @@ public sealed partial class SessionTurnUiController
     /// </summary>
     private PlanRun? _visiblePlanRun;
     private Func<bool> _showToolCalls = () => true;
-    /// <summary>
-    /// Ordinal of the activity fold being accumulated inside the current turn. The fold's entry id
-    /// is <c>activity:&lt;anchor&gt;:&lt;index&gt;</c>, and the index increments each time the fold is
-    /// sealed by an assistant bubble so the live publish and the replay agree on the same key.
-    /// </summary>
-    private int _activityBlockIndex;
 
     private Action _requestScroll = NoOpScroll;
     private Action _requestScrollImmediate = NoOpScroll;
@@ -240,7 +229,7 @@ public sealed partial class SessionTurnUiController
     /// transcript's own user message id, never the provisional id the UI minted in
     /// <see cref="AddUserMessage"/>, or a replay and a live upsert render two cards.
     /// </summary>
-    internal string? CurrentTurnAnchorId => _currentTurnAnchorId;
+    internal string? CurrentTurnAnchorId => _turnLifecycle.TurnAnchorId;
 
     /// <summary>
     /// Merged file edits for the turn whose summary card id is <paramref name="entryId"/>
@@ -601,14 +590,15 @@ public sealed partial class SessionTurnUiController
         {
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
-            _activityBlockIndex = 0;
+            _turnLifecycle.BeginLiveTurn();
+            _turnLifecycle.ResetActivityBlockIndex();
             var message = ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments);
             AppendActivitySourceMessage(message);
             Messages.Add(new ChatMessageViewModel(message));
             // Anchor this turn's live activity/files cards to the user message that opened it.
             // Replay derives the same anchor from the transcript, so a live card and its replayed
             // twin share one key and overwrite each other instead of stacking.
-            _currentTurnAnchorId = message.Id;
+            _turnLifecycle.SetTurnAnchor(message.Id);
             TrimMessagesIfNeeded();
             RequestScrollImmediate();
         });
@@ -620,7 +610,8 @@ public sealed partial class SessionTurnUiController
         {
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
-            _activityBlockIndex = 0;
+            _turnLifecycle.BeginLiveTurn();
+            _turnLifecycle.ResetActivityBlockIndex();
             _tokenBuffer.ClearBuffers();
             _tokenBuffer.StopFlushTimer();
             _streaming.Reset();

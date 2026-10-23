@@ -43,8 +43,8 @@ public sealed partial class SessionTurnUiController
                         {
                             SealActivitySegment();
                             // A compaction checkpoint owns the turn boundary from here on.
-                            _currentTurnAnchorId = single.MessageId;
-                            _activityBlockIndex = 0;
+                            _turnLifecycle.SetTurnAnchor(single.MessageId);
+                            _turnLifecycle.ResetActivityBlockIndex();
                             if (CanTouchChatView)
                             {
                                 _ = ChatView!.ApplyToolResultMarkdownAsync(single);
