@@ -1,6 +1,7 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.RuntimeDiagnostics;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.Patch;
 
 namespace Athlon.Agent.Infrastructure.Ssh;
 
@@ -28,29 +29,38 @@ public sealed class SshApplyPatchTool(
     {
         var clock = new ApplyPatchInvokeClock();
         var sessionId = ApplyPatchDiagnostics.ResolveSessionId(activeSessionContext, runContextAccessor);
+        var diagnostics = new PatchDiagnosticsContext(
+            _logger,
+            runtimeDiagnosticEventSink,
+            clock,
+            sessionId,
+            remote: true,
+            patchChars: 0);
 
         if (!SshWorkspaceToolHelper.TryEnsureConnected(client, out var error))
         {
-            Fail("path", error.Error ?? error.Summary, clock, sessionId, patchChars: 0);
+            diagnostics.Fail("path", error.Error ?? error.Summary);
             return error;
         }
 
         if (!ToolArguments.TryGetRequired(invocation, "patch", out var patch, out error))
         {
-            Fail("path", error.Error ?? error.Summary, clock, sessionId, patchChars: 0);
+            diagnostics.Fail("path", error.Error ?? error.Summary);
             return error;
         }
 
-        var patchChars = patch.Length;
+        diagnostics.PatchChars = patch.Length;
         if (!UnifiedDiffParser.TryParse(patch, out var files, out var parseError))
         {
             var message = parseError ?? "Could not parse patch.";
-            Fail("parse", message, clock, sessionId, patchChars, patchPreview: patch);
+            diagnostics.PatchPreview = patch;
+            diagnostics.Fail("parse", message);
             return ToolResult.Failure("Invalid patch", message);
         }
 
-        var fileCount = files.Count;
-        var hunkCount = files.Sum(f => f.HunkCount);
+        diagnostics.PatchPreview = patch;
+        diagnostics.FileCount = files.Count;
+        diagnostics.HunkCount = files.Sum(f => f.HunkCount);
 
         string? pathFilter = null;
         if (invocation.Arguments.TryGetString(ToolPathNormalizer.PathArgumentName, out var rawPath)
@@ -59,10 +69,13 @@ public sealed class SshApplyPatchTool(
             if (!ToolPathNormalizer.TryNormalizeForFileOperation(rawPath, out pathFilter, out var pathMessage))
             {
                 var message = $"{invocation.ToolName}: {pathMessage}";
-                Fail("path", message, clock, sessionId, patchChars, pathFilter: rawPath, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+                diagnostics.PathFilter = rawPath;
+                diagnostics.Fail("path", message);
                 return ToolResult.Failure("Invalid path", message);
             }
         }
+
+        diagnostics.PathFilter = pathFilter;
 
         var pending = new List<PendingWrite>();
         var alreadyApplied = new List<string>();
@@ -72,7 +85,7 @@ public sealed class SshApplyPatchTool(
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relativePath = file.Path;
-            if (!MatchesFilter(file, pathFilter))
+            if (!PatchApplyFilter.Matches(file, pathFilter))
             {
                 continue;
             }
@@ -85,7 +98,7 @@ public sealed class SshApplyPatchTool(
                     out var fullPath,
                     out error))
             {
-                Fail("path", error.Error ?? error.Summary, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+                diagnostics.Fail("path", error.Error ?? error.Summary, relativePath);
                 return error;
             }
 
@@ -99,7 +112,7 @@ public sealed class SshApplyPatchTool(
                         out moveFull,
                         out error))
                 {
-                    Fail("path", error.Error ?? error.Summary, clock, sessionId, patchChars, path: file.MoveTo, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+                    diagnostics.Fail("path", error.Error ?? error.Summary, file.MoveTo);
                     return error;
                 }
 
@@ -107,7 +120,7 @@ public sealed class SshApplyPatchTool(
                 if (existingDest is not null)
                 {
                     var message = $"Cannot move onto an existing file: {file.MoveTo}";
-                    Fail("exists", message, clock, sessionId, patchChars, path: file.MoveTo, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+                    diagnostics.Fail("exists", message, file.MoveTo);
                     return ToolResult.Failure("File exists", message);
                 }
             }
@@ -134,7 +147,7 @@ public sealed class SshApplyPatchTool(
                 if (existingNew is not null)
                 {
                     var message = $"Cannot create file that already exists: {relativePath}";
-                    Fail("exists", message, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+                    diagnostics.Fail("exists", message, relativePath);
                     return ToolResult.Failure("File exists", message);
                 }
 
@@ -146,7 +159,7 @@ public sealed class SshApplyPatchTool(
                 if (existing is null)
                 {
                     var message = $"Cannot patch missing file: {relativePath}";
-                    Fail("missing_file", message, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+                    diagnostics.Fail("missing_file", message, relativePath);
                     return ToolResult.Failure("File not found", message);
                 }
 
@@ -158,7 +171,7 @@ public sealed class SshApplyPatchTool(
             if (!appliedResult.Succeeded)
             {
                 var message = TextLineEndings.WithNonstandardEolHint($"{relativePath}: {appliedResult.Error}", source);
-                Fail("hunk_mismatch", message, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+                diagnostics.Fail("hunk_mismatch", message, relativePath);
                 return ToolResult.Failure("Patch failed", message);
             }
 
@@ -201,7 +214,7 @@ public sealed class SshApplyPatchTool(
             var message = matched == 0
                 ? "Patch contained no matching file hunks."
                 : "No-op: patch applied but file content unchanged.";
-            Fail("noop", message, clock, sessionId, patchChars, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+            diagnostics.Fail("noop", message);
             return ToolResult.Failure(noop ? "No-op" : "No files patched", message);
         }
 
@@ -234,7 +247,7 @@ public sealed class SshApplyPatchTool(
                     written.Add(change);
                     await RollbackAsync(client, written, CancellationToken.None).ConfigureAwait(false);
                     var message = $"{change.RelativePath}: written content did not match the patch.";
-                    Fail("verify", message, clock, sessionId, patchChars, path: change.RelativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+                    diagnostics.Fail("verify", message, change.RelativePath);
                     return ToolResult.Failure("Patch failed", message);
                 }
 
@@ -255,7 +268,7 @@ public sealed class SshApplyPatchTool(
                 }
 
                 var message = $"{change.RelativePath}: {ex.Message}";
-                Fail("exception", message, clock, sessionId, patchChars, path: change.RelativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+                diagnostics.Fail("exception", message, change.RelativePath);
                 return ToolResult.Failure("Patch failed", message);
             }
         }
@@ -271,32 +284,6 @@ public sealed class SshApplyPatchTool(
         return ToolResult.Success($"Patched {appliedFiles.Length} file(s)", string.Join(Environment.NewLine, appliedFiles));
     }
 
-    private void Fail(
-        string stage,
-        string error,
-        ApplyPatchInvokeClock clock,
-        string? sessionId,
-        int patchChars,
-        string? path = null,
-        string? pathFilter = null,
-        int fileCount = 0,
-        int hunkCount = 0,
-        string? patchPreview = null) =>
-        ApplyPatchDiagnostics.ReportFailure(
-            _logger,
-            runtimeDiagnosticEventSink,
-            stage,
-            error,
-            clock.ElapsedMs,
-            remote: true,
-            patchChars,
-            sessionId,
-            path,
-            pathFilter,
-            fileCount,
-            hunkCount,
-            patchPreview);
-
     private static async Task RollbackAsync(
         ISshWorkspaceClient client,
         IReadOnlyList<PendingWrite> written,
@@ -306,23 +293,6 @@ public sealed class SshApplyPatchTool(
         {
             await RestoreOneAsync(client, written[i], cancellationToken).ConfigureAwait(false);
         }
-    }
-
-    private static bool MatchesFilter(PatchFile file, string? pathFilter)
-    {
-        if (pathFilter is null)
-        {
-            return true;
-        }
-
-        var filter = ToolPathNormalizer.ForModel(pathFilter);
-        if (string.Equals(ToolPathNormalizer.ForModel(file.Path), filter, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return file.MoveTo is not null
-            && string.Equals(ToolPathNormalizer.ForModel(file.MoveTo), filter, StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task RestoreOneAsync(

@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.RuntimeDiagnostics;
+using Athlon.Agent.Infrastructure.Patch;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -24,48 +25,142 @@ public sealed class ApplyPatchTool(
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
+        var diagnostics = CreateDiagnosticsContext();
+
+        var parseResult = ParsePatchInput(invocation, diagnostics, out var patch, out var files);
+        if (parseResult is not null)
+        {
+            return parseResult;
+        }
+
+        var filterResult = ResolvePathFilter(invocation, diagnostics, out var pathFilter);
+        if (filterResult is not null)
+        {
+            return filterResult;
+        }
+
+        var collectResult = await CollectPendingChangesAsync(
+            files,
+            pathFilter,
+            diagnostics,
+            cancellationToken);
+        if (collectResult.EarlyResult is not null)
+        {
+            return collectResult.EarlyResult;
+        }
+
+        if (collectResult.Pending.Count == 0)
+        {
+            return HandleNoPendingWrites(
+                diagnostics,
+                pathFilter,
+                collectResult.Matched,
+                collectResult.Unchanged,
+                collectResult.AlreadyApplied);
+        }
+
+        var commitResult = await CommitPendingWritesAsync(
+            collectResult.Pending,
+            diagnostics,
+            cancellationToken);
+        if (commitResult.Failure is not null)
+        {
+            return commitResult.Failure;
+        }
+
+        return await AuditAndSucceedAsync(
+            commitResult.AppliedFiles!,
+            pathFilter,
+            diagnostics.Clock,
+            cancellationToken);
+    }
+
+    private PatchDiagnosticsContext CreateDiagnosticsContext()
+    {
         var clock = new ApplyPatchInvokeClock();
         var sessionId = ApplyPatchDiagnostics.ResolveSessionId(activeSessionContext, runContextAccessor);
+        return new PatchDiagnosticsContext(
+            _logger,
+            runtimeDiagnosticEventSink,
+            clock,
+            sessionId,
+            remote: false,
+            patchChars: 0);
+    }
 
-        if (!ToolArguments.TryGetRequired(invocation, "patch", out var patch, out var error))
+    private static ToolResult? ParsePatchInput(
+        ToolInvocation invocation,
+        PatchDiagnosticsContext diagnostics,
+        out string patch,
+        out IReadOnlyList<PatchFile> files)
+    {
+        patch = string.Empty;
+        files = Array.Empty<PatchFile>();
+
+        if (!ToolArguments.TryGetRequired(invocation, "patch", out patch, out var error))
         {
-            Fail("path", error.Error ?? error.Summary, clock, sessionId, patchChars: 0);
+            diagnostics.Fail("path", error.Error ?? error.Summary);
             return error;
         }
 
-        var patchChars = patch.Length;
-        if (!UnifiedDiffParser.TryParse(patch, out var files, out var parseError))
+        diagnostics.PatchChars = patch.Length;
+
+        if (!UnifiedDiffParser.TryParse(patch, out files, out var parseError))
         {
             var message = parseError ?? "Could not parse patch.";
-            Fail("parse", message, clock, sessionId, patchChars, patchPreview: patch);
+            diagnostics.PatchPreview = patch;
+            diagnostics.Fail("parse", message);
             return ToolResult.Failure("Invalid patch", message);
         }
 
-        var fileCount = files.Count;
-        var hunkCount = files.Sum(f => f.HunkCount);
+        diagnostics.PatchPreview = patch;
+        diagnostics.FileCount = files.Count;
+        diagnostics.HunkCount = files.Sum(f => f.HunkCount);
+        return null;
+    }
 
-        string? pathFilter = null;
-        if (invocation.Arguments.TryGetString(ToolPathNormalizer.PathArgumentName, out var rawPath)
-            && !string.IsNullOrWhiteSpace(rawPath))
+    private static ToolResult? ResolvePathFilter(
+        ToolInvocation invocation,
+        PatchDiagnosticsContext diagnostics,
+        out string? pathFilter)
+    {
+        pathFilter = null;
+        if (!invocation.Arguments.TryGetString(ToolPathNormalizer.PathArgumentName, out var rawPath)
+            || string.IsNullOrWhiteSpace(rawPath))
         {
-            if (!ToolPathNormalizer.TryNormalizeForFileOperation(rawPath, out pathFilter, out var pathMessage))
-            {
-                var message = $"{invocation.ToolName}: {pathMessage}";
-                Fail("path", message, clock, sessionId, patchChars, pathFilter: rawPath, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-                return ToolResult.Failure("Invalid path", message);
-            }
+            diagnostics.PathFilter = null;
+            return null;
         }
 
-        var pending = new List<PendingWrite>();
+        if (!ToolPathNormalizer.TryNormalizeForFileOperation(rawPath, out pathFilter, out var pathMessage))
+        {
+            var message = $"{invocation.ToolName}: {pathMessage}";
+            diagnostics.PathFilter = rawPath;
+            diagnostics.Fail("path", message);
+            return ToolResult.Failure("Invalid path", message);
+        }
+
+        diagnostics.PathFilter = pathFilter;
+        return null;
+    }
+
+    private async Task<CollectPendingResult> CollectPendingChangesAsync(
+        IReadOnlyList<PatchFile> files,
+        string? pathFilter,
+        PatchDiagnosticsContext diagnostics,
+        CancellationToken cancellationToken)
+    {
+        var pending = new List<PatchPendingWrite>();
         var alreadyApplied = new List<string>();
         var matched = 0;
         var unchanged = 0;
+
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var relativePath = file.Path;
-            if (!MatchesFilter(file, pathFilter))
+            if (!PatchApplyFilter.Matches(file, pathFilter))
             {
                 continue;
             }
@@ -75,10 +170,10 @@ public sealed class ApplyPatchTool(
                     new ToolInvocation("apply_patch", new Dictionary<string, string> { [ToolPathNormalizer.PathArgumentName] = relativePath }),
                     guard,
                     out var fullPath,
-                    out error))
+                    out var error))
             {
-                Fail("path", error.Error ?? error.Summary, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-                return error;
+                diagnostics.Fail("path", error.Error ?? error.Summary, relativePath);
+                return CollectPendingResult.Fail(error);
             }
 
             string? moveFull = null;
@@ -90,117 +185,79 @@ public sealed class ApplyPatchTool(
                         out moveFull,
                         out error))
                 {
-                    Fail("path", error.Error ?? error.Summary, clock, sessionId, patchChars, path: file.MoveTo, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-                    return error;
+                    diagnostics.Fail("path", error.Error ?? error.Summary, file.MoveTo);
+                    return CollectPendingResult.Fail(error);
                 }
 
                 if (File.Exists(moveFull))
                 {
                     var message = $"Cannot move onto an existing file: {file.MoveTo}";
-                    Fail("exists", message, clock, sessionId, patchChars, path: file.MoveTo, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-                    return ToolResult.Failure("File exists", message);
+                    diagnostics.Fail("exists", message, file.MoveTo);
+                    return CollectPendingResult.Fail(ToolResult.Failure("File exists", message));
                 }
             }
 
-            if (file.Kind == PatchFileKind.Delete)
+            var environment = new PatchFileApplyEnvironment(relativePath, fullPath, moveFull, diagnostics);
+            var step = await PatchFileApplication.ApplyAsync(
+                file,
+                LocalPatchFileApplier.Instance,
+                environment,
+                cancellationToken);
+
+            switch (step.Kind)
             {
-                if (!File.Exists(fullPath))
-                {
+                case PatchFileApplyOutcomeKind.Failed:
+                    return CollectPendingResult.Fail(step.Failure!);
+                case PatchFileApplyOutcomeKind.Pending:
+                    pending.Add(step.Pending!);
+                    break;
+                case PatchFileApplyOutcomeKind.AlreadyApplied:
                     alreadyApplied.Add(relativePath);
-                    continue;
-                }
-
-                var deleted = await File.ReadAllTextAsync(fullPath, cancellationToken);
-                pending.Add(new PendingWrite(relativePath, fullPath, deleted, null, PendingKind.Delete));
-                continue;
+                    break;
+                case PatchFileApplyOutcomeKind.Unchanged:
+                    unchanged++;
+                    break;
             }
-
-            string? original = null;
-            string source;
-            if (file.Kind == PatchFileKind.Add)
-            {
-                if (File.Exists(fullPath))
-                {
-                    var message = $"Cannot create file that already exists: {relativePath}";
-                    Fail("exists", message, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-                    return ToolResult.Failure("File exists", message);
-                }
-
-                source = string.Empty;
-            }
-            else
-            {
-                if (!File.Exists(fullPath))
-                {
-                    var message = $"Cannot patch missing file: {relativePath}";
-                    Fail("missing_file", message, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-                    return ToolResult.Failure("File not found", message);
-                }
-
-                original = await File.ReadAllTextAsync(fullPath, cancellationToken);
-                source = original;
-            }
-
-            var applied = PatchApplier.Apply(source, file);
-            if (!applied.Succeeded)
-            {
-                var message = TextLineEndings.WithNonstandardEolHint($"{relativePath}: {applied.Error}", source);
-                Fail("hunk_mismatch", message, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-                return ToolResult.Failure("Patch failed", message);
-            }
-
-            if (file.MoveTo is not null)
-            {
-                var movedText = applied.Status == PatchApplyStatus.Changed
-                    ? TextLineEndings.ToDiskText(source, applied.Text)
-                    : source;
-                pending.Add(new PendingWrite(file.MoveTo, moveFull!, original ?? source, movedText, PendingKind.Move, SourceFull: fullPath));
-                continue;
-            }
-
-            if (applied.Status == PatchApplyStatus.AlreadyApplied)
-            {
-                alreadyApplied.Add(relativePath);
-                continue;
-            }
-
-            if (applied.Status == PatchApplyStatus.Unchanged)
-            {
-                unchanged++;
-                continue;
-            }
-
-            var toWrite = file.Kind == PatchFileKind.Add
-                ? applied.Text
-                : TextLineEndings.ToDiskText(source, applied.Text);
-            pending.Add(new PendingWrite(relativePath, fullPath, original, toWrite));
         }
 
-        if (pending.Count == 0)
+        return new CollectPendingResult(pending, alreadyApplied, matched, unchanged, null);
+    }
+
+    private ToolResult HandleNoPendingWrites(
+        PatchDiagnosticsContext diagnostics,
+        string? pathFilter,
+        int matched,
+        int unchanged,
+        IReadOnlyList<string> alreadyApplied)
+    {
+        if (alreadyApplied.Count > 0 && unchanged == 0)
         {
-            if (alreadyApplied.Count > 0 && unchanged == 0)
-            {
-                ApplyPatchDiagnostics.ReportSuccess(_logger, clock.ElapsedMs, remote: false, alreadyApplied);
-                return ToolResult.Success("Already applied", string.Join(Environment.NewLine, alreadyApplied));
-            }
-
-            var noop = matched > 0;
-            var message = matched == 0
-                ? pathFilter is null
-                    ? "Patch contained no applicable file hunks."
-                    : $"No hunks matched path filter: {pathFilter}"
-                : "No-op: patch applied but file content unchanged.";
-            Fail("noop", message, clock, sessionId, patchChars, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-            return ToolResult.Failure(noop ? "No-op" : "No files patched", message);
+            ApplyPatchDiagnostics.ReportSuccess(_logger, diagnostics.Clock.ElapsedMs, remote: false, alreadyApplied);
+            return ToolResult.Success("Already applied", string.Join(Environment.NewLine, alreadyApplied));
         }
 
-        var written = new List<PendingWrite>();
+        var noop = matched > 0;
+        var message = matched == 0
+            ? pathFilter is null
+                ? "Patch contained no applicable file hunks."
+                : $"No hunks matched path filter: {pathFilter}"
+            : "No-op: patch applied but file content unchanged.";
+        diagnostics.Fail("noop", message);
+        return ToolResult.Failure(noop ? "No-op" : "No files patched", message);
+    }
+
+    private async Task<CommitWritesResult> CommitPendingWritesAsync(
+        IReadOnlyList<PatchPendingWrite> pending,
+        PatchDiagnosticsContext diagnostics,
+        CancellationToken cancellationToken)
+    {
+        var written = new List<PatchPendingWrite>();
         foreach (var change in pending)
         {
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (change.Kind == PendingKind.Delete)
+                if (change.Kind == PatchPendingKind.Delete)
                 {
                     File.Delete(change.FullPath);
                     written.Add(change);
@@ -220,11 +277,11 @@ public sealed class ApplyPatchTool(
                     written.Add(change);
                     await RollbackAsync(written, CancellationToken.None);
                     var message = $"{change.RelativePath}: written content did not match the patch.";
-                    Fail("verify", message, clock, sessionId, patchChars, path: change.RelativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-                    return ToolResult.Failure("Patch failed", message);
+                    diagnostics.Fail("verify", message, change.RelativePath);
+                    return CommitWritesResult.Fail(ToolResult.Failure("Patch failed", message));
                 }
 
-                if (change.Kind == PendingKind.Move
+                if (change.Kind == PatchPendingKind.Move
                     && change.SourceFull is not null
                     && File.Exists(change.SourceFull))
                 {
@@ -243,12 +300,21 @@ public sealed class ApplyPatchTool(
                 }
 
                 var message = $"{change.RelativePath}: {ex.Message}";
-                Fail("exception", message, clock, sessionId, patchChars, path: change.RelativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-                return ToolResult.Failure("Patch failed", message);
+                diagnostics.Fail("exception", message, change.RelativePath);
+                return CommitWritesResult.Fail(ToolResult.Failure("Patch failed", message));
             }
         }
 
         var appliedFiles = written.Select(change => change.RelativePath).ToArray();
+        return CommitWritesResult.Succeed(appliedFiles);
+    }
+
+    private async Task<ToolResult> AuditAndSucceedAsync(
+        string[] appliedFiles,
+        string? pathFilter,
+        ApplyPatchInvokeClock clock,
+        CancellationToken cancellationToken)
+    {
         await WorkspaceToolHelper.AuditAsync(
             audit,
             "apply_patch",
@@ -262,33 +328,25 @@ public sealed class ApplyPatchTool(
             string.Join(Environment.NewLine, appliedFiles));
     }
 
-    private void Fail(
-        string stage,
-        string error,
-        ApplyPatchInvokeClock clock,
-        string? sessionId,
-        int patchChars,
-        string? path = null,
-        string? pathFilter = null,
-        int fileCount = 0,
-        int hunkCount = 0,
-        string? patchPreview = null) =>
-        ApplyPatchDiagnostics.ReportFailure(
-            _logger,
-            runtimeDiagnosticEventSink,
-            stage,
-            error,
-            clock.ElapsedMs,
-            remote: false,
-            patchChars,
-            sessionId,
-            path,
-            pathFilter,
-            fileCount,
-            hunkCount,
-            patchPreview);
+    private readonly record struct CollectPendingResult(
+        List<PatchPendingWrite> Pending,
+        List<string> AlreadyApplied,
+        int Matched,
+        int Unchanged,
+        ToolResult? EarlyResult)
+    {
+        public static CollectPendingResult Fail(ToolResult failure) =>
+            new([], [], 0, 0, failure);
+    }
 
-    private static async Task RollbackAsync(IReadOnlyList<PendingWrite> written, CancellationToken cancellationToken)
+    private readonly record struct CommitWritesResult(ToolResult? Failure, string[]? AppliedFiles)
+    {
+        public static CommitWritesResult Fail(ToolResult failure) => new(failure, null);
+
+        public static CommitWritesResult Succeed(string[] appliedFiles) => new(null, appliedFiles);
+    }
+
+    private static async Task RollbackAsync(IReadOnlyList<PatchPendingWrite> written, CancellationToken cancellationToken)
     {
         for (var i = written.Count - 1; i >= 0; i--)
         {
@@ -296,26 +354,9 @@ public sealed class ApplyPatchTool(
         }
     }
 
-    private static bool MatchesFilter(PatchFile file, string? pathFilter)
+    private static async Task RestoreOneAsync(PatchPendingWrite change, CancellationToken cancellationToken)
     {
-        if (pathFilter is null)
-        {
-            return true;
-        }
-
-        var filter = ToolPathNormalizer.ForModel(pathFilter);
-        if (string.Equals(ToolPathNormalizer.ForModel(file.Path), filter, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return file.MoveTo is not null
-            && string.Equals(ToolPathNormalizer.ForModel(file.MoveTo), filter, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static async Task RestoreOneAsync(PendingWrite change, CancellationToken cancellationToken)
-    {
-        if (change.Kind == PendingKind.Move)
+        if (change.Kind == PatchPendingKind.Move)
         {
             if (File.Exists(change.FullPath))
             {
@@ -332,7 +373,7 @@ public sealed class ApplyPatchTool(
             return;
         }
 
-        if (change.Kind == PendingKind.Delete)
+        if (change.Kind == PatchPendingKind.Delete)
         {
             if (change.Original is not null)
             {
@@ -354,19 +395,4 @@ public sealed class ApplyPatchTool(
 
         await File.WriteAllTextAsync(change.FullPath, change.Original, cancellationToken);
     }
-
-    private enum PendingKind
-    {
-        Write,
-        Delete,
-        Move
-    }
-
-    private sealed record PendingWrite(
-        string RelativePath,
-        string FullPath,
-        string? Original,
-        string? ToWrite,
-        PendingKind Kind = PendingKind.Write,
-        string? SourceFull = null);
 }
