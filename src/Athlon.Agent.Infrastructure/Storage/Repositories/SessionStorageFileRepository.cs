@@ -1,25 +1,21 @@
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Net.Http.Json;
-using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.RuntimeDiagnostics;
-using Athlon.Agent.Infrastructure.BehaviorReport;
-using Microsoft.Extensions.DependencyInjection;
-using Serilog;
-using Serilog.Core;
-using Serilog.Events;
+using Athlon.Agent.Core.Storage;
 
-namespace Athlon.Agent.Infrastructure;
+namespace Athlon.Agent.Infrastructure.Storage.Repositories;
 
-/// <summary>Session documents: save, load, list and delete.</summary>
-public sealed partial class FileStorageService
+public sealed class SessionStorageFileRepository(
+    IAppLogger logger,
+    IAppPathProvider paths,
+    IJsonFileStore jsonFileStore,
+    IAgentRunContextAccessor runContextAccessor,
+    SessionDirectoryService sessionDirectories,
+    SessionIndexCoordinator indexCoordinator,
+    IRuntimeDiagnosticEventSink? runtimeDiagnosticEventSink = null) : ISessionStorageRepository
 {
+    private readonly IAppLogger _logger = logger.ForContext("Storage");
+
     public async Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default)
     {
         string sessionDir;
@@ -27,8 +23,8 @@ public sealed partial class FileStorageService
         {
             using (await SessionWriteLock.AcquireAsync(session.Id, cancellationToken).ConfigureAwait(false))
             {
-                EnsureSessionLogDirectories(session.Id);
-                sessionDir = GetSessionDirectory(session);
+                sessionDirectories.EnsureSessionLogDirectories(session.Id);
+                sessionDir = sessionDirectories.GetSessionDirectory(session);
 
                 await jsonFileStore.SaveAsync(Path.Combine(sessionDir, "session.json"), session, cancellationToken);
                 _logger.Information("Session persisted to {SessionDir}", sessionDir);
@@ -53,7 +49,7 @@ public sealed partial class FileStorageService
         if (SessionDirectoryLayout.IsTopLevelSessionDirectory(paths.SessionsPath, sessionDir)
             && !SessionDirectoryLayout.IsNestedSubAgentSessionId(paths.SessionsPath, session.Id))
         {
-            _indexCoordinator.ScheduleUpdate(session);
+            indexCoordinator.ScheduleUpdate(session);
         }
     }
 
@@ -66,8 +62,6 @@ public sealed partial class FileStorageService
 
     public async Task SaveSessionOffThreadAsync(AgentSession session, CancellationToken cancellationToken = default)
     {
-        // Serialization is CPU work proportional to the whole message list, so it must not happen
-        // on a caller that is painting. The write itself already runs on the pool.
         var json = await BackgroundFileIo.RunAsync(
             () => JsonSerializer.Serialize(session, JsonFileStore.Options)).ConfigureAwait(false);
 
@@ -76,8 +70,8 @@ public sealed partial class FileStorageService
         {
             using (await SessionWriteLock.AcquireAsync(session.Id, cancellationToken).ConfigureAwait(false))
             {
-                await EnsureSessionLogDirectoriesAsync(session.Id).ConfigureAwait(false);
-                sessionDir = GetSessionDirectory(session);
+                await sessionDirectories.EnsureSessionLogDirectoriesAsync(session.Id).ConfigureAwait(false);
+                sessionDir = sessionDirectories.GetSessionDirectory(session);
                 await FileIoRetry.RunAsync(
                     () => AtomicFile.WriteAllTextAsync(Path.Combine(sessionDir, "session.json"), json, cancellationToken),
                     cancellationToken);
@@ -103,7 +97,7 @@ public sealed partial class FileStorageService
         if (SessionDirectoryLayout.IsTopLevelSessionDirectory(paths.SessionsPath, sessionDir)
             && !SessionDirectoryLayout.IsNestedSubAgentSessionId(paths.SessionsPath, session.Id))
         {
-            _indexCoordinator.ScheduleUpdate(session);
+            indexCoordinator.ScheduleUpdate(session);
         }
     }
 
@@ -120,10 +114,7 @@ public sealed partial class FileStorageService
             return Task.FromResult<SessionIndexEntry?>(null);
         }
 
-        // Only the direct layout is eligible for the fast path; anything else (index fallback,
-        // recovered/moved directories) returns null so the caller loads the full session instead
-        // of rendering a metadata-only shell from a path we are not sure about.
-        var directPath = Path.Combine(GetSessionDirectory(sessionId), "session.json");
+        var directPath = Path.Combine(sessionDirectories.GetSessionDirectory(sessionId), "session.json");
         if (!File.Exists(directPath))
         {
             return Task.FromResult<SessionIndexEntry?>(null);
@@ -150,7 +141,7 @@ public sealed partial class FileStorageService
 
         try
         {
-            var directPath = Path.Combine(GetSessionDirectory(sessionId), "session.json");
+            var directPath = Path.Combine(sessionDirectories.GetSessionDirectory(sessionId), "session.json");
             if (File.Exists(directPath))
             {
                 var session = await jsonFileStore.LoadAsync<AgentSession>(directPath, cancellationToken);
@@ -207,7 +198,7 @@ public sealed partial class FileStorageService
 
     public async Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default)
     {
-        return await _indexCoordinator.ListSessionsAsync(cancellationToken).ConfigureAwait(false);
+        return await indexCoordinator.ListSessionsAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -234,32 +225,21 @@ public sealed partial class FileStorageService
                 }
             }
 
-            var directDir = GetSessionDirectory(sessionId);
+            var directDir = sessionDirectories.GetSessionDirectory(sessionId);
             if (Directory.Exists(directDir) && !deleted.Contains(directDir))
             {
                 await DeleteDirectoryResilientAsync(directDir, cancellationToken).ConfigureAwait(false);
             }
 
-            // A removed sub-agent session must stop resolving; the delete may have taken out the
-            // last nested directory for this id.
             SessionDirectoryLayout.InvalidateNestedIndex(paths.SessionsPath);
         }
 
-        await _indexCoordinator.RefreshIndexImmediateAsync(cancellationToken);
+        await indexCoordinator.RefreshIndexImmediateAsync(cancellationToken);
         SessionWriteLock.RemoveSession(sessionId);
-        // The directory is gone, so the "already prepared" marker must go too: if the same id is
-        // written again, its folders have to be recreated rather than assumed present. Keyed off the
-        // plain top-level path because that is what a non-sub-agent context resolves to.
-        _ensuredSessionDirs.TryRemove(Path.Combine(paths.SessionsPath, sessionId), out _);
+        sessionDirectories.TryForgetEnsuredDir(sessionId);
         _logger.Information("Deleted session {SessionId}", sessionId);
     }
 
-    /// <summary>
-    /// <see cref="Directory.Delete(string, bool)"/> fails outright if any file inside is still open
-    /// — a reader mid-deserialization, the search indexer, or antivirus. Retrying rides out those
-    /// short-lived handles instead of surfacing a sharing violation and leaving the session
-    /// half-deleted. Callers suppress their own background readers; this covers everything else.
-    /// </summary>
     private static Task DeleteDirectoryResilientAsync(string path, CancellationToken cancellationToken) =>
         FileIoRetry.RunAsync(() =>
         {
@@ -270,4 +250,38 @@ public sealed partial class FileStorageService
 
             return Task.CompletedTask;
         }, cancellationToken);
+
+    private async Task EnqueueStorageDiagnosticAsync(
+        string? sessionId,
+        RuntimeDiagnosticPhase phase,
+        string eventType,
+        RuntimeDiagnosticSeverity severity,
+        string errorCode,
+        string? message)
+    {
+        if (runtimeDiagnosticEventSink is not { } sink)
+        {
+            return;
+        }
+
+        var context = runContextAccessor.Current;
+        var evt = new RuntimeDiagnosticEvent(
+            eventId: "",
+            ts: default,
+            sequence: 0,
+            sessionId: sessionId,
+            runId: context?.RunId ?? sessionId,
+            turnId: null,
+            attemptId: null,
+            parentAttemptId: null,
+            toolCallId: null,
+            messageId: null,
+            component: RuntimeDiagnosticComponent.Storage,
+            phase: phase,
+            eventType: eventType,
+            severity: severity,
+            errorCode: errorCode,
+            message: message);
+        await sink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
+    }
 }

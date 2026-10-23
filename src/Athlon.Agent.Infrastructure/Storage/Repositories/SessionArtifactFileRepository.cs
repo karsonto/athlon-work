@@ -1,24 +1,12 @@
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Net.Http.Json;
-using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Core.RuntimeDiagnostics;
-using Athlon.Agent.Infrastructure.BehaviorReport;
-using Microsoft.Extensions.DependencyInjection;
-using Serilog;
-using Serilog.Core;
-using Serilog.Events;
+using Athlon.Agent.Core.Storage;
 
-namespace Athlon.Agent.Infrastructure;
+namespace Athlon.Agent.Infrastructure.Storage.Repositories;
 
-/// <summary>Transcripts, evicted tool results and handoff notes.</summary>
-public sealed partial class FileStorageService
+public sealed class SessionArtifactFileRepository(SessionDirectoryService sessionDirectories) : ISessionArtifactRepository
 {
     public async Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
     {
@@ -35,7 +23,7 @@ public sealed partial class FileStorageService
             }
 
             await FileIoRetry.RunAsync(
-                () => File.WriteAllTextAsync(path, builder.ToString(), Utf8Bom, cancellationToken),
+                () => File.WriteAllTextAsync(path, builder.ToString(), SessionDirectoryService.Utf8Bom, cancellationToken),
                 cancellationToken);
             return path;
         }
@@ -49,7 +37,7 @@ public sealed partial class FileStorageService
     {
         using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
         {
-            var evictedDir = Path.Combine(GetSessionDirectory(sessionId), "evicted");
+            var evictedDir = Path.Combine(sessionDirectories.GetSessionDirectory(sessionId), "evicted");
             Directory.CreateDirectory(evictedDir);
             var path = Path.Combine(evictedDir, $"{toolCallId}.txt");
             await AtomicFile.WriteAllTextAsync(path, content, cancellationToken);
@@ -69,7 +57,7 @@ public sealed partial class FileStorageService
 
         using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
         {
-            var path = Path.Combine(GetSessionDirectory(sessionId), "evicted", $"{toolCallId}.txt");
+            var path = Path.Combine(sessionDirectories.GetSessionDirectory(sessionId), "evicted", $"{toolCallId}.txt");
             if (!File.Exists(path))
             {
                 return null;
@@ -227,10 +215,10 @@ public sealed partial class FileStorageService
     }
 
     private string GetSessionTranscriptsDirectory(string sessionId) =>
-        Path.Combine(GetSessionDirectory(sessionId), "transcripts");
+        Path.Combine(sessionDirectories.GetSessionDirectory(sessionId), "transcripts");
 
     private string GetHandoffNotePath(string sessionId) =>
-        Path.Combine(GetSessionDirectory(sessionId), "notes", "handoff.md");
+        Path.Combine(sessionDirectories.GetSessionDirectory(sessionId), "notes", "handoff.md");
 
     private bool TryResolveTranscriptPath(string sessionId, string fileName, out string path)
     {

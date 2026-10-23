@@ -5,7 +5,7 @@ namespace Athlon.Agent.Infrastructure;
 /// <summary>
 /// Debounces session index updates and upserts single entries instead of scanning all sessions.
 /// </summary>
-internal sealed class SessionIndexCoordinator
+public sealed class SessionIndexCoordinator
 {
     private static readonly TimeSpan DebounceInterval = TimeSpan.FromMilliseconds(1500);
 

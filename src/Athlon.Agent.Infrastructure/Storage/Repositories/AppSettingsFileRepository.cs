@@ -1,24 +1,9 @@
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Net.Http.Json;
-using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Core.RuntimeDiagnostics;
-using Athlon.Agent.Infrastructure.BehaviorReport;
-using Microsoft.Extensions.DependencyInjection;
-using Serilog;
-using Serilog.Core;
-using Serilog.Events;
+using Athlon.Agent.Core.Storage;
 
-namespace Athlon.Agent.Infrastructure;
+namespace Athlon.Agent.Infrastructure.Storage.Repositories;
 
-/// <summary>Application settings file.</summary>
-public sealed partial class FileStorageService
+public sealed class AppSettingsFileRepository(IAppPathProvider paths, IJsonFileStore jsonFileStore) : IAppSettingsRepository
 {
     public async Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {

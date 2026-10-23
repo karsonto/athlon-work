@@ -1,24 +1,14 @@
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Net.Http.Json;
 using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Core.RuntimeDiagnostics;
-using Athlon.Agent.Infrastructure.BehaviorReport;
-using Microsoft.Extensions.DependencyInjection;
-using Serilog;
-using Serilog.Core;
-using Serilog.Events;
+using Athlon.Agent.Core.Storage;
 
-namespace Athlon.Agent.Infrastructure;
+namespace Athlon.Agent.Infrastructure.Storage.Repositories;
 
-/// <summary>Conversation display log (conversation.jsonl).</summary>
-public sealed partial class FileStorageService
+public sealed class ConversationDisplayFileRepository(
+    IJsonFileStore jsonFileStore,
+    SessionDirectoryService sessionDirectories) : IConversationDisplayRepository
 {
     public async Task<ChatMessage?> TryLoadConversationMessageAsync(
         string sessionId,
@@ -68,7 +58,7 @@ public sealed partial class FileStorageService
 
         using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
         {
-            EnsureSessionLogDirectories(sessionId);
+            sessionDirectories.EnsureSessionLogDirectories(sessionId);
             var path = GetConversationDisplayPath(sessionId);
             await jsonFileStore.AppendJsonLineAsync(path, message, cancellationToken);
         }
@@ -86,7 +76,7 @@ public sealed partial class FileStorageService
 
         using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
         {
-            EnsureSessionLogDirectories(sessionId);
+            sessionDirectories.EnsureSessionLogDirectories(sessionId);
             var path = GetConversationDisplayPath(sessionId);
             var builder = new StringBuilder();
             foreach (var message in messages)
@@ -95,7 +85,7 @@ public sealed partial class FileStorageService
             }
 
             await FileIoRetry.RunAsync(
-                () => File.WriteAllTextAsync(path, builder.ToString(), Utf8Bom, cancellationToken),
+                () => File.WriteAllTextAsync(path, builder.ToString(), SessionDirectoryService.Utf8Bom, cancellationToken),
                 cancellationToken);
         }
     }
@@ -112,11 +102,9 @@ public sealed partial class FileStorageService
 
         using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
         {
-            await EnsureSessionLogDirectoriesAsync(sessionId).ConfigureAwait(false);
+            await sessionDirectories.EnsureSessionLogDirectoriesAsync(sessionId).ConfigureAwait(false);
             var path = GetConversationDisplayPath(sessionId);
 
-            // Building the payload is the expensive half for a long conversation, so it moves with
-            // the write rather than staying on the caller's thread.
             var json = await BackgroundFileIo.RunAsync(() =>
             {
                 var builder = new StringBuilder();
@@ -129,7 +117,7 @@ public sealed partial class FileStorageService
             }).ConfigureAwait(false);
 
             await FileIoRetry.RunAsync(
-                () => File.WriteAllTextAsync(path, json, Utf8Bom, cancellationToken),
+                () => File.WriteAllTextAsync(path, json, SessionDirectoryService.Utf8Bom, cancellationToken),
                 cancellationToken);
         }
     }
@@ -151,8 +139,6 @@ public sealed partial class FileStorageService
                 return Array.Empty<ChatMessage>();
             }
 
-            // conversation.jsonl is append-only. Later lines with the same Id win so a
-            // mid-turn streaming checkpoint can be overwritten by the final Persist.
             var indexById = new Dictionary<string, int>(StringComparer.Ordinal);
             var messages = new List<ChatMessage>();
             foreach (var line in await File.ReadAllLinesAsync(path, cancellationToken).ConfigureAwait(false))
@@ -178,7 +164,6 @@ public sealed partial class FileStorageService
                 messages.Add(message);
             }
 
-            // The file is append-only so order is stable; only sort if somehow out of order.
             if (messages.Count > 1)
             {
                 for (var i = 1; i < messages.Count; i++)
@@ -191,8 +176,6 @@ public sealed partial class FileStorageService
                 }
             }
 
-            // Strip heavy tool result content for display only (full content remains in conversation.jsonl
-            // for model context reconstruction).
             for (var i = 0; i < messages.Count; i++)
             {
                 messages[i] = StripToolContentForDisplay(messages[i]);
@@ -318,7 +301,6 @@ public sealed partial class FileStorageService
         }
 
         var message = ConversationDisplayLog.TryParseLine(line);
-        // Reverse scan meets newer lines first, so first-seen Id is last-wins in file order.
         if (message is not null && seen.Add(message.Id))
         {
             messages.Add(message);
@@ -359,7 +341,7 @@ public sealed partial class FileStorageService
     }
 
     private string GetConversationDisplayPath(string sessionId) =>
-        Path.Combine(GetSessionDirectory(sessionId), "conversation.jsonl");
+        Path.Combine(sessionDirectories.GetSessionDirectory(sessionId), "conversation.jsonl");
 
     private static ChatMessage StripToolContentForDisplay(ChatMessage message) =>
         ConversationDisplayContentStripper.StripToolContentForDisplay(message);

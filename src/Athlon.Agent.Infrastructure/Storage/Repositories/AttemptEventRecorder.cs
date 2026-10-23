@@ -1,10 +1,10 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Storage;
 using Athlon.Agent.Infrastructure.BehaviorReport;
 
-namespace Athlon.Agent.Infrastructure;
+namespace Athlon.Agent.Infrastructure.Storage.Repositories;
 
-/// <summary>Attempt-event forwarding (behavior report). Tool-call disk logs have been removed.</summary>
-public sealed partial class FileStorageService
+public sealed class AttemptEventRecorder : IAttemptEventRecorder
 {
     public Task AppendAttemptEventAsync(
         string sessionId,
