@@ -1,35 +1,29 @@
 using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Chat;
+using Athlon.Agent.Infrastructure.Chat;
 
 namespace Athlon.Agent.Infrastructure;
 
+/// <summary>
+/// Facade over <see cref="IChatResponseDialect"/> for OpenAI-compatible HTTP bodies and SSE streams.
+/// Provider-specific field / thinking-tag differences live in dialects, not here.
+/// </summary>
 internal static class OpenAiChatResponseParser
 {
-    private static readonly string[] EmbeddedThinkingEndTags =
-    [
-        "\u003c/redacted_thinking\u003e",
-        "\u0060/think\u0060"
-    ];
-
-    private static readonly string[] EmbeddedThinkingStartTags =
-    [
-        "\u003credacted_thinking\u003e",
-        "\u0060think\u0060"
-    ];
+    private static readonly ChatResponseDialectRegistry Dialects = ChatResponseDialectRegistry.CreateDefault();
 
     public static AgentModelResponse ParseNonStreamingResponse(string responseBody)
     {
         using var json = JsonDocument.Parse(responseBody);
         var message = json.RootElement.GetProperty("choices")[0].GetProperty("message");
-        var content = message.TryGetProperty("content", out var contentElement) && contentElement.ValueKind == JsonValueKind.String
-            ? contentElement.GetString() ?? string.Empty
-            : string.Empty;
-
-        var toolCalls = ParseToolCallsFromMessage(message);
-        var reasoningContent = TryReadReasoningContent(message);
+        var dialect = Dialects.Resolve(message);
+        var content = dialect.ReadContent(message);
+        var toolCalls = MaterializeToolCalls(dialect.ReadToolCalls(message), idleTimedOut: false);
+        var reasoningContent = dialect.ReadReasoning(message);
         var usage = TryParseUsage(json.RootElement);
-        return NormalizeAssistantResponse(content, toolCalls, reasoningContent, usage);
+        return NormalizeAssistantResponse(dialect, content, toolCalls, reasoningContent, usage);
     }
 
     public static async Task<AgentModelResponse> EmitParsedResponseAsync(
@@ -81,6 +75,7 @@ internal static class OpenAiChatResponseParser
             return await EmitParsedResponseAsync(body, onTextDelta, onReasoningDelta, onToolCallDelta);
         }
 
+        var streamDialect = Dialects.StreamingDefault;
         var contentBuilder = new StringBuilder();
         var reasoningBuilder = new StringBuilder();
         var rawBuilder = new StringBuilder();
@@ -162,7 +157,7 @@ internal static class OpenAiChatResponseParser
                     }
                 }
 
-                await AppendReasoningDelta(payload, reasoningBuilder, onReasoningDelta);
+                await AppendReasoningDelta(streamDialect, payload, reasoningBuilder, onReasoningDelta);
 
                 if (payload.TryGetProperty("tool_calls", out var deltaToolCalls) && deltaToolCalls.ValueKind == JsonValueKind.Array)
                 {
@@ -260,17 +255,31 @@ internal static class OpenAiChatResponseParser
             })
             .ToArray();
 
+        var content = contentBuilder.ToString();
         var reasoningContent = reasoningBuilder.Length == 0 ? null : reasoningBuilder.ToString();
-        return NormalizeAssistantResponse(contentBuilder.ToString(), normalizedToolCalls, reasoningContent, usage);
+        // Resolve dialect against the assembled message so embedded-thinking tags can still peel.
+        var assembled = BuildAssembledMessageElement(content, reasoningContent);
+        var dialect = Dialects.Resolve(assembled);
+        return NormalizeAssistantResponse(dialect, content, normalizedToolCalls, reasoningContent, usage);
+    }
+
+    private static JsonElement BuildAssembledMessageElement(string content, string? reasoning)
+    {
+        using var doc = JsonDocument.Parse(
+            reasoning is null
+                ? $"{{\"content\":{JsonSerializer.Serialize(content)}}}"
+                : $"{{\"content\":{JsonSerializer.Serialize(content)},\"reasoning_content\":{JsonSerializer.Serialize(reasoning)}}}");
+        return doc.RootElement.Clone();
     }
 
     private static AgentModelResponse NormalizeAssistantResponse(
+        IChatResponseDialect dialect,
         string content,
         IReadOnlyList<AgentToolCall> toolCalls,
         string? reasoningContent,
         ModelUsage? usage = null)
     {
-        var (normalizedContent, normalizedReasoning) = SplitEmbeddedThinkingContent(content, reasoningContent);
+        var (normalizedContent, normalizedReasoning) = dialect.Normalize(content, reasoningContent);
         return new AgentModelResponse(normalizedContent, toolCalls, normalizedReasoning, usage);
     }
 
@@ -303,59 +312,14 @@ internal static class OpenAiChatResponseParser
         return PromptCacheUsageParser.MergeInto(baseUsage, usageElement);
     }
 
-    private static (string Content, string? ReasoningContent) SplitEmbeddedThinkingContent(
-        string content,
-        string? reasoningContent)
-    {
-        if (!string.IsNullOrWhiteSpace(reasoningContent))
-        {
-            return (content, reasoningContent);
-        }
-
-        foreach (var endTag in EmbeddedThinkingEndTags)
-        {
-            var index = content.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
-            if (index < 0)
-            {
-                continue;
-            }
-
-            var reasoning = content[..index].Trim();
-            var answer = content[(index + endTag.Length)..].Trim();
-            foreach (var startTag in EmbeddedThinkingStartTags)
-            {
-                if (reasoning.StartsWith(startTag, StringComparison.OrdinalIgnoreCase))
-                {
-                    reasoning = reasoning[startTag.Length..].Trim();
-                    break;
-                }
-            }
-
-            return (answer, string.IsNullOrWhiteSpace(reasoning) ? null : reasoning);
-        }
-
-        return (content, null);
-    }
-
-    private static List<AgentToolCall> ParseToolCallsFromMessage(JsonElement message)
+    private static List<AgentToolCall> MaterializeToolCalls(
+        IEnumerable<ChatToolCallDraft> drafts,
+        bool idleTimedOut)
     {
         var toolCalls = new List<AgentToolCall>();
-        if (message.TryGetProperty("tool_calls", out var callsElement) && callsElement.ValueKind == JsonValueKind.Array)
+        foreach (var draft in drafts)
         {
-            foreach (var call in callsElement.EnumerateArray())
-            {
-                var function = call.GetProperty("function");
-                var id = call.GetProperty("id").GetString() ?? IdGen.NewId();
-                var name = function.GetProperty("name").GetString() ?? string.Empty;
-                var argumentsJson = function.TryGetProperty("arguments", out var argumentsElement)
-                    ? argumentsElement.ValueKind == JsonValueKind.String
-                        ? argumentsElement.GetString() ?? "{}"
-                        : argumentsElement.ValueKind == JsonValueKind.Object
-                            ? argumentsElement.GetRawText()
-                            : "{}"
-                    : "{}";
-                toolCalls.Add(CreateToolCall(id, name, argumentsJson, idleTimedOut: false));
-            }
+            toolCalls.Add(CreateToolCall(draft.Id, draft.Name, draft.ArgumentsJson, idleTimedOut));
         }
 
         return toolCalls;
@@ -400,38 +364,13 @@ internal static class OpenAiChatResponseParser
         public StringBuilder Arguments { get; } = new();
     }
 
-    private static string? TryReadReasoningContent(JsonElement message)
-    {
-        if (message.TryGetProperty("reasoning_content", out var reasoningContent)
-            && reasoningContent.ValueKind == JsonValueKind.String)
-        {
-            return reasoningContent.GetString();
-        }
-
-        if (message.TryGetProperty("reasoning", out var reasoning) && reasoning.ValueKind == JsonValueKind.String)
-        {
-            return reasoning.GetString();
-        }
-
-        return null;
-    }
-
     private static async Task AppendReasoningDelta(
+        IChatResponseDialect dialect,
         JsonElement delta,
         StringBuilder reasoningBuilder,
         Func<string, Task>? onReasoningDelta)
     {
-        string? tokenText = null;
-        if (delta.TryGetProperty("reasoning_content", out var reasoningContent)
-            && reasoningContent.ValueKind == JsonValueKind.String)
-        {
-            tokenText = reasoningContent.GetString();
-        }
-        else if (delta.TryGetProperty("reasoning", out var reasoning) && reasoning.ValueKind == JsonValueKind.String)
-        {
-            tokenText = reasoning.GetString();
-        }
-
+        var tokenText = dialect.ReadReasoningDelta(delta);
         if (string.IsNullOrEmpty(tokenText))
         {
             return;
