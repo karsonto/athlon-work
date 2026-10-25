@@ -34,8 +34,9 @@ public sealed class FileStorageService : IFileStorageService
 
     /// <summary>
     /// Compatibility constructor for tests and direct instantiation without DI.
+    /// Internal so the container does not treat it as a second activation candidate.
     /// </summary>
-    public FileStorageService(
+    internal FileStorageService(
         IAppLogger logger,
         IAppPathProvider paths,
         IJsonFileStore jsonFileStore,
