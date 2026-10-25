@@ -28,6 +28,23 @@ Qwen3-TTS 本地模型 —— 真·流式语音合成
   vocoder 不会阻塞 talker，TTFA（首包延迟）≈ 首帧生成耗时。
 * **可打断**：`cancel()` 立即停止生成并清空队列（barge-in）。
 
+语音克隆（Base 模型）
+--------------------
+克隆走官方 ``generate_voice_clone()``：提示词由官方构建（参考音频码本 ``ref_code``
++ 参考文字 ``ref_text`` + 说话人 embedding），本脚本同样在 ``talker.generate``
+处截获，因此与 CustomVoice 共用同一条逐帧流式路径。
+
+* **必须用 Base 模型**：官方对 ``tts_model_type != "base"`` 直接抛错，
+  CustomVoice / VoiceDesign 权重无法克隆。
+* ``non_streaming_mode=False`` 时官方会在 prefill 里把「参考音频码本」与
+  「参考文字 + 目标文字」对齐，剩余文字留给生成阶段逐帧注入——正好是流式所需。
+* 官方非流式实现会先 ``cat(ref_code, codes)`` 再按比例切掉参考段；流式路径只解码
+  新生成的帧，天然省掉这一步（也避免比例切分的误差）。
+* ``create_voice_clone_prompt()`` 的结果按 ``(ref_audio, ref_text, x_vector_only)``
+  缓存，反复使用同一音色时无需重新编码参考音频。
+* ``x_vector_only_mode=True`` 只用说话人 embedding（不需要 ``ref_text``），
+  官方明确说明克隆质量会下降；需要最佳相似度请提供准确的参考文字。
+
 依赖
 ----
     pip install -U qwen-tts soundfile
@@ -54,18 +71,37 @@ python tools/streaming_tts_local.py --model ./m --text "测试" --device-out > a
 
 # 调整快慢权衡：--decode-every 3 表示每攒 3 帧解码一次（默认 1，最低延迟）
 python tools/streaming_tts_local.py --model ./m --text "测试" --play --decode-every 2
+
+# ---- 语音克隆（需 Base 模型）----
+# 提供参考音频 + 其文字内容（ICL 模式，相似度最佳）
+python tools/streaming_tts_local.py \
+    --model ./Qwen3-TTS-12Hz-1.7B-Base \
+    --ref-audio ./ref/voice.wav --ref-text "参考音频里说的那句话。" \
+    --text "用这个声音说一段新的话。" --play
+
+# 只给参考音频（x-vector 模式，无需参考文字，但相似度会下降）
+python tools/streaming_tts_local.py \
+    --model ./Qwen3-TTS-12Hz-1.7B-Base \
+    --ref-audio ./ref/voice.wav --x-vector-only \
+    --text "用这个声音说一段新的话。" --play
+
+# 参考音频也可以是 URL 或 base64（官方支持的三种形式）
+python tools/streaming_tts_local.py --model ./m \
+    --ref-audio "https://example.com/voice.wav" --ref-text "…" --text "测试"
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import queue
 import sys
 import threading
 import time
 import wave
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 # --------------------------------------------------------------------------- #
 # 常量
@@ -74,6 +110,12 @@ from typing import Any, Dict, Iterator, List, Optional
 # Qwen3-TTS-Tokenizer-12Hz: decode_upsample_rate = 1920, out_sr = 24000
 FRAME_UPSAMPLE = 1920
 SAMPLE_RATE = 24000
+
+# CustomVoice 模型的预置音色（与官方 README 一致）；Base 模型没有预置音色。
+CUSTOM_VOICE_SPEAKERS: Tuple[str, ...] = (
+    "Vivian", "Serena", "Uncle_Fu", "Dylan", "Eric",
+    "Ryan", "Aiden", "Ono_Anna", "Sohee",
+)
 
 # 官方 hard defaults（见 qwen3_tts_model.py::_merge_generate_kwargs）
 HARD_DEFAULTS: Dict[str, Any] = {
@@ -92,6 +134,86 @@ HARD_DEFAULTS: Dict[str, Any] = {
 
 class _PromptCaptured(Exception):
     """内部信号：提示词已截获，中止官方 blocking generate。"""
+
+
+def _hash_audio_source(source: Any) -> str:
+    """
+    参考音频的缓存指纹。
+
+    字符串形式（路径/URL/base64）直接哈希；``(ndarray, sr)`` 取内容摘要——
+    调用方常把同一段音频先以 ndarray 传入，必须与字符串形式区分缓存键，
+    但同一段音频反复传入应命中同一缓存，故对内容而非对象地址哈希。
+    """
+    if isinstance(source, str):
+        return "s:" + hashlib.sha256(source.encode("utf-8")).hexdigest()[:24]
+    if isinstance(source, tuple) and len(source) == 2:
+        audio, sr = source
+        try:
+            digest = hashlib.sha256(
+                memoryview(audio).cast("B")  # type: ignore[arg-type]
+            ).hexdigest()[:24]
+        except (TypeError, ValueError):
+            digest = "0" * 24
+        return f"n:{int(sr)}:{getattr(audio, 'shape', 0)}:{digest}"
+    return f"x:{id(source)}"
+
+
+# 语音克隆请求。image 之外的字段名字对齐官方 generate_voice_clone。
+@dataclass
+class VoiceCloneSpec:
+    """
+    一次克隆合成的参考条件。
+
+    ref_audio: 参考音频；支持本地路径 / http(s) URL / base64 字符串 / ``(ndarray, sr)``。
+    ref_text:  参考音频对应的文字，ICL 模式下必填（x_vector_only 时忽略）。
+    x_vector_only_mode: True 则仅用说话人 embedding，质量下降。
+    """
+
+    ref_audio: Any
+    ref_text: Optional[str] = None
+    x_vector_only_mode: bool = False
+
+    @property
+    def cache_key(self) -> Tuple[str, Optional[str], bool]:
+        """可哈希的缓存键：同一参考音频 + 同一文字 + 同一模式只编码一次。"""
+        text = (self.ref_text or "").strip()
+        return (
+            _hash_audio_source(self.ref_audio),
+            text or None,
+            bool(self.x_vector_only_mode),
+        )
+
+
+def resolve_icl_mode(
+    spec: VoiceCloneSpec, prompt_item: Any = None
+) -> bool:
+    """
+    按官方语义解析「是否 ICL 模式」。
+
+    x_vector_only_mode=False 时官方强制 ICL，且要求 ref_text 非空
+    （见 create_voice_clone_prompt 的校验），因此这里提前给出可读的错误，
+    而不是等官方抛一个只有索引信息的 ValueError。
+    """
+    if spec.x_vector_only_mode:
+        return False
+    return bool(getattr(prompt_item, "icl_mode", True))
+
+
+def validate_clone_spec(spec: VoiceCloneSpec) -> None:
+    """在昂贵操作（加载模型 / 编码参考音频）之前做参数自检。"""
+    ref_audio = spec.ref_audio
+    has_audio = (
+        (isinstance(ref_audio, str) and bool(ref_audio.strip()))
+        or (isinstance(ref_audio, tuple) and len(ref_audio) == 2)
+    )
+    if not has_audio:
+        raise ValueError("语音克隆需要 ref_audio（本地路径 / URL / base64 / (ndarray, sr)）。")
+
+    if not spec.x_vector_only_mode and not (spec.ref_text or "").strip():
+        raise ValueError(
+            "ICL 模式（x_vector_only_mode=False）必须提供 ref_text —— 即参考音频里说的那句话。"
+            "若确实拿不到参考文字，请改用 x_vector_only_mode=True（克隆质量会下降）。"
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -234,6 +356,8 @@ class StreamMetrics:
     audio_seconds: float = 0.0
     wall_seconds: float = 0.0
     error: Optional[str] = None               # 生成线程异常信息
+    # 克隆诊断：本次是否克隆、以及实际生效的模式（icl / x_vector）
+    clone_mode: Optional[str] = None
 
     @property
     def rtf(self) -> float:
@@ -242,8 +366,10 @@ class StreamMetrics:
 
 class LocalStreamingTTS:
     """
-    本地 Qwen3-TTS CustomVoice 流式合成。
+    本地 Qwen3-TTS 流式合成。
 
+    ``custom_voice`` 模型走预置音色，``base`` 模型额外支持语音克隆；
+    同一个实例不能同时具备两种能力，故 ``stream()`` 会按模型类型校验。
     加载一次模型，可反复调用 `stream()`。
     """
 
@@ -273,6 +399,13 @@ class LocalStreamingTTS:
         self._gen_defaults: Dict[str, Any] = {}
         self._talker_cls: Any = None
         self.last_metrics: Optional[StreamMetrics] = None
+
+        # 语音克隆：模型类型与参考条件的提示词缓存
+        self._model_type: Optional[str] = None
+        self._clone_prompt_cache: Dict[Tuple[str, Optional[str], bool], Any] = {}
+        self._prompt_lock = threading.Lock()
+        # 最近一次克隆请求实际生效的模式（"icl" / "x_vector"），供诊断与调用方读取
+        self.last_clone_mode: Optional[str] = None
 
     # --------------------------- 加载 --------------------------- #
 
@@ -307,11 +440,17 @@ class LocalStreamingTTS:
         self.tts = tts
         model = tts.model
         model_type = getattr(model, "tts_model_type", None)
-        if model_type != "custom_voice":
+        # custom_voice：预置音色；base：语音克隆。两者共用同一条流式路径，
+        # 区别只在提示词由官方哪个方法构建。
+        if model_type not in ("custom_voice", "base"):
             raise ValueError(
-                f"此脚本面向 CustomVoice 模型，当前模型 tts_model_type={model_type!r}。"
-                "请使用 Qwen3-TTS-12Hz-1.7B/0.6B-CustomVoice。"
+                f"此脚本面向 CustomVoice / Base 模型，当前 tts_model_type={model_type!r}。"
+                "请使用 Qwen3-TTS-12Hz-1.7B/0.6B-CustomVoice（预置音色）"
+                "或 Qwen3-TTS-12Hz-1.7B/0.6B-Base（语音克隆）。"
             )
+        self._model_type = model_type
+        self._clone_prompt_cache.clear()
+        self.last_clone_mode = None
 
         self._talker = model.talker
         self._talker_cls = type(self._talker)
@@ -399,6 +538,109 @@ class LocalStreamingTTS:
 
     # --------------------------- 提示词截获 --------------------------- #
 
+    @contextmanager
+    def _captured_talker_call(self) -> Iterator[Dict[str, Any]]:
+        """
+        临时接管 `talker.generate`，把官方构建好的张量截获下来。
+
+        截获后立刻抛 `_PromptCaptured` 中止官方流程——官方会继续做整段 blocking
+        生成与解码，而我们只需要 prefill 用的几个张量。
+
+        注意：patch 打在**类**上，因此不是线程安全的。服务层靠串行推理锁保证同一时刻
+        只有一个请求走到这里；直接使用本类时请勿并发调用 `stream()`。
+        """
+        captured: Dict[str, Any] = {}
+        cls = self._talker_cls
+        original = cls.generate
+
+        def _spy(self_talker: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+            captured.clear()  # 只认最近一次调用，避免上一次的残留键污染结果
+            captured.update(kwargs)
+            raise _PromptCaptured()
+
+        cls.generate = _spy
+        try:
+            yield captured
+        finally:
+            cls.generate = original
+
+    def _prompt_items(self, spec: VoiceCloneSpec) -> Any:
+        """构建（或命中缓存）官方 VoiceClonePromptItem。"""
+        key = spec.cache_key
+        with self._prompt_lock:  # 同一参考条件只编码一次；编码开销大且结果可复用
+            hit = self._clone_prompt_cache.get(key)
+            if hit is not None:
+                return hit
+        self._log(f"构建克隆提示词（首次，需要编码参考音频）: x_vector_only={spec.x_vector_only_mode}")
+        items = self.tts.create_voice_clone_prompt(
+            ref_audio=spec.ref_audio,
+            ref_text=spec.ref_text,
+            x_vector_only_mode=spec.x_vector_only_mode,
+        )
+        if not isinstance(items, list) or not items:
+            raise RuntimeError("create_voice_clone_prompt 未返回有效的提示词条目。")
+        with self._prompt_lock:
+            self._clone_prompt_cache[key] = items
+        return items
+
+    def _capture_clone_prompt(
+        self,
+        spec: VoiceCloneSpec,
+        text: str,
+        language: str,
+        instruct: Optional[str],
+        max_new_tokens: int,
+    ) -> Dict[str, Any]:
+        """
+        克隆路径的提示词截获。
+
+        与 CustomVoice 唯一区别：提示词由官方 ``generate_voice_clone`` 构建。
+        官方会把参考音频码本、参考文字、说话人 embedding 全部对齐好，并把
+        ``non_streaming_mode=False`` 下剩余的「目标文字 embedding」放进
+        ``trailing_text_hidden`` 交给生成阶段逐帧注入——这正是流式所需。
+
+        注意：Base 克隆模型不支持 instruct（风格指令）。``generate_voice_clone``
+        虽然用 ``**kwargs`` 吸收了这个参数，但它只会一路传到
+        ``Qwen3TTSForConditionalGeneration.generate`` 的 ``**kwargs`` 里并被静默丢弃，
+        既不会生效也不会报错。因此这里**不传** instruct，改为记录告警——
+        静默忽略比明确拒绝更容易误导调用方。
+        """
+        validate_clone_spec(spec)
+        prompt_items = self._prompt_items(spec)
+        icl_mode = resolve_icl_mode(spec, prompt_items[0])
+        if instruct:
+            self._log(
+                f"忽略 instruct={instruct!r}：Base 克隆模型不支持风格指令，"
+                "该参数会被官方静默丢弃。需要控制语气请改用 CustomVoice 模型。"
+            )
+        kwargs: Dict[str, Any] = {
+            "text": text,
+            "language": language,
+            "voice_clone_prompt": prompt_items,
+            "non_streaming_mode": False,
+            "max_new_tokens": max_new_tokens,
+        }
+
+        with self._captured_talker_call() as captured:
+            try:
+                self.tts.generate_voice_clone(**kwargs)
+            except _PromptCaptured:
+                pass
+
+        if "inputs_embeds" not in captured:
+            raise RuntimeError(
+                "未能截获克隆提示词张量，可能与当前 qwen-tts 版本不兼容。"
+                "请升级 qwen-tts 后重试。"
+            )
+        if captured["inputs_embeds"].shape[0] != 1:
+            raise ValueError("流式模式仅支持单条文本（batch_size=1）。")
+
+        # 记录实际生效的模式：x_vector 模式只喂说话人 embedding（不注入参考音频码本），
+        # ICL 模式则额外把参考音频码本 + 参考文字一并作为上下文。
+        # 我们的流式解码只产新帧，故无需官方那步「解码后按比例切掉参考段」。
+        self.last_clone_mode = "icl" if icl_mode else "x_vector"
+        return captured
+
     def _capture_prompt(
         self,
         text: str,
@@ -406,35 +648,45 @@ class LocalStreamingTTS:
         language: str,
         instruct: Optional[str],
         max_new_tokens: int,
+        clone: Optional[VoiceCloneSpec] = None,
     ) -> Dict[str, Any]:
         """
-        Monkeypatch talker.generate 截获官方构建好的张量，然后中止。
+        截获官方构建好的提示词张量，然后中止官方 blocking 生成。
 
-        复用官方 generate_custom_voice 的全部提示词逻辑（说话人 embedding、
-        方言、instruct、左 padding、trailing text padding），规避重实现风险。
+        有 ``clone`` 时走 Base 模型的 `generate_voice_clone`，否则走 CustomVoice 的
+        `generate_custom_voice`。两条路径都复用官方全部提示词逻辑
+        （说话人 embedding、方言、instruct、左 padding、trailing text padding），
+        规避重实现风险。
         """
-        captured: Dict[str, Any] = {}
-        cls = self._talker_cls
-        original = cls.generate
-
-        def _spy(self_talker: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-            captured.update(kwargs)
-            raise _PromptCaptured()
-
-        cls.generate = _spy
-        try:
-            self.tts.generate_custom_voice(
-                text=text,
-                language=language,
-                speaker=speaker,
-                instruct=instruct,
-                non_streaming_mode=False,  # 关键：让模型在只拿到部分文本时即可起跑
-                max_new_tokens=max_new_tokens,
+        if clone is not None:
+            if self._model_type != "base":
+                raise ValueError(
+                    f"语音克隆需要 Base 模型，当前模型 tts_model_type={self._model_type!r}。"
+                    "请用 --model / --clone-model 指向 Qwen3-TTS-12Hz-1.7B-Base。"
+                )
+            return self._capture_clone_prompt(
+                clone, text, language, instruct, max_new_tokens
             )
-        except _PromptCaptured:
-            pass
-        finally:
-            cls.generate = original
+
+        if self._model_type != "custom_voice":
+            raise ValueError(
+                f"预置音色需要 CustomVoice 模型，当前模型 tts_model_type={self._model_type!r}。"
+                "Base 模型请改用语音克隆（提供 ref_audio / ref_text）。"
+            )
+
+        with self._captured_talker_call() as captured:
+            try:
+                # 关键：non_streaming_mode=False 让模型在只拿到部分文本时即可起跑
+                self.tts.generate_custom_voice(
+                    text=text,
+                    language=language,
+                    speaker=speaker,
+                    instruct=instruct,
+                    non_streaming_mode=False,
+                    max_new_tokens=max_new_tokens,
+                )
+            except _PromptCaptured:
+                pass
 
         if "inputs_embeds" not in captured:
             raise RuntimeError(
@@ -443,6 +695,7 @@ class LocalStreamingTTS:
             )
         if captured["inputs_embeds"].shape[0] != 1:
             raise ValueError("流式模式仅支持单条文本（batch_size=1）。")
+        self.last_clone_mode = None
         return captured
 
     # --------------------------- 流式生成 --------------------------- #
@@ -593,18 +846,49 @@ class LocalStreamingTTS:
         speaker: str = "Vivian",
         language: str = "Chinese",
         instruct: Optional[str] = None,
+        ref_audio: Optional[Any] = None,
+        ref_text: Optional[str] = None,
+        x_vector_only_mode: bool = False,
         **gen_kwargs: Any,
     ) -> Iterator[Any]:
         """
         流式合成，逐块 yield float32 numpy（24kHz 单声道）。
 
-        示例::
+        预置音色（CustomVoice 模型）::
+
             tts = LocalStreamingTTS("./Qwen3-TTS-12Hz-0.6B-CustomVoice").load()
-            for pcm in tts.stream("你好"):
+            for pcm in tts.stream("你好", speaker="Vivian"):
                 player.write(pcm)
+
+        语音克隆（Base 模型，需提供参考音频 + 其文字）::
+
+            tts = LocalStreamingTTS("./Qwen3-TTS-12Hz-1.7B-Base").load()
+            for pcm in tts.stream(
+                "用这个声音说一段新的话",
+                ref_audio="./ref/voice.wav",
+                ref_text="参考音频里说的那句话。",
+            ):
+                player.write(pcm)
+
+        ``ref_audio`` 支持本地路径 / http(s) URL / base64 / ``(ndarray, sr)``。
+        给了 ``ref_audio`` 即走克隆路径（要求 Base 模型）；仅 ``x_vector_only_mode=True``
+        时可以不传 ``ref_text``，但克隆相似度会下降。
         """
         if self.tts is None:
             raise RuntimeError("请先调用 load()。")
+
+        clone: Optional[VoiceCloneSpec] = None
+        if ref_audio is not None:
+            clone = VoiceCloneSpec(
+                ref_audio=ref_audio,
+                ref_text=ref_text,
+                x_vector_only_mode=bool(x_vector_only_mode),
+            )
+        elif x_vector_only_mode or ref_text:
+            raise ValueError(
+                "ref_text / x_vector_only_mode 必须与 ref_audio 一起提供；"
+                "只给参考文字没有参考音频无法克隆。"
+            )
 
         gen = dict(self._gen_defaults)
         gen.update({k: v for k, v in gen_kwargs.items() if v is not None})
@@ -618,7 +902,8 @@ class LocalStreamingTTS:
         pcm_q: "queue.Queue[Optional[Any]]" = queue.Queue()
 
         prompt = self._capture_prompt(text, speaker, language, instruct,
-                                      int(gen["max_new_tokens"]))
+                                      int(gen["max_new_tokens"]), clone=clone)
+        metrics.clone_mode = self.last_clone_mode
 
         gen_thread = threading.Thread(
             target=self._generate_frames,
@@ -664,6 +949,37 @@ class LocalStreamingTTS:
         if self.debug:
             sys.stderr.write(f"[local-tts] {msg}\n")
             sys.stderr.flush()
+
+    # --------------------------- 能力查询 --------------------------- #
+
+    @property
+    def model_type(self) -> Optional[str]:
+        """``custom_voice``（预置音色）或 ``base``（语音克隆）。"""
+        return self._model_type
+
+    @property
+    def supports_voice_clone(self) -> bool:
+        return self._model_type == "base"
+
+    @property
+    def supports_custom_voice(self) -> bool:
+        return self._model_type == "custom_voice"
+
+    def list_voices(self) -> List[str]:
+        """
+        该模型可用的音色名。
+
+        预置音色仅在 CustomVoice 模型上存在；Base 模型的音色由调用方提供的参考音频
+        决定，故返回空列表（其「音色名」语义属于服务层注册的克隆音色）。
+        """
+        return list(CUSTOM_VOICE_SPEAKERS) if self.supports_custom_voice else []
+
+    def clear_clone_cache(self) -> int:
+        """清空参考音频的提示词缓存，返回被清除的条目数。"""
+        with self._prompt_lock:
+            count = len(self._clone_prompt_cache)
+            self._clone_prompt_cache.clear()
+        return count
 
 
 def _emit(
@@ -780,6 +1096,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--max-new-tokens", type=int, default=None,
                    help="最多生成多少帧（每帧80ms）")
 
+    c = p.add_argument_group(
+        "语音克隆（需 Base 模型）",
+        description="提供参考音频 + 参考音频里说的那句话，即可用该声音合成新文本。",
+    )
+    c.add_argument("--ref-audio", default=None,
+                   help="参考音频：本地路径 / http(s) URL / base64")
+    c.add_argument("--ref-text", default=None,
+                   help="参考音频里说的那句话（ICL 模式必填，相似度最佳）")
+    c.add_argument("--x-vector-only", action="store_true",
+                   help="只用说话人 embedding，无需 --ref-text，但克隆质量会下降")
+
     st = p.add_argument_group("流式调优")
     st.add_argument("--decode-every", type=int, default=1,
                     help="每攒 N 帧解码一次；1=最低延迟，>1 省算力")
@@ -833,7 +1160,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         "top_p": args.top_p,
         "repetition_penalty": args.repetition_penalty,
         "max_new_tokens": args.max_new_tokens,
+        "ref_audio": args.ref_audio,
+        "ref_text": args.ref_text,
+        "x_vector_only_mode": args.x_vector_only,
     }
+
+    if args.ref_audio:
+        try:
+            validate_clone_spec(VoiceCloneSpec(
+                ref_audio=args.ref_audio,
+                ref_text=args.ref_text,
+                x_vector_only_mode=args.x_vector_only,
+            ))
+        except ValueError as exc:
+            raise SystemExit(f"[fatal] {exc}")
+        if not tts.supports_voice_clone:
+            raise SystemExit(
+                f"[fatal] --ref-audio 需要 Base 模型，当前模型类型为 {tts.model_type!r}。\n"
+                "        请改用 Qwen3-TTS-12Hz-1.7B-Base（或 0.6B-Base）。"
+            )
 
     sink = None
     if args.out:
@@ -875,7 +1220,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
             sys.stderr.write(
                 f"[{idx}] 首帧码本 {first_frame} | TTFA {first if first else float('nan'):.1f}ms | "
-                f"音频 {dur:.2f}s | 耗时 {wall:.2f}s | RTF {wall / max(dur, 1e-6):.2f}\n"
+                f"音频 {dur:.2f}s | 耗时 {wall:.2f}s | RTF {wall / max(dur, 1e-6):.2f}"
+                + (f" | 克隆[{m.clone_mode}]" if args.ref_audio and m and m.clone_mode else "")
+                + "\n"
             )
     except KeyboardInterrupt:
         sys.stderr.write("\n[interrupted]\n")

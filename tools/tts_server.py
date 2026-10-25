@@ -24,6 +24,33 @@ HTTP 接口，任何兼容 OpenAI 的客户端只要改 base_url 即可接入。
                               （``response.audio.delta`` 等），
                               适合浏览器 / WebSocket 网关再转发
 
+语音克隆（可选）
+----------------
+克隆需要 **Base 模型**（``Qwen3-TTS-12Hz-1.7B/0.6B-Base``），CustomVoice 权重
+无法克隆，因此本服务支持同时挂两个模型：
+
+    --model        CustomVoice（预置音色）
+    --clone-model  Base（语音克隆），按需懒加载，不用不占显存
+
+请求里给 ``ref_audio`` + ``ref_text`` 即走克隆路径。两种用法：
+
+1. **临时克隆**：请求体直接带参考条件，适合一次性试用::
+
+       {"input":"用这个声音说","ref_audio":"./ref/a.wav","ref_text":"参考音频里的话"}
+
+   出于安全考虑，``ref_audio`` 若是本地路径，必须落在 ``--ref-audio-dir`` 之内
+   （未配置该参数则只接受 http(s) URL 或 base64，避免把本服务变成任意文件读取器）。
+
+2. **注册音色**：用 ``--clone-voices voices.json`` 预先注册，之后客户端只需传
+   ``voice`` 名字，与预置音色用法完全一致（名字会出现在 ``/health`` 的 ``voices``
+   里，因此 OpenAI 兼容客户端无需任何改动）::
+
+       {"voices":[{"name":"laoban","ref_audio":"./voices/laoban.wav",
+                   "ref_text":"参考音频里说的话","x_vector_only_mode":false}]}
+
+``x_vector_only_mode=true`` 时只需参考音频、无需 ``ref_text``，但官方明确说明
+克隆质量会下降；要最佳相似度请提供准确的参考文字。
+
 关于 response_format 与 OpenAI 的差异
 -------------------------------------
 OpenAI 在不传 ``response_format`` 时默认返回 **mp3**。本服务默认值自适应：
@@ -39,13 +66,19 @@ OpenAI 在不传 ``response_format`` 时默认返回 **mp3**。本服务默认�
 设计要点
 --------
 * **零重实现**：复用同目录的 ``LocalStreamingTTS``（本地流式引擎），
-  提示词逻辑仍由官方 ``generate_custom_voice`` 构建。
+  提示词逻辑仍由官方 ``generate_custom_voice`` / ``generate_voice_clone`` 构建。
 * **单例 + 串行推理**：模型只加载一次；由于单卡显存与 forward 线程安全
   限制，推理默认串行执行（可用 ``--max-concurrency`` 调整）。
+* **克隆模型的按需加载**：CustomVoice 启动即加载；Base（克隆）在首个克隆
+  请求时才加载，未配置克隆的部署完全不受影响。
+* **参考音频安全边界**：本地路径限定在 ``--ref-audio-dir`` 内（realpath 比较，
+  阻断 ``../`` 与符号链接逃逸），远程 URL 拒绝内网/环回地址（SSRF 防护），
+  不配置白名单则只接受 base64。
 * **可选转码**：pcm/wav 为原生输出，无需额外依赖；mp3/opus/flac/aac
   需要系统安装 ffmpeg，缺失时返回明确的 400 错误而非静默失败。
 * **OpenAI 兼容细节**：语音名同时接受 Qwen 原生名（Vivian 等）与
-  OpenAI 别名（alloy 等）；模型名宽松匹配；错误体遵循 OpenAI 格式。
+  OpenAI 别名（alloy 等）；克隆音色注册后同样出现在 ``/health`` 的 ``voices``
+  与 ``voice`` 参数里，因此客户端零改动；模型名宽松匹配；错误体遵循 OpenAI 格式。
 
 依赖
 ----
@@ -59,6 +92,11 @@ OpenAI 在不传 ``response_format`` 时默认返回 **mp3**。本服务默认�
 # 启动服务（模型目录自行指定）
 python tools/tts_server.py --model ./Qwen3-TTS-12Hz-0.6B-CustomVoice \
     --host 0.0.0.0 --port 8000
+
+# 同时开启语音克隆（预置音色 + 克隆两套能力并存）
+python tools/tts_server.py --model ./Qwen3-TTS-12Hz-0.6B-CustomVoice \
+    --clone-model ./Qwen3-TTS-12Hz-1.7B-Base \
+    --ref-audio-dir ./voices --clone-voices ./voices/voices.json
 
 # 客户端调用（与 OpenAI SDK 形式一致）
 curl -X POST http://127.0.0.1:8000/v1/audio/speech \
@@ -96,10 +134,12 @@ import argparse
 import asyncio
 import base64
 import concurrent.futures
+import ipaddress
 import json
 import logging
 import os
 import shutil
+import socket
 import struct
 import subprocess
 import sys
@@ -109,6 +149,7 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
+from urllib.parse import urlparse
 
 try:
     import numpy as np
@@ -122,7 +163,12 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 # 复用同目录的本地流式引擎
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from streaming_tts_local import SAMPLE_RATE, LocalStreamingTTS  # noqa: E402
+from streaming_tts_local import (  # noqa: E402
+    SAMPLE_RATE,
+    LocalStreamingTTS,
+    VoiceCloneSpec,
+    validate_clone_spec,
+)
 
 log = logging.getLogger("tts-server")
 
@@ -190,6 +236,234 @@ def available_containers() -> List[str]:
     has_ff = ffmpeg_available()
     return sorted(n for n, kind in CONTAINERS.items()
                   if kind == "native" or has_ff)
+
+
+# --------------------------------------------------------------------------- #
+# 语音克隆：参考音频安全校验与音色注册
+# --------------------------------------------------------------------------- #
+
+def _looks_like_base64(value: str) -> bool:
+    """
+    粗略判定「内联 base64」而非文件路径。
+
+    与官方 qwen-tts 的判定保持一致：带 ``data:audio`` 前缀，或没有路径分隔符
+    且长度较长（内联音频必然很长）。这种输入不需要落盘校验。
+    """
+    text = value.strip()
+    if text.startswith("data:audio"):
+        return True
+    return ("/" not in text and "\\" not in text) and len(text) > 256
+
+
+def _is_remote_url(value: str) -> bool:
+    try:
+        parsed = urlparse(value.strip())
+    except ValueError:
+        return False
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+
+
+def _host_is_private(hostname: Optional[str]) -> bool:
+    """
+    判断主机名是否指向内网/环回/链路本地地址。
+
+    本服务会在服务端 ``urllib.request.urlopen`` 拉取 ``ref_audio``，若不加限制，
+    调用方可用 ``http://169.254.169.254/...`` 之类地址探测内网（SSRF）。
+    """
+    if not hostname:
+        return True
+    if hostname.lower() in ("localhost", "localhost.localdomain"):
+        return True
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        # 解析不了就不放行，避免把判断留给后续的 urlopen
+        return True
+    for info in infos:
+        address = info[4][0]
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError:
+            return True
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return True
+    return False
+
+
+def validate_ref_audio(
+    ref_audio: Any,
+    ref_dir: Optional[str],
+    *,
+    allow_remote: bool = True,
+) -> Any:
+    """
+    校验请求里的 ``ref_audio``，返回可安全交给引擎的值。
+
+    * 内联 base64：直接放行（不落盘、不可用于探测文件系统）。
+    * http(s) URL：仅在 ``allow_remote`` 且非内网地址时放行。
+      注意这只能挡住「直接用 IP/域名探测」，DNS rebinding 等深度攻击面需要
+      在出口层面限制；本服务默认面向可信内网，故采用这一档强度。
+    * 本地路径：必须配置 ``--ref-audio-dir`` 且解析后仍在该目录内
+      （用 realpath 比较，阻断 ``../`` 与符号链接两种逃逸）。
+
+    校验失败抛 :class:`ApiError`（400）。
+    """
+    if isinstance(ref_audio, (list, tuple)) and not isinstance(ref_audio, str):
+        # (ndarray, sr) 这类内联输入不在本层校验范围（无法从 HTTP 传入）
+        raise ApiError(
+            "'ref_audio' 只接受字符串（本地路径 / http(s) URL / base64）。",
+            param="ref_audio", code="invalid_value",
+        )
+    if not isinstance(ref_audio, str) or not ref_audio.strip():
+        raise ApiError(
+            "'ref_audio' 必须是非空字符串（本地路径 / http(s) URL / base64）。",
+            param="ref_audio", code="invalid_value",
+        )
+
+    value = ref_audio.strip()
+
+    if _looks_like_base64(value):
+        return value
+
+    if _is_remote_url(value):
+        if not allow_remote:
+            raise ApiError(
+                "当前服务已禁止远程 ref_audio，请改用本地路径或 base64。",
+                param="ref_audio", code="remote_ref_audio_disabled",
+            )
+        hostname = urlparse(value).hostname
+        if _host_is_private(hostname):
+            raise ApiError(
+                f"拒绝拉取内网/环回地址的参考音频（{hostname}）。"
+                "这属于服务端请求伪造（SSRF）防护，请使用可公开访问的地址"
+                "或直接上传参考音频到 --ref-audio-dir 目录。",
+                param="ref_audio", code="ref_audio_blocked",
+            )
+        return value
+
+    if not ref_dir:
+        raise ApiError(
+            "未配置 --ref-audio-dir，出于安全考虑不接受本地路径形式的 ref_audio。"
+            "请用 --ref-audio-dir 指定参考音频目录（并把音频放进该目录），"
+            "或改用 http(s) URL / base64。",
+            param="ref_audio", code="ref_audio_path_not_allowed",
+        )
+
+    base = os.path.realpath(ref_dir)
+    candidate = os.path.realpath(
+        value if os.path.isabs(value) else os.path.join(base, value)
+    )
+    # 前缀比较必须带分隔符，否则 /data/voices-evil 会骗过 /data/voices
+    if candidate != base and not candidate.startswith(base + os.sep):
+        raise ApiError(
+            f"ref_audio 越界：只允许读取 --ref-audio-dir（{base}）内的文件。",
+            param="ref_audio", code="ref_audio_outside_dir",
+        )
+    if not os.path.isfile(candidate):
+        raise ApiError(
+            f"参考音频不存在：{candidate}",
+            param="ref_audio", code="ref_audio_not_found",
+        )
+    return candidate
+
+
+@dataclass
+class CloneVoice:
+    """一个预先注册的克隆音色。"""
+
+    name: str
+    ref_audio: Any
+    ref_text: Optional[str] = None
+    x_vector_only_mode: bool = False
+    language: str = "Auto"
+
+    def spec(self) -> VoiceCloneSpec:
+        return VoiceCloneSpec(
+            ref_audio=self.ref_audio,
+            ref_text=self.ref_text,
+            x_vector_only_mode=self.x_vector_only_mode,
+        )
+
+
+class CloneVoiceRegistry:
+    """
+    克隆音色表：把「名字」映射到「参考音频 + 参考文字」。
+
+    有了它，客户端可以像用预置音色一样只传 ``voice`` 名字，音色名也会出现在
+    ``/health`` 的 ``voices`` 里，因此 OpenAI 兼容客户端零改动即可选用。
+    """
+
+    def __init__(self) -> None:
+        self._by_name: Dict[str, CloneVoice] = {}
+
+    def register(self, voice: CloneVoice) -> None:
+        self._by_name[voice.name] = voice
+
+    def get(self, name: Optional[str]) -> Optional[CloneVoice]:
+        if not name:
+            return None
+        return self._by_name.get(name.strip())
+
+    def __len__(self) -> int:
+        return len(self._by_name)
+
+    def __contains__(self, name: object) -> bool:
+        return isinstance(name, str) and name in self._by_name
+
+    def names(self) -> List[str]:
+        return list(self._by_name)
+
+
+def load_clone_voices(path: str) -> List[CloneVoice]:
+    """
+    读取 ``--clone-voices`` 指定的 JSON，返回注册项。
+
+    格式::
+
+        {"voices": [{"name": "laoban", "ref_audio": "./voices/laoban.wav",
+                     "ref_text": "参考音频里说的话",
+                     "x_vector_only_mode": false,
+                     "language": "Chinese"}]}
+
+    不支持 ``instructions``（风格指令）：Base 克隆模型没有该能力，官方会静默
+    丢弃这个参数，故这里也不提供，避免给出一个不会生效的配置项。
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except OSError as exc:
+        raise SystemExit(f"[fatal] 无法读取 --clone-voices={path}: {exc}")
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"[fatal] --clone-voices={path} 不是合法 JSON: {exc}")
+
+    raw = payload.get("voices") if isinstance(payload, dict) else payload
+    if not isinstance(raw, list):
+        raise SystemExit(
+            f"[fatal] --clone-voices={path} 应为 JSON 数组，或形如 {{\"voices\": [...]}}。"
+        )
+
+    voices: List[CloneVoice] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise SystemExit(f"[fatal] --clone-voices 第 {index} 项不是对象。")
+        name = str(item.get("name") or "").strip()
+        if not name:
+            raise SystemExit(f"[fatal] --clone-voices 第 {index} 项缺少 name。")
+        voices.append(CloneVoice(
+            name=name,
+            ref_audio=str(item.get("ref_audio") or "").strip(),
+            ref_text=item.get("ref_text"),
+            x_vector_only_mode=bool(item.get("x_vector_only_mode", False)),
+            language=str(item.get("language") or "Auto"),
+        ))
+    return voices
 
 
 # --------------------------------------------------------------------------- #
@@ -311,6 +585,8 @@ class SpeechRequest:
     instructions: Optional[str] = None
     speed: float = 1.0
     language: str = "Auto"
+    # 非空即走语音克隆路径（要求引擎为 Base 模型）
+    clone: Optional[VoiceCloneSpec] = None
 
 
 class BaseEngine:
@@ -323,6 +599,10 @@ class BaseEngine:
 
     sample_rate: int = SAMPLE_RATE
     loaded: bool = False
+    # 该引擎是否支持语音克隆；假引擎/远端引擎可覆写。
+    supports_voice_clone: bool = False
+    # 引擎已知的音色名（含克隆音色），供服务层做参数校验。
+    voices: List[str] = []
 
     def ensure_loaded(self) -> None:
         raise NotImplementedError
@@ -331,7 +611,7 @@ class BaseEngine:
         raise NotImplementedError
 
     def list_voices(self) -> List[str]:
-        return list(QWEN_VOICES)
+        return list(self.voices)
 
     def stream(self, req: SpeechRequest) -> Iterator["np.ndarray"]:
         """
@@ -367,7 +647,13 @@ def apply_speed(
 
 
 class QwenEngine(BaseEngine):
-    """基于本地 Qwen3-TTS 权重的引擎。"""
+    """
+    基于本地 Qwen3-TTS 权重的引擎。
+
+    支持同时挂两个模型：CustomVoice（预置音色）与 Base（语音克隆）。
+    Base 模型**按需懒加载**——没配 ``--clone-model`` 或没发克隆请求时，
+    它完全不占显存；两个模型各自持有独立的推理锁，互不阻塞。
+    """
 
     def __init__(
         self,
@@ -382,6 +668,9 @@ class QwenEngine(BaseEngine):
         served_name: str = DEFAULT_MODEL,
         max_concurrency: int = 1,
         debug: bool = False,
+        clone_model_path: Optional[str] = None,
+        clone_tokenizer_path: Optional[str] = None,
+        clone_voices: Optional[List[CloneVoice]] = None,
     ) -> None:
         self.model_path = model_path
         self.device = device
@@ -399,11 +688,77 @@ class QwenEngine(BaseEngine):
         self._infer_lock = threading.Lock()   # 串行化推理（单卡）
         self._loaded = False
 
+        # 克隆侧：独立的引擎实例、加载锁与推理锁
+        self.clone_model_path = clone_model_path
+        self.clone_tokenizer_path = clone_tokenizer_path
+        self._clone_engine: Optional[LocalStreamingTTS] = None
+        self._clone_load_lock = threading.Lock()
+        self._clone_infer_lock = threading.Lock()
+
+        self.clone_registry = CloneVoiceRegistry()
+        for voice in clone_voices or []:
+            self.clone_registry.register(voice)
+
     @property
     def loaded(self) -> bool:
         return self._loaded
 
+    @property
+    def clone_loaded(self) -> bool:
+        return self._clone_engine is not None
+
+    @property
+    def supports_voice_clone(self) -> bool:  # type: ignore[override]
+        """配了克隆模型、或已注册的音色引用了当前引擎可用的模型。"""
+        return bool(self.clone_model_path) or len(self.clone_registry) > 0
+
+    def list_models(self) -> List[str]:
+        names = [self.served_name]
+        if self.clone_model_path:
+            names.append(f"{self.served_name}-clone")
+        return names
+
+    def list_voices(self) -> List[str]:
+        """预置音色 + 已注册的克隆音色（喂给 /health，客户端据此填充下拉框）。"""
+        voices = list(QWEN_VOICES)
+        for name in self.clone_registry.names():
+            if name not in voices:
+                voices.append(name)
+        return voices
+
     # ---- 生命周期 ----
+
+    @staticmethod
+    def _build_engine(
+        model_path: str, tokenizer_path: Optional[str], *,
+        device: str, dtype: str, attn: str, decode_every: int,
+        left_context: int, debug: bool, label: str,
+    ) -> LocalStreamingTTS:
+        log.info("加载本地模型[%s]: %s (device=%s dtype=%s)",
+                 label, model_path, device, dtype)
+        try:
+            return LocalStreamingTTS(
+                model_path=model_path,
+                device=device,
+                dtype=dtype,
+                attn_implementation=attn,
+                tokenizer_path=tokenizer_path,
+                decode_every=decode_every,
+                left_context_frames=left_context,
+                debug=debug,
+            ).load()
+        except ImportError as exc:
+            raise ApiError(
+                f"加载模型所需的依赖缺失: {exc}。"
+                "请先安装 qwen-tts（pip install -U qwen-tts）。",
+                status=503, code="dependency_missing", type_="server_error",
+            ) from exc
+        except (OSError, ValueError) as exc:
+            raise ApiError(
+                f"无法加载模型 {model_path!r}: {exc}。"
+                f"请确认 --{label} 指向有效的本地模型目录，或该目录权重完整。",
+                status=503, code="model_load_failed", type_="server_error",
+            ) from exc
 
     def ensure_loaded(self) -> None:
         if self._loaded:
@@ -411,39 +766,49 @@ class QwenEngine(BaseEngine):
         with self._load_lock:
             if self._loaded:
                 return
-            log.info("加载本地模型: %s (device=%s dtype=%s)",
-                     self.model_path, self.device, self.dtype)
             t0 = time.time()
-            try:
-                self._engine = LocalStreamingTTS(
-                    model_path=self.model_path,
-                    device=self.device,
-                    dtype=self.dtype,
-                    attn_implementation=self.attn,
-                    tokenizer_path=self.tokenizer_path,
-                    decode_every=self.decode_every,
-                    left_context_frames=self.left_context,
-                    debug=self.debug,
-                ).load()
-            except ImportError as exc:
-                raise ApiError(
-                    f"加载模型所需的依赖缺失: {exc}。"
-                    "请先安装 qwen-tts（pip install -U qwen-tts）。",
-                    status=503, code="dependency_missing", type_="server_error",
-                ) from exc
-            except (OSError, ValueError) as exc:
-                raise ApiError(
-                    f"无法加载模型 {self.model_path!r}: {exc}。"
-                    "请确认 --model 指向有效的本地模型目录，或该目录权重完整。",
-                    status=503, code="model_load_failed", type_="server_error",
-                ) from exc
+            self._engine = self._build_engine(
+                self.model_path, self.tokenizer_path,
+                device=self.device, dtype=self.dtype, attn=self.attn,
+                decode_every=self.decode_every, left_context=self.left_context,
+                debug=self.debug, label="model",
+            )
             self._loaded = True
             log.info("模型就绪，耗时 %.1fs", time.time() - t0)
 
-    def list_models(self) -> List[str]:
-        return [self.served_name]
+    def ensure_clone_loaded(self) -> LocalStreamingTTS:
+        """
+        懒加载 Base 模型（语音克隆用）。
+
+        未配置 --clone-model 时给出可操作的错误，而不是静默回退到 CustomVoice
+        ——那样只会得到一个「克隆失败」的怪结果。
+        """
+        if self._clone_engine is not None:
+            return self._clone_engine
+        if not self.clone_model_path:
+            raise ApiError(
+                "本服务未配置语音克隆模型。请在启动参数中加入 "
+                "--clone-model <Qwen3-TTS-12Hz-1.7B-Base 目录>。",
+                status=400, param="ref_audio", code="voice_clone_unavailable",
+            )
+        with self._clone_load_lock:
+            if self._clone_engine is None:
+                t0 = time.time()
+                self._clone_engine = self._build_engine(
+                    self.clone_model_path, self.clone_tokenizer_path,
+                    device=self.device, dtype=self.dtype, attn=self.attn,
+                    decode_every=self.decode_every,
+                    left_context=self.left_context, debug=self.debug,
+                    label="clone-model",
+                )
+                log.info("克隆模型就绪，耗时 %.1fs", time.time() - t0)
+        return self._clone_engine
 
     def stream(self, req: SpeechRequest) -> Iterator["np.ndarray"]:
+        if req.clone is not None:
+            yield from self._stream_clone(req)
+            return
+
         if not self._loaded or self._engine is None:
             self.ensure_loaded()
         assert self._engine is not None
@@ -457,9 +822,31 @@ class QwenEngine(BaseEngine):
                 instruct=req.instructions,
             )
 
+    def _stream_clone(self, req: SpeechRequest) -> Iterator["np.ndarray"]:
+        assert req.clone is not None
+        engine = self.ensure_clone_loaded()
+        if not engine.supports_voice_clone:
+            raise ApiError(
+                f"语音克隆需要 Base 模型，--clone-model 当前是 "
+                f"{engine.model_type!r} 类型。请指向 Qwen3-TTS-12Hz-1.7B-Base。",
+                status=400, param="ref_audio", code="voice_clone_unavailable",
+            )
+        # 与预置音色共用同一条流式路径，只是提示词由官方 generate_voice_clone 构建；
+        # 这里同样要串行化（talker.generate 的 patch 是类级的，非线程安全）。
+        with self._clone_infer_lock:
+            yield from engine.stream(
+                text=req.text,
+                language=req.language,
+                instruct=req.instructions,
+                ref_audio=req.clone.ref_audio,
+                ref_text=req.clone.ref_text,
+                x_vector_only_mode=req.clone.x_vector_only_mode,
+            )
+
     def shutdown(self) -> None:
         self._loaded = False
         self._engine = None
+        self._clone_engine = None
 
 
 # --------------------------------------------------------------------------- #
@@ -496,7 +883,7 @@ def error_response(err: ApiError) -> JSONResponse:
 # --------------------------------------------------------------------------- #
 
 def _resolve_voice(raw: Optional[str], engine: BaseEngine) -> str:
-    """接受 Qwen 原生音色名与 OpenAI 别名，大小写不敏感。"""
+    """接受 Qwen 原生音色名、已注册的克隆音色名与 OpenAI 别名，大小写不敏感。"""
     if not raw:
         return QWEN_VOICES[0]
 
@@ -505,6 +892,13 @@ def _resolve_voice(raw: Optional[str], engine: BaseEngine) -> str:
 
     if key in available:
         return available[key]
+
+    # 已注册的克隆音色：Base 模型的 list_voices() 为空，此时按原样透传，
+    # 由 service 层去注册表里解析参考音频。
+    if getattr(engine, "clone_registry", None) is not None and key in getattr(
+        engine, "clone_registry"
+    ):
+        return key
 
     alias = OPENAI_VOICE_ALIASES.get(key)
     if alias and alias.lower() in available:
@@ -522,7 +916,71 @@ def _resolve_voice(raw: Optional[str], engine: BaseEngine) -> str:
     )
 
 
-def parse_speech_payload(payload: Dict[str, Any], engine: BaseEngine) -> SpeechRequest:
+def _resolve_clone_voice(
+    voice_name: str,
+    engine: BaseEngine,
+    ref_audio: Optional[str],
+    ref_text: Optional[str],
+    x_vector_only_mode: bool,
+    ref_dir: Optional[str],
+    allow_remote_ref: bool,
+) -> Optional[VoiceCloneSpec]:
+    """
+    决定本次请求是否走语音克隆，并返回规范化的参考条件。
+
+    优先级：请求体显式给的 ref_audio（临时克隆）> ``voice`` 命中的注册音色。
+    两者都没有则返回 None（走预置音色）。
+    """
+    registry = getattr(engine, "clone_registry", None)
+
+    if ref_audio is not None:
+        if not engine.supports_voice_clone:
+            raise ApiError(
+                "本服务未启用语音克隆。请用 --clone-model 指定 Base 模型"
+                "（Qwen3-TTS-12Hz-1.7B-Base）。",
+                status=400, param="ref_audio", code="voice_clone_unavailable",
+            )
+        safe_ref = validate_ref_audio(ref_audio, ref_dir, allow_remote=allow_remote_ref)
+        spec = VoiceCloneSpec(
+            ref_audio=safe_ref,
+            ref_text=ref_text,
+            x_vector_only_mode=x_vector_only_mode,
+        )
+        try:
+            # 在昂贵操作（加载模型 / 编码音频）之前就把参数问题挡掉
+            validate_clone_spec(spec)
+        except ValueError as exc:
+            raise ApiError(str(exc), param="ref_text", code="invalid_value") from exc
+        return spec
+
+    registered = registry.get(voice_name) if registry is not None else None
+    if registered is not None:
+        if not engine.supports_voice_clone:
+            raise ApiError(
+                f"音色 {voice_name!r} 是克隆音色，但本服务未启用语音克隆模型。",
+                status=400, param="voice", code="voice_clone_unavailable",
+            )
+        safe_ref = validate_ref_audio(
+            registered.ref_audio, ref_dir, allow_remote=allow_remote_ref
+        )
+        return VoiceCloneSpec(
+            ref_audio=safe_ref,
+            ref_text=ref_text if ref_text is not None else registered.ref_text,
+            x_vector_only_mode=(
+                x_vector_only_mode or registered.x_vector_only_mode
+            ),
+        )
+
+    return None
+
+
+def parse_speech_payload(
+    payload: Dict[str, Any],
+    engine: BaseEngine,
+    *,
+    ref_dir: Optional[str] = None,
+    allow_remote_ref: bool = True,
+) -> SpeechRequest:
     """校验并规范化 OpenAI /v1/audio/speech 的请求体。"""
     text = payload.get("input")
     if text is None:
@@ -561,12 +1019,42 @@ def parse_speech_payload(payload: Dict[str, Any], engine: BaseEngine) -> SpeechR
 
     language = payload.get("language") or "Auto"
 
+    # ---- 语音克隆：显式 ref_audio 或注册音色名 ----
+    ref_audio = payload.get("ref_audio")
+    if ref_audio is not None and not isinstance(ref_audio, str):
+        raise ApiError(
+            "'ref_audio' 必须是字符串（本地路径 / http(s) URL / base64）。",
+            param="ref_audio", code="invalid_value",
+        )
+    ref_text = payload.get("ref_text")
+    if ref_text is not None and not isinstance(ref_text, str):
+        raise ApiError("'ref_text' 必须是字符串。", param="ref_text")
+
+    x_vector_only_mode = bool(
+        payload.get("x_vector_only_mode", payload.get("x_vector_only", False))
+    )
+
+    clone = _resolve_clone_voice(
+        voice, engine, ref_audio, ref_text, x_vector_only_mode,
+        ref_dir, allow_remote_ref,
+    )
+
+    # 注册音色可以带默认语言；请求没显式指定时用注册值补上。
+    # 注意不回填 instructions：Base 克隆模型不支持风格指令，官方会静默丢弃，
+    # 回填等于向调用方承诺一个不会生效的行为。
+    if clone is not None and ref_audio is None:
+        registered = getattr(engine, "clone_registry", None)
+        item = registered.get(voice) if registered is not None else None
+        if item is not None and language == "Auto" and item.language:
+            language = item.language
+
     return SpeechRequest(
         text=text,
         voice=voice,
         instructions=instructions,
         speed=speed,
         language=language,
+        clone=clone,
     )
 
 
@@ -806,6 +1294,10 @@ class ServerConfig:
     preload: bool = True                # 启动即加载模型
     max_concurrency: int = 1
     cors_origins: List[str] = field(default_factory=lambda: ["*"])
+    # 参考音频白名单目录；为空则拒绝本地路径形式的 ref_audio（只允许 URL/base64）
+    ref_audio_dir: Optional[str] = None
+    # 是否允许服务端代为拉取远程 ref_audio（关闭可彻底消除 SSRF 面）
+    allow_remote_ref_audio: bool = True
 
 
 def create_app(
@@ -876,6 +1368,7 @@ def create_app(
     @app.get("/health")
     async def health() -> Dict[str, Any]:
         """存活探针：进程活着即 200，始终轻量。"""
+        registry = getattr(engine, "clone_registry", None)
         return {
             "status": "ok",
             "model": engine.list_models()[0],
@@ -885,6 +1378,12 @@ def create_app(
             "default_format": default_container(),
             "available_formats": available_containers(),
             "voices": engine.list_voices(),
+            # 语音克隆能力：客户端可据此决定是否显示克隆相关 UI
+            "supports_voice_clone": bool(engine.supports_voice_clone),
+            "clone_model_loaded": bool(getattr(engine, "clone_loaded", False)),
+            "clone_voices": registry.names() if registry is not None else [],
+            "ref_audio_dir": cfg.ref_audio_dir,
+            "allow_remote_ref_audio": cfg.allow_remote_ref_audio,
         }
 
     @app.get("/ready")
@@ -927,7 +1426,11 @@ def create_app(
         if not isinstance(payload, dict):
             raise ApiError("请求体必须是 JSON 对象。")
 
-        req = parse_speech_payload(payload, engine)
+        req = parse_speech_payload(
+            payload, engine,
+            ref_dir=cfg.ref_audio_dir,
+            allow_remote_ref=cfg.allow_remote_ref_audio,
+        )
 
         # 默认格式：对齐 OpenAI（mp3），但无 ffmpeg 时降级为原生 wav，
         # 否则缺 ffmpeg 的环境下「不传 response_format」会全部失败。
@@ -1085,6 +1588,23 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--no-preload", action="store_true",
                    help="启动时不加载模型，首个请求再加载")
 
+    c = p.add_argument_group(
+        "语音克隆",
+        description="需要 Base 模型（Qwen3-TTS-12Hz-1.7B-Base）。"
+                    "克隆模型按需懒加载，不用不占显存。",
+    )
+    c.add_argument("--clone-model", default=None,
+                   help="Base 模型的本地目录（启用语音克隆）")
+    c.add_argument("--clone-tokenizer-dir", default=None,
+                   help="Base 模型的 speech_tokenizer 目录（模型内未包含时）")
+    c.add_argument("--clone-voices", default=None,
+                   help="预注册克隆音色的 JSON 文件，见文件头说明")
+    c.add_argument("--ref-audio-dir", default=None,
+                   help="允许作为 ref_audio 的参考音频目录（安全白名单）。"
+                        "不配置则请求只能使用 URL / base64")
+    c.add_argument("--no-remote-ref-audio", action="store_true",
+                   help="禁止服务端拉取远程 ref_audio（彻底消除 SSRF 面）")
+
     st = p.add_argument_group("流式调优")
     st.add_argument("--decode-every", type=int, default=1,
                     help="每攒 N 帧解码一次；1=最低延迟")
@@ -1102,6 +1622,61 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--debug", action="store_true")
     s.add_argument("--log-level", default="info")
     return p
+
+
+def _prepare_clone_config(args: argparse.Namespace) -> tuple[List[CloneVoice], Optional[str]]:
+    """
+    解析并校验克隆相关参数，返回（注册音色, 规范化后的 ref_audio 目录）。
+
+    这里刻意「启动即失败」而不是等运行时报错：参考音频目录写错、JSON 里
+    引用了不存在的参考音频，都属于部署期错误，越早暴露越省事。
+    """
+    ref_dir: Optional[str] = args.ref_audio_dir
+    if ref_dir:
+        if not os.path.isdir(ref_dir):
+            raise SystemExit(f"[fatal] --ref-audio-dir 不是目录: {ref_dir}")
+        ref_dir = os.path.realpath(ref_dir)
+
+    voices = load_clone_voices(args.clone_voices) if args.clone_voices else []
+
+    if not args.clone_model and not voices and not ref_dir and not args.no_remote_ref_audio:
+        return [], ref_dir
+
+    if not args.clone_model:
+        if args.clone_voices:
+            raise SystemExit(
+                "[fatal] 配置了 --clone-voices，但缺少 --clone-model。\n"
+                "        语音克隆需要 Base 模型，请加上 "
+                "--clone-model <Qwen3-TTS-12Hz-1.7B-Base 目录>。"
+            )
+        log.warning(
+            "--ref-audio-dir / --no-remote-ref-audio 已配置，但没有 --clone-model，"
+            "本次不会启用语音克隆。"
+        )
+        return [], ref_dir
+
+    for voice in voices:
+        try:
+            validate_clone_spec(voice.spec())
+        except ValueError as exc:
+            raise SystemExit(f"[fatal] 克隆音色 {voice.name!r} 配置有误: {exc}")
+        if not voice.x_vector_only_mode and not (voice.ref_text or "").strip():
+            raise SystemExit(
+                f"[fatal] 克隆音色 {voice.name!r} 缺少 ref_text；"
+                "ICL 模式必须提供参考音频里说的话，"
+                "或显式设置 x_vector_only_mode=true（克隆质量会下降）。"
+            )
+        # 启动时就把参考音频解析一遍：越界的路径/不可达的 URL 在启动期暴露，
+        # 好过等到第一次合成请求才报错。
+        try:
+            voice.ref_audio = validate_ref_audio(
+                voice.ref_audio, ref_dir,
+                allow_remote=not args.no_remote_ref_audio,
+            )
+        except ApiError as exc:
+            raise SystemExit(f"[fatal] 克隆音色 {voice.name!r} 的 ref_audio 不可用: {exc.message}")
+
+    return voices, ref_dir
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -1122,6 +1697,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     else:
         log.info("已检测到 ffmpeg，默认格式 mp3（与 OpenAI 一致）")
 
+    clone_voices, ref_dir = _prepare_clone_config(args)
+
     engine = QwenEngine(
         model_path=args.model,
         device=args.device,
@@ -1133,7 +1710,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         served_name=args.served_model_name,
         max_concurrency=args.max_concurrency,
         debug=args.debug,
+        clone_model_path=args.clone_model,
+        clone_tokenizer_path=args.clone_tokenizer_dir,
+        clone_voices=clone_voices,
     )
+
+    if args.clone_model:
+        log.info("语音克隆已启用：clone-model=%s，已注册克隆音色 %d 个",
+                 args.clone_model, len(clone_voices))
+    if args.clone_model and not ref_dir and args.no_remote_ref_audio:
+        log.warning("--no-remote-ref-audio 且未配置 --ref-audio-dir："
+                    "请求将只能通过 base64 传入参考音频")
 
     cfg = ServerConfig(
         host=args.host,
@@ -1142,6 +1729,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         preload=not args.no_preload,
         max_concurrency=args.max_concurrency,
         cors_origins=[o.strip() for o in args.cors.split(",") if o.strip()],
+        ref_audio_dir=ref_dir,
+        allow_remote_ref_audio=not args.no_remote_ref_audio,
     )
 
     app = create_app(engine, cfg)
