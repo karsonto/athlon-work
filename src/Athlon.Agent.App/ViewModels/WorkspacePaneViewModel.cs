@@ -156,7 +156,13 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
             Tabs.Add(existing);
         }
 
-        existing.Show(files, selectedPath, sourceEntryId);
+        existing.Show(
+            files,
+            selectedPath,
+            sourceEntryId,
+            _workspaceContext.RootPath,
+            _workspaceContext.Kind,
+            focusPath: !string.IsNullOrWhiteSpace(selectedPath));
         ActiveTab = existing;
         IsAddMenuOpen = false;
     }
@@ -171,7 +177,13 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
             return;
         }
 
-        existing.Show(files, existing.SelectedFile?.RelativePath, sourceEntryId);
+        existing.Show(
+            files,
+            existing.SelectedFile?.RelativePath,
+            sourceEntryId,
+            _workspaceContext.RootPath,
+            _workspaceContext.Kind,
+            focusPath: false);
     }
 
     [RelayCommand]
