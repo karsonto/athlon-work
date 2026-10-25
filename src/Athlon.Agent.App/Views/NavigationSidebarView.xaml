@@ -75,7 +75,7 @@
                     </TextBlock>
 
                     <TextBlock Text="{loc:Localize Key=Nav_Repositories}"
-                               Margin="4,4,4,8">
+                               Margin="6,10,6,4">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock" BasedOn="{StaticResource AppTextSection}">
                                 <Setter Property="Visibility" Value="Visible" />
@@ -157,12 +157,14 @@
                                                 <materialDesign:PackIcon Grid.Column="0"
                                                                          Kind="{Binding FolderIconKind}"
                                                                          Style="{StaticResource SidebarPackIconStyle}"
-                                                                         Margin="0,0,8,0"
+                                                                         Margin="0,0,7,0"
                                                                          Foreground="{Binding FolderGlyphBrushKey, Converter={StaticResource ResourceKeyToBrush}}"
                                                                          VerticalAlignment="Center" />
                                                 <TextBlock Grid.Column="1"
                                                            Text="{Binding Title}"
                                                            Style="{StaticResource AppTextSecondary}"
+                                                           FontSize="13"
+                                                           TextOptions.TextFormattingMode="Display"
                                                            Foreground="{Binding HeaderForegroundBrushKey, Converter={StaticResource ResourceKeyToBrush}}"
                                                            VerticalAlignment="Center" />
                                             </Grid>

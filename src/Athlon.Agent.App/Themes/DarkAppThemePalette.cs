@@ -27,11 +27,11 @@ public static class DarkAppThemePalette
         Border = C("#27272A"),
         BorderHover = C("#3F3F46"),
 
-        // Text — high contrast with improved readability
-        Text = C("#F9FAFB"),
-        TextSecondary = C("#D1D5DB"),
-        SubtleText = C("#A1A1AA"),
-        DisabledText = C("#71717A"),
+        // Text — VS Code Dark+ ramp: body #CCC, dimmed #8A8A8A, disabled #6E6E6E
+        Text = C("#CCCCCC"),
+        TextSecondary = C("#B8B8B8"),
+        SubtleText = C("#8A8A8A"),
+        DisabledText = C("#6E6E6E"),
         DisabledBackground = C("#323236"),
 
         // Accent — Indigo for better distinction
@@ -78,7 +78,7 @@ public static class DarkAppThemePalette
         // Tool call cards — neutral elevated surfaces
         ToolThinkingBorder = C("#27272A"),
         ToolThinkingBg = C("#121214"),
-        ToolThinkingText = C("#D1D5DB"),
+        ToolThinkingText = C("#BBBBBB"),
         ToolSuccessBorder = C("#27272A"),
         ToolSuccessBg = C("#121214"),
         ToolSuccessText = C("#10B981"),
@@ -89,16 +89,16 @@ public static class DarkAppThemePalette
         // Hover states — more distinct for better feedback
         HoverNeutral = C("#1A1A1E"),
         HoverNeutralAlt = C("#222226"),
-        HoverActive = C("#254766"),
+        HoverActive = C("#2A2D2E"),
         HoverTool = C("#242237"),
         HoverToolPressed = C("#2C2942"),
-        HoverSurface = C("#28282B"),
-        HoverSurfacePressed = C("#303034"),
+        HoverSurface = C("#2A2D2E"),
+        HoverSurfacePressed = C("#313437"),
 
         // Selection
-        SelectionActive = C("#1E3A5F"),
-        SelectionInactive = C("#1F2D45"),
-        SelectionBorder = C("#2F5C8E"),
+        SelectionActive = C("#04395E"),
+        SelectionInactive = C("#37373D"),
+        SelectionBorder = C("#007FD4"),
 
         // Completion popup badges
         AtCompletionSkillBadgeBg = C("#1C1A2E"),
@@ -117,7 +117,7 @@ public static class DarkAppThemePalette
         // Code blocks
         CodeBackground = C("#18181B"),
         CodeBackgroundAlt = C("#202023"),
-        CodeForeground = C("#F1F5F9"),
+        CodeForeground = C("#D4D4D4"),
         CodeBorder = C("#1E293B"),
         CodeHighlightBlue = C("#60A5FA"),
         TableBorder = C("#404048"),
@@ -157,9 +157,9 @@ public static class DarkAppThemePalette
 
     private static WorkspaceFileIconThemeColors CreateFileIcons() => new()
     {
-        Placeholder = C("#6B7280"),
-        Folder = C("#C5C5C5"),
-        File = C("#C5C5C5"),
+        Placeholder = C("#8A8A8A"),
+        Folder = C("#CCCCCC"),
+        File = C("#CCCCCC"),
         CSharp = C("#519ABA"),
         Project = C("#8B5CF6"),
         Solution = C("#D4D4D4"),
@@ -177,7 +177,7 @@ public static class DarkAppThemePalette
         Docker = C("#2496ED"),
         Image = C("#A371F7"),
         MsBuild = C("#F5B041"),
-        Config = C("#6B7280"),
+        Config = C("#9E9E9E"),
     };
 
     private static Color C(string hex) => AppThemeColor.FromHex(hex);

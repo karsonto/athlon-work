@@ -2,17 +2,22 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-      App typography scale (comfort + density):
-        Caption  11  — section labels, meta, hints
+      App typography scale (VS Code Dark+ inspired density):
+        Caption   11 — section labels, meta, hints (small caps, SemiBold)
         Secondary 12 — list secondary, compact labels
-        Body     13  — nav rows, dense UI copy
-        Title    14  — page/session titles (also global TextBlock default)
-        Display  26  — empty-state hero
-      Weights: prefer Normal; Medium only for titles/sections; avoid SemiBold/Light in chrome.
+        Body      13 — nav rows, tree rows, dense UI copy
+        Title     14 — page/session titles
+        Display   26 — empty-state hero
+
+      Text ramp (see Dark/LightAppThemePalette):
+        Text #CCC → TextSecondary #B8B8B8 → SubtleText #8A8A8A → DisabledText #6E6E6E
+      Weights: Normal for rows and body copy; SemiBold only for titles/section headers.
+      Rendering: Display formatting + ClearType keeps 11–13px text crisp at 125%/150% DPI.
     -->
 
     <FontFamily x:Key="AppFontFamily">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, PingFang SC</FontFamily>
     <FontFamily x:Key="AppFontFamilyDisplay">Segoe UI Variable Display, Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, PingFang SC</FontFamily>
+    <FontFamily x:Key="AppFontFamilyMono">Cascadia Mono, Consolas, Microsoft YaHei UI, Courier New</FontFamily>
 
     <Style x:Key="AppTextCaption" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
@@ -21,11 +26,16 @@
         <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
         <Setter Property="TextWrapping" Value="NoWrap" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
     </Style>
 
+    <!-- Explorer/section header: 11px, small caps, dimmed (VS Code side-bar section) -->
     <Style x:Key="AppTextSection" TargetType="TextBlock" BasedOn="{StaticResource AppTextCaption}">
-        <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.DisabledText}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
+        <Setter Property="Typography.Capitals" Value="AllSmallCaps" />
     </Style>
 
     <Style x:Key="AppTextSecondary" TargetType="TextBlock">
@@ -35,6 +45,8 @@
         <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
         <Setter Property="TextWrapping" Value="NoWrap" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
     </Style>
 
     <Style x:Key="AppTextBody" TargetType="TextBlock">
@@ -44,10 +56,27 @@
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="TextWrapping" Value="NoWrap" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
     </Style>
 
     <Style x:Key="AppTextNav" TargetType="TextBlock" BasedOn="{StaticResource AppTextBody}">
         <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Explorer row (file tree / repository tree): 13px, single line, centered in the 22px row -->
+    <Style x:Key="AppTextExplorerRow" TargetType="TextBlock" BasedOn="{StaticResource AppTextBody}">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Folders read brighter (#CCC); files stay one step dimmer (#B8B8B8) -->
+    <Style x:Key="AppTextExplorerFolder" TargetType="TextBlock" BasedOn="{StaticResource AppTextExplorerRow}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+    </Style>
+
+    <Style x:Key="AppTextExplorerFile" TargetType="TextBlock" BasedOn="{StaticResource AppTextExplorerRow}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
     </Style>
 
     <Style x:Key="AppTextTitle" TargetType="TextBlock">
@@ -57,6 +86,8 @@
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="TextWrapping" Value="NoWrap" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
     </Style>
 
     <Style x:Key="AppTextHero" TargetType="TextBlock">

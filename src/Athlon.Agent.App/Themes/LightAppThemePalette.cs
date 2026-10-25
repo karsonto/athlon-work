@@ -27,10 +27,11 @@ public static class LightAppThemePalette
         ComposerBorder = C(ReportHtmlLightColors.SoftBorder),
         Border = C(ReportHtmlLightColors.SoftBorder),
         BorderHover = C(ReportHtmlLightColors.Slate400),
-        Text = C(ReportHtmlLightColors.Slate900),
-        TextSecondary = C(ReportHtmlLightColors.Slate600),
-        SubtleText = C(ReportHtmlLightColors.Slate500),
-        DisabledText = C(ReportHtmlLightColors.Slate400),
+        // Text — VS Code Light+ ramp: body #333, dimmed #767676, disabled #A8A8A8
+        Text = C("#333333"),
+        TextSecondary = C("#5A5A5A"),
+        SubtleText = C("#767676"),
+        DisabledText = C("#A8A8A8"),
         DisabledBackground = C(ReportHtmlLightColors.Slate200),
         // Accent — Indigo (aligned with dark theme)
         Accent = C(ReportHtmlLightColors.Indigo500),
@@ -82,9 +83,9 @@ public static class LightAppThemePalette
         HoverToolPressed = C(ReportHtmlLightColors.Violet100),
         HoverSurface = C(ReportHtmlLightColors.Slate50),
         HoverSurfacePressed = C(ReportHtmlLightColors.Slate100),
-        SelectionActive = C(ReportHtmlLightColors.Indigo50),
-        SelectionInactive = C(ReportHtmlLightColors.Slate50),
-        SelectionBorder = C(ReportHtmlLightColors.Indigo200),
+        SelectionActive = C("#E4E6F1"),
+        SelectionInactive = C("#F0F0F0"),
+        SelectionBorder = C("#0090F1"),
         AtCompletionSkillBadgeBg = C(ReportHtmlLightColors.Violet50),
         AtCompletionSkillBadgeBorder = C(ReportHtmlLightColors.Violet200),
         AtCompletionSkillBadgeText = C(ReportHtmlLightColors.Violet900),
@@ -131,11 +132,11 @@ public static class LightAppThemePalette
     private static WorkspaceFileIconThemeColors CreateFileIcons() => new()
     {
         Placeholder = C(ReportHtmlLightColors.Slate400),
-        Folder = C(ReportHtmlLightColors.Slate500),
-        File = C(ReportHtmlLightColors.Slate500),
+        Folder = C("#8A8A8A"),
+        File = C("#616161"),
         CSharp = C("#519ABA"),
         Project = C("#8B5CF6"),
-        Solution = C(ReportHtmlLightColors.Slate600),
+        Solution = C("#5A5A5A"),
         Markdown = C("#519ABA"),
         Json = C("#9A8B00"),
         Xml = C("#E37933"),
@@ -150,7 +151,7 @@ public static class LightAppThemePalette
         Docker = C("#2496ED"),
         Image = C("#A371F7"),
         MsBuild = C("#D97706"),
-        Config = C(ReportHtmlLightColors.Slate500),
+        Config = C("#767676"),
     };
 
     private static Color C(string hex) => AppThemeColor.FromHex(hex);
