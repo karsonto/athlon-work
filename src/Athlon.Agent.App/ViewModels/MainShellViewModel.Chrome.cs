@@ -188,6 +188,22 @@ public partial class MainShellViewModel
     }
 
     [RelayCommand]
+    private void OpenChangesWorkspaceTab()
+    {
+        WorkspacePane.IsAddMenuOpen = false;
+        var existing = WorkspacePane.Tabs.OfType<ChangesWorkspaceTabViewModel>().FirstOrDefault();
+        if (existing is not null)
+        {
+            WorkspacePane.ActiveTab = existing;
+            return;
+        }
+
+        var review = _activeUi.GetLatestReviewFiles();
+        FillMissingWriteDiffsFromWorkspace(review.Files);
+        WorkspacePane.ShowChanges(review.Files, null, review.EntryId);
+    }
+
+    [RelayCommand]
     private async Task OpenBrowserWorkspaceTabAsync()
     {
         if (!_appSettings.Ui.ContextSidebarVisible)

@@ -282,6 +282,39 @@ public sealed partial class SessionTurnUiController
     }
 
     /// <summary>
+    /// Latest turn that actually edited files: the live turn while it is writing, otherwise the
+    /// most recent user turn in the transcript. Entry id matches the files card (<c>files:{anchor}</c>).
+    /// </summary>
+    public (string? EntryId, IReadOnlyList<ModifiedFileViewModel> Files) GetLatestReviewFiles()
+    {
+        var anchor = _turnLifecycle.TurnAnchorId;
+        var live = _modifiedFilesTracker.PeekTurnFiles();
+        if (live.Count > 0 && !string.IsNullOrWhiteSpace(anchor))
+        {
+            return ("files:" + anchor, live);
+        }
+
+        for (var index = Messages.Count - 1; index >= 0; index--)
+        {
+            var message = Messages[index];
+            if (!message.IsUser)
+            {
+                continue;
+            }
+
+            var files = GetTurnFiles(message.MessageId);
+            if (files.Count == 0)
+            {
+                continue;
+            }
+
+            return ("files:" + message.MessageId, files);
+        }
+
+        return (null, Array.Empty<ModifiedFileViewModel>());
+    }
+
+    /// <summary>
     /// Materializes buffered tokens and returns the in-flight assistant row that is not yet
     /// durable on disk so a session switch can checkpoint it before flush.
     /// Tool messages are sync-flushed at message boundaries and do not need checkpointing.

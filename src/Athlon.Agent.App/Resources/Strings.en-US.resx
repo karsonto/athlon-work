@@ -104,13 +104,16 @@
     <value>Details</value>
   </data>
   <data name="Chat_ContextMeterTooltip" xml:space="preserve">
-    <value>Context occupancy</value>
+    <value>Context usage</value>
+  </data>
+  <data name="Chat_ContextMeterTitle" xml:space="preserve">
+    <value>Context Usage</value>
   </data>
   <data name="Chat_ContextMeterPercent" xml:space="preserve">
-    <value>{0}% used</value>
+    <value>{0}% Full</value>
   </data>
   <data name="Chat_ContextMeterCapacity" xml:space="preserve">
-    <value>~{0} / {1} window</value>
+    <value>~{0} / {1} Tokens</value>
   </data>
   <data name="Chat_ContextMeterMessages" xml:space="preserve">
     <value>Conversation</value>

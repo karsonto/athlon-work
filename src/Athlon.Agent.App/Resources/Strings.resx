@@ -106,11 +106,14 @@
   <data name="Chat_ContextMeterTooltip" xml:space="preserve">
     <value>上下文占用</value>
   </data>
+  <data name="Chat_ContextMeterTitle" xml:space="preserve">
+    <value>上下文用量</value>
+  </data>
   <data name="Chat_ContextMeterPercent" xml:space="preserve">
-    <value>{0}% 已用</value>
+    <value>{0}% 已满</value>
   </data>
   <data name="Chat_ContextMeterCapacity" xml:space="preserve">
-    <value>~{0} / {1} 窗口</value>
+    <value>~{0} / {1} Tokens</value>
   </data>
   <data name="Chat_ContextMeterMessages" xml:space="preserve">
     <value>对话历史</value>

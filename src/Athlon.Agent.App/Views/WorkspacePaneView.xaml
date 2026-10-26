@@ -53,6 +53,58 @@
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         </Style>
+
+        <Style x:Key="WorkspaceLauncherCardStyle" TargetType="Button">
+            <Setter Property="Height" Value="92" />
+            <Setter Property="Margin" Value="0,4" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Card"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource Brush.HoverNeutral}" />
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.BorderHover}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource Brush.SurfaceActive}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="WorkspaceLauncherIconStyle" TargetType="materialDesign:PackIcon">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
+        </Style>
+
+        <Style x:Key="WorkspaceLauncherLabelStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="4,8,4,0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -122,7 +174,7 @@
                                                             <Setter Property="Kind" Value="StarOutline" />
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Kind}" Value="Changes">
-                                                            <Setter Property="Kind" Value="FileCompare" />
+                                                            <Setter Property="Kind" Value="SourceBranch" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -189,6 +241,24 @@
                                             Padding="6"
                                             MinWidth="220">
                                         <StackPanel>
+                                            <Button Command="{Binding OpenChangesWorkspaceTabCommand}"
+                                                    Style="{StaticResource WorkspaceEmptyRowStyle}"
+                                                    Padding="10,9"
+                                                    MinHeight="38"
+                                                    Margin="0,1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="28" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <materialDesign:PackIcon Kind="SourceBranch"
+                                                                             Style="{StaticResource WorkspacePackIconStyle}" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{loc:Localize Key=Context_TabChanges}"
+                                                               Style="{StaticResource WorkspaceEmptyLabelStyle}"
+                                                               FontSize="13" />
+                                                </Grid>
+                                            </Button>
                                             <Button Command="{Binding WorkspacePane.AddBrowserTabCommand}"
                                                     Style="{StaticResource WorkspaceEmptyRowStyle}"
                                                     Padding="10,9"
@@ -329,89 +399,87 @@
                     </Style.Triggers>
                 </Style>
             </Grid.Style>
-            <StackPanel VerticalAlignment="Center"
-                        HorizontalAlignment="Stretch"
-                        Margin="28,0"
-                        MaxWidth="360">
-                <Button Command="{Binding WorkspacePane.AddBrowserTabCommand}"
-                        Style="{StaticResource WorkspaceEmptyRowStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="28" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+            <Grid VerticalAlignment="Center"
+                  HorizontalAlignment="Center"
+                  Margin="16,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="108" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="108" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Button Grid.Row="0"
+                        Grid.Column="0"
+                        Command="{Binding OpenChangesWorkspaceTabCommand}"
+                        Style="{StaticResource WorkspaceLauncherCardStyle}">
+                    <StackPanel>
+                        <materialDesign:PackIcon Kind="SourceBranch"
+                                                 Style="{StaticResource WorkspaceLauncherIconStyle}" />
+                        <TextBlock Text="{loc:Localize Key=Context_TabChanges}"
+                                   Style="{StaticResource WorkspaceLauncherLabelStyle}" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Row="0"
+                        Grid.Column="2"
+                        Command="{Binding WorkspacePane.AddBrowserTabCommand}"
+                        Style="{StaticResource WorkspaceLauncherCardStyle}">
+                    <StackPanel>
                         <materialDesign:PackIcon Kind="Earth"
-                                                 Style="{StaticResource WorkspacePackIconStyle}" />
-                        <TextBlock Grid.Column="1"
-                                   Text="{loc:Localize Key=Workspace_Browser}"
-                                   Style="{StaticResource WorkspaceEmptyLabelStyle}" />
-                        <Border Grid.Column="2" Style="{StaticResource WorkspaceShortcutPillStyle}">
-                            <TextBlock Text="Ctrl+T" Style="{StaticResource WorkspaceShortcutTextStyle}" />
-                        </Border>
-                    </Grid>
+                                                 Style="{StaticResource WorkspaceLauncherIconStyle}" />
+                        <TextBlock Text="{loc:Localize Key=Workspace_Browser}"
+                                   Style="{StaticResource WorkspaceLauncherLabelStyle}" />
+                    </StackPanel>
                 </Button>
-
-                <Button Command="{Binding WorkspacePane.AddTerminalTabCommand}"
-                        Style="{StaticResource WorkspaceEmptyRowStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="28" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <materialDesign:PackIcon Kind="Console"
-                                                 Style="{StaticResource WorkspacePackIconStyle}" />
-                        <TextBlock Grid.Column="1"
-                                   Text="{loc:Localize Key=Workspace_Terminal}"
-                                   Style="{StaticResource WorkspaceEmptyLabelStyle}" />
-                    </Grid>
+                <Button Grid.Row="1"
+                        Grid.Column="0"
+                        Command="{Binding WorkspacePane.AddTerminalTabCommand}"
+                        Style="{StaticResource WorkspaceLauncherCardStyle}">
+                    <StackPanel>
+                        <materialDesign:PackIcon Kind="ConsoleLine"
+                                                 Style="{StaticResource WorkspaceLauncherIconStyle}" />
+                        <TextBlock Text="{loc:Localize Key=Workspace_Terminal}"
+                                   Style="{StaticResource WorkspaceLauncherLabelStyle}" />
+                    </StackPanel>
                 </Button>
-
-                <Button Command="{Binding WorkspacePane.AddFilesTabCommand}"
-                        Style="{StaticResource WorkspaceEmptyRowStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="28" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <materialDesign:PackIcon Kind="FolderOutline"
-                                                 Style="{StaticResource WorkspacePackIconStyle}" />
-                        <TextBlock Grid.Column="1"
-                                   Text="{loc:Localize Key=Context_TabFiles}"
-                                   Style="{StaticResource WorkspaceEmptyLabelStyle}" />
-                    </Grid>
+                <Button Grid.Row="1"
+                        Grid.Column="2"
+                        Command="{Binding WorkspacePane.AddFilesTabCommand}"
+                        Style="{StaticResource WorkspaceLauncherCardStyle}">
+                    <StackPanel>
+                        <materialDesign:PackIcon Kind="FileDocumentOutline"
+                                                 Style="{StaticResource WorkspaceLauncherIconStyle}" />
+                        <TextBlock Text="{loc:Localize Key=Context_TabFiles}"
+                                   Style="{StaticResource WorkspaceLauncherLabelStyle}" />
+                    </StackPanel>
                 </Button>
-
-                <Button Command="{Binding WorkspacePane.AddSkillsTabCommand}"
-                        Style="{StaticResource WorkspaceEmptyRowStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="28" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                <Button Grid.Row="2"
+                        Grid.Column="0"
+                        Command="{Binding WorkspacePane.AddSkillsTabCommand}"
+                        Style="{StaticResource WorkspaceLauncherCardStyle}">
+                    <StackPanel>
                         <materialDesign:PackIcon Kind="StarOutline"
-                                                 Style="{StaticResource WorkspacePackIconStyle}" />
-                        <TextBlock Grid.Column="1"
-                                   Text="{loc:Localize Key=Context_TabSkills}"
-                                   Style="{StaticResource WorkspaceEmptyLabelStyle}" />
-                    </Grid>
+                                                 Style="{StaticResource WorkspaceLauncherIconStyle}" />
+                        <TextBlock Text="{loc:Localize Key=Context_TabSkills}"
+                                   Style="{StaticResource WorkspaceLauncherLabelStyle}" />
+                    </StackPanel>
                 </Button>
-
-                <Button Command="{Binding StartComputerUseOverlayCommand}"
-                        Style="{StaticResource WorkspaceEmptyRowStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="28" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                <Button Grid.Row="2"
+                        Grid.Column="2"
+                        Command="{Binding StartComputerUseOverlayCommand}"
+                        Style="{StaticResource WorkspaceLauncherCardStyle}">
+                    <StackPanel>
                         <materialDesign:PackIcon Kind="Monitor"
-                                                 Style="{StaticResource WorkspacePackIconStyle}" />
-                        <TextBlock Grid.Column="1"
-                                   Text="{loc:Localize Key=ComputerUse_MenuStart}"
-                                   Style="{StaticResource WorkspaceEmptyLabelStyle}" />
-                    </Grid>
+                                                 Style="{StaticResource WorkspaceLauncherIconStyle}" />
+                        <TextBlock Text="{loc:Localize Key=ComputerUse_MenuStart}"
+                                   Style="{StaticResource WorkspaceLauncherLabelStyle}" />
+                    </StackPanel>
                 </Button>
-            </StackPanel>
+            </Grid>
         </Grid>
 
         <!-- Active tab content -->

@@ -29,7 +29,9 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
     internal const double RingStrokeThickness = 2.2;
     internal static readonly double RingCircumference = Math.PI * (RingDiameter - RingStrokeThickness);
     private const double DashEpsilon = 0.01;
-    private const double TrackWidth = 256;
+    private double _trackWidth = 328;
+    private ContextOccupancyBreakdown? _occupancy;
+    private int _usableWindow;
 
     [ObservableProperty]
     private bool isVisible;
@@ -85,7 +87,23 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
             TokenCountDisplay.FormatCompact(budget.EstimatedTotalPrompt),
             TokenCountDisplay.FormatWindow(budget.TotalWindow));
         RingDashArray = FrozenDash(Math.Clamp(utilization, 0, 1) * RingCircumference);
-        Categories = BuildCategories(budget.DisplayOccupancy, usable);
+        _occupancy = budget.DisplayOccupancy;
+        _usableWindow = usable;
+        Categories = BuildCategories(budget.DisplayOccupancy, usable, _trackWidth);
+    }
+
+    public void SetTrackWidth(double width)
+    {
+        if (double.IsNaN(width) || width < 1 || Math.Abs(_trackWidth - width) < 0.5)
+        {
+            return;
+        }
+
+        _trackWidth = width;
+        if (_occupancy is not null)
+        {
+            Categories = BuildCategories(_occupancy, _usableWindow, _trackWidth);
+        }
     }
 
     public void ApplyOverflow()
@@ -113,7 +131,8 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
 
     private static IReadOnlyList<ContextOccupancyCategoryRow> BuildCategories(
         ContextOccupancyBreakdown occupancy,
-        int usableWindow)
+        int usableWindow,
+        double trackWidth)
     {
         var candidates = new (string Id, string LabelKey, int Tokens)[]
         {
@@ -133,7 +152,7 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
         }
 
         var denominator = Math.Max(usableWindow, occupancy.ContentTokens);
-        var scale = denominator > 0 ? TrackWidth / denominator : 0;
+        var scale = denominator > 0 ? trackWidth / denominator : 0;
         var rows = new List<ContextOccupancyCategoryRow>(visible.Count);
         for (var index = 0; index < visible.Count; index++)
         {

@@ -5,69 +5,96 @@
              xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
              xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels">
     <UserControl.Resources>
-        <Style x:Key="OccupancySwatchStyle" TargetType="Border">
-            <Setter Property="Width" Value="8" />
-            <Setter Property="Height" Value="8" />
+        <SolidColorBrush x:Key="Meter.System" Color="#8A8A8A" />
+        <SolidColorBrush x:Key="Meter.Tools" Color="#8B7CF6" />
+        <SolidColorBrush x:Key="Meter.Rules" Color="#3DDC97" />
+        <SolidColorBrush x:Key="Meter.Skills" Color="#E8A317" />
+        <SolidColorBrush x:Key="Meter.Mcp" Color="#C084FC" />
+        <SolidColorBrush x:Key="Meter.Subagent" Color="#5B9BF5" />
+        <SolidColorBrush x:Key="Meter.Conversation" Color="#E06C75" />
+        <Style x:Key="MeterSwatchStyle" TargetType="Border">
+            <Setter Property="Width" Value="10" />
+            <Setter Property="Height" Value="10" />
             <Setter Property="CornerRadius" Value="2" />
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Background" Value="{DynamicResource Brush.SubtleText}" />
+            <Setter Property="Background" Value="{StaticResource Meter.System}" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding Id}" Value="tools">
-                    <Setter Property="Background" Value="{DynamicResource Brush.TextSecondary}" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Tools}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Id}" Value="rules">
-                    <Setter Property="Background" Value="{DynamicResource Brush.Success}" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Rules}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Id}" Value="skills">
-                    <Setter Property="Background" Value="{DynamicResource Brush.Warning}" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Skills}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Id}" Value="mcp">
-                    <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionMcpBadgeText}" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Mcp}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Id}" Value="subagent">
-                    <Setter Property="Background" Value="{DynamicResource Brush.CodeHighlightBlue}" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Subagent}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Id}" Value="conversation">
-                    <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Conversation}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-        <Style x:Key="OccupancyBarSegmentStyle" TargetType="Border">
-            <Setter Property="Height" Value="8" />
-            <Setter Property="Background" Value="{DynamicResource Brush.SubtleText}" />
+        <Style x:Key="MeterSegmentStyle" TargetType="Border">
+            <Setter Property="Height" Value="6" />
+            <Setter Property="Margin" Value="0,0,1,0" />
+            <Setter Property="Background" Value="{StaticResource Meter.System}" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding Id}" Value="tools">
-                    <Setter Property="Background" Value="{DynamicResource Brush.TextSecondary}" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Tools}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Id}" Value="rules">
-                    <Setter Property="Background" Value="{DynamicResource Brush.Success}" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Rules}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Id}" Value="skills">
-                    <Setter Property="Background" Value="{DynamicResource Brush.Warning}" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Skills}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Id}" Value="mcp">
-                    <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionMcpBadgeText}" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Mcp}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Id}" Value="subagent">
-                    <Setter Property="Background" Value="{DynamicResource Brush.CodeHighlightBlue}" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Subagent}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Id}" Value="conversation">
-                    <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsFirst}" Value="True">
-                    <Setter Property="CornerRadius" Value="2,0,0,2" />
+                    <Setter Property="Background" Value="{StaticResource Meter.Conversation}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsLast}" Value="True">
-                    <Setter Property="CornerRadius" Value="0,2,2,0" />
+                    <Setter Property="Margin" Value="0" />
                 </DataTrigger>
-                <MultiDataTrigger>
-                    <MultiDataTrigger.Conditions>
-                        <Condition Binding="{Binding IsFirst}" Value="True" />
-                        <Condition Binding="{Binding IsLast}" Value="True" />
-                    </MultiDataTrigger.Conditions>
-                    <Setter Property="CornerRadius" Value="2" />
-                </MultiDataTrigger>
             </Style.Triggers>
+        </Style>
+        <Style x:Key="MeterCloseButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="11"
+                                Width="22"
+                                Height="22">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.HoverNeutral}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </UserControl.Resources>
     <UserControl.Style>
@@ -127,33 +154,62 @@
                 </Ellipse>
             </Grid>
         </Button>
-        <Popup PlacementTarget="{Binding ElementName=MeterButton}"
+        <Popup x:Name="UsagePopup"
                Placement="Top"
+               HorizontalOffset="0"
+               VerticalOffset="-8"
                IsOpen="{Binding IsFlyoutOpen, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}"
                StaysOpen="False"
                AllowsTransparency="True">
-            <Border Background="{DynamicResource Brush.Panel}"
+            <Border x:Name="UsageCard"
+                    Background="{DynamicResource Brush.MenuBackground}"
                     BorderBrush="{DynamicResource Brush.Border}"
                     BorderThickness="1"
-                    CornerRadius="10"
-                    Padding="12"
-                    MinWidth="260"
-                    MaxWidth="320"
+                    CornerRadius="18"
+                    Padding="16,14,16,14"
+                    MinWidth="280"
                     SnapsToDevicePixels="True">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="28"
+                                      ShadowDepth="6"
+                                      Direction="270"
+                                      Opacity="0.38"
+                                      Color="#000000" />
+                </Border.Effect>
                 <StackPanel>
-                    <Grid Margin="0,0,0,8">
+                    <Grid Margin="0,0,0,14">
+                        <TextBlock Text="{loc:Localize Key=Chat_ContextMeterTitle}"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Text}" />
+                        <Button HorizontalAlignment="Right"
+                                Click="CloseFlyout_OnClick"
+                                Style="{StaticResource MeterCloseButtonStyle}"
+                                Content="×"
+                                FontSize="16" />
+                    </Grid>
+                    <Grid Margin="0,0,0,10">
                         <TextBlock Text="{Binding PercentLabel}"
-                                   FontSize="12"
-                                   Foreground="{DynamicResource Brush.SubtleText}" />
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Text}" />
                         <TextBlock Text="{Binding UsedCapacityLabel}"
                                    FontSize="12"
                                    HorizontalAlignment="Right"
+                                   VerticalAlignment="Center"
                                    Foreground="{DynamicResource Brush.SubtleText}" />
                     </Grid>
-                    <Grid Height="8" Margin="0,0,0,10">
-                        <Border Background="{DynamicResource Brush.Border}"
-                                CornerRadius="2" />
-                        <ItemsControl ItemsSource="{Binding Categories}">
+                    <Border x:Name="UsageTrack"
+                            Height="6"
+                            Margin="0,0,0,16"
+                            CornerRadius="3"
+                            ClipToBounds="True"
+                            SizeChanged="UsageTrack_OnSizeChanged"
+                            Background="{DynamicResource Brush.HoverNeutral}">
+                        <ItemsControl ItemsSource="{Binding Categories}"
+                                      VerticalAlignment="Center">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <StackPanel Orientation="Horizontal" />
@@ -162,30 +218,32 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:ContextOccupancyCategoryRow}">
                                     <Border Width="{Binding BarWidth}"
-                                            Style="{StaticResource OccupancyBarSegmentStyle}" />
+                                            Style="{StaticResource MeterSegmentStyle}" />
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </Grid>
+                    </Border>
                     <ItemsControl ItemsSource="{Binding Categories}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:ContextOccupancyCategoryRow}">
-                                <Grid Margin="0,0,0,6">
+                                <Grid Margin="0,0,0,8" Height="18">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Style="{StaticResource OccupancySwatchStyle}" />
+                                    <Border Style="{StaticResource MeterSwatchStyle}" />
                                     <TextBlock Grid.Column="1"
-                                               Margin="8,0,8,0"
-                                               FontSize="12"
+                                               Margin="10,0,12,0"
+                                               FontSize="13"
+                                               VerticalAlignment="Center"
                                                Text="{Binding Label}"
-                                               Foreground="{DynamicResource Brush.Text}" />
-                                    <TextBlock Grid.Column="2"
-                                               FontSize="12"
-                                               Text="{Binding TokensLabel}"
                                                Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBlock Grid.Column="2"
+                                               FontSize="13"
+                                               VerticalAlignment="Center"
+                                               Text="{Binding TokensLabel}"
+                                               Foreground="{DynamicResource Brush.TextSecondary}" />
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -194,7 +252,7 @@
                                Margin="0,2,0,0"
                                FontSize="11"
                                TextWrapping="Wrap"
-                               Foreground="{DynamicResource Brush.SubtleText}" />
+                               Foreground="{DynamicResource Brush.DisabledText}" />
                     <TextBlock Text="{loc:Localize Key=Shell_CompactingContext}"
                                Margin="0,4,0,0"
                                FontSize="12"
@@ -210,28 +268,44 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                    <Button Content="{loc:Localize Key=Shell_CompactContextTitle}"
-                            Command="{Binding CompactCommand}"
-                            Margin="0,10,0,0"
-                            HorizontalAlignment="Stretch">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
-                                <Setter Property="HorizontalAlignment" Value="Stretch" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsCompactCtaEmphasized}" Value="True">
-                                        <Setter Property="Foreground" Value="White" />
-                                        <Setter Property="Background" Value="{DynamicResource Brush.Danger}" />
-                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                    <Button Content="{loc:Localize Key=Shell_ClearContextTitle}"
-                            Command="{Binding ClearCommand}"
-                            Margin="0,6,0,0"
-                            HorizontalAlignment="Stretch"
-                            Style="{StaticResource GhostButtonStyle}" />
+                    <Border Height="1"
+                            Margin="0,12,0,10"
+                            Background="{DynamicResource Brush.Border}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0"
+                                Content="{loc:Localize Key=Shell_CompactContextTitle}"
+                                Command="{Binding CompactCommand}"
+                                HorizontalAlignment="Stretch"
+                                FontSize="12"
+                                Padding="8,5">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                                    <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                    <Setter Property="FontSize" Value="12" />
+                                    <Setter Property="Padding" Value="8,5" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactCtaEmphasized}" Value="True">
+                                            <Setter Property="Foreground" Value="White" />
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Danger}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Grid.Column="2"
+                                Content="{loc:Localize Key=Shell_ClearContextTitle}"
+                                Command="{Binding ClearCommand}"
+                                HorizontalAlignment="Stretch"
+                                FontSize="12"
+                                Padding="8,5"
+                                Style="{StaticResource GhostButtonStyle}" />
+                    </Grid>
                 </StackPanel>
             </Border>
         </Popup>
