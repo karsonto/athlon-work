@@ -90,8 +90,14 @@ public sealed class BrowserScreenshotTests
 
             Assert.StartsWith(BrowserFrameFiles.Prefix, saved.FileName, StringComparison.Ordinal);
             Assert.EndsWith(".png", saved.FileName, StringComparison.Ordinal);
+            Assert.Equal("image/png", saved.MimeType);
             Assert.Equal(saved.FileName, Path.GetFileName(saved.LocalPath));
             Assert.True(File.Exists(saved.LocalPath));
+
+            var jpeg = store.SaveBrowserFrame("session-1", "image/jpeg", [7, 8, 9]);
+            Assert.StartsWith(BrowserFrameFiles.Prefix, jpeg.FileName, StringComparison.Ordinal);
+            Assert.EndsWith(".jpg", jpeg.FileName, StringComparison.Ordinal);
+            Assert.Equal("image/jpeg", jpeg.MimeType);
 
             var frame = store.SaveByteFrame("session-1", "desktop.png", "image/png", [4, 5, 6]);
             Assert.Equal("desktop.png", frame.FileName);

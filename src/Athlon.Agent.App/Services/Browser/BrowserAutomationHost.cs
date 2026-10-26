@@ -118,7 +118,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
             return null;
         }
 
-        var attachment = _images.SaveBrowserFrame(sessionId, "image/png", captured.Value.Bytes);
+        var attachment = _images.SaveBrowserFrame(sessionId, captured.Value.MimeType, captured.Value.Bytes);
         await _pruner.PruneAsync(sessionId, cancellationToken).ConfigureAwait(false);
         return new BrowserScreenshotCapture(
             attachment,
@@ -288,6 +288,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
 
     private readonly record struct VisiblePng(
         byte[] Bytes,
+        string MimeType,
         string Url,
         string Title,
         bool FullPage,
@@ -318,8 +319,10 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
             return null;
         }
 
+        var shrunk = BrowserScreenshotEncoder.Shrink(captured.Bytes);
         return new VisiblePng(
-            captured.Bytes,
+            shrunk.Bytes,
+            shrunk.MimeType,
             webView.Source ?? tab.CurrentUrl ?? string.Empty,
             webView.DocumentTitle ?? tab.Title ?? string.Empty,
             fullPage,
@@ -410,12 +413,13 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         var clipped = width > MaxFullPageEdgeCssPx || height > MaxFullPageEdgeCssPx;
         width = Math.Min(width, MaxFullPageEdgeCssPx);
         height = Math.Min(height, MaxFullPageEdgeCssPx);
+        var scale = BrowserScreenshotEncoder.FullPageScale(width, height);
         var request = JsonSerializer.Serialize(new
         {
             format = "png",
             fromSurface = true,
             captureBeyondViewport = true,
-            clip = new { x = 0, y = 0, width, height, scale = 1 }
+            clip = new { x = 0, y = 0, width, height, scale }
         });
         return await CaptureCdpPngAsync(webView, request, clipped).ConfigureAwait(true);
     }

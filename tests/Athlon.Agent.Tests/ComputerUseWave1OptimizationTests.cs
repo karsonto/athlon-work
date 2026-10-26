@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Athlon.Agent.App.Services.Browser;
 using Athlon.Agent.App.Services.ComputerUse;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.ComputerUse;
@@ -284,6 +285,37 @@ public sealed class ComputerUseWave1OptimizationTests
         Assert.True(encoded.Bytes.Length > 100);
         Assert.Equal(0xFF, encoded.Bytes[0]);
         Assert.Equal(0xD8, encoded.Bytes[1]);
+    }
+
+    [Fact]
+    public void BrowserScreenshot_ShrinksLongEdgeToJpeg()
+    {
+        var source = CreateSolidBitmap(2400, 1200, Colors.SteelBlue);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(source));
+        using var png = new MemoryStream();
+        encoder.Save(png);
+        var pngBytes = png.ToArray();
+
+        var shrunk = BrowserScreenshotEncoder.Shrink(pngBytes);
+
+        Assert.Equal("image/jpeg", shrunk.MimeType);
+        Assert.Equal(0xFF, shrunk.Bytes[0]);
+        Assert.Equal(0xD8, shrunk.Bytes[1]);
+
+        using var jpeg = new MemoryStream(shrunk.Bytes);
+        var decoded = BitmapDecoder.Create(jpeg, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        var frame = decoded.Frames[0];
+        Assert.Equal(1600, frame.PixelWidth);
+        Assert.Equal(800, frame.PixelHeight);
+    }
+
+    [Fact]
+    public void BrowserScreenshot_FullPageScaleCapsLongestCssEdge()
+    {
+        Assert.Equal(1, BrowserScreenshotEncoder.FullPageScale(1280, 720));
+        Assert.Equal(1600d / 16000d, BrowserScreenshotEncoder.FullPageScale(16000, 8000), precision: 6);
+        Assert.Equal(1, BrowserScreenshotEncoder.FullPageScale(0, 900));
     }
 
     [Fact]

@@ -72,7 +72,8 @@ public sealed class ImageAttachmentStore : IImageAttachmentStore
 
     public ImageAttachment SaveBrowserFrame(string sessionId, string mimeType, byte[] bytes)
     {
-        var saved = Save(sessionId, "frame.png", mimeType, bytes, BrowserFrameFilePrefix);
+        var extension = ExtensionFromMime(string.IsNullOrWhiteSpace(mimeType) ? "image/png" : mimeType);
+        var saved = Save(sessionId, "frame" + extension, mimeType, bytes, BrowserFrameFilePrefix);
         var storedName = Path.GetFileName(saved.LocalPath);
         return string.IsNullOrWhiteSpace(storedName)
             ? saved
