@@ -200,14 +200,10 @@ internal static class OpenAiChatResponseParser
                             }
                         }
 
-                        await NotifyToolCallDeltaAsync(
-                            onToolCallDelta,
-                            new StreamingToolCallDelta(
-                                index,
-                                state.Id,
-                                state.Name,
-                                state.Arguments.ToString()),
-                            cancellationToken);
+                        if (TryBuildToolCallDelta(index, state, out var delta))
+                        {
+                            await NotifyToolCallDeltaAsync(onToolCallDelta, delta, cancellationToken);
+                        }
                     }
                 }
             }
@@ -325,6 +321,48 @@ internal static class OpenAiChatResponseParser
         return toolCalls;
     }
 
+    /// <summary>
+    /// Edit tools emit one path-only snapshot, then stay silent so later chunks are not copied.
+    /// Other tools keep the accumulated arguments snapshot.
+    /// </summary>
+    private static bool TryBuildToolCallDelta(
+        int index,
+        StreamingToolCallState state,
+        out StreamingToolCallDelta delta)
+    {
+        delta = null!;
+        if (state.DisplayPathEmitted)
+        {
+            return false;
+        }
+
+        if (ToolCallStreamingJsonHelper.IsEditTool(state.Name))
+        {
+            var windowLength = Math.Min(state.Arguments.Length, ToolCallStreamingJsonHelper.EditPathScanWindow);
+            if (windowLength == 0)
+            {
+                return false;
+            }
+
+            var window = state.Arguments.ToString(0, windowLength);
+            if (!ToolCallStreamingJsonHelper.TryExtractEditDisplayPath(window, state.Name, out var path))
+            {
+                return false;
+            }
+
+            state.DisplayPathEmitted = true;
+            delta = new StreamingToolCallDelta(
+                index,
+                state.Id,
+                state.Name,
+                ToolCallStreamingJsonHelper.PathOnlyArgumentsJson(path));
+            return true;
+        }
+
+        delta = new StreamingToolCallDelta(index, state.Id, state.Name, state.Arguments.ToString());
+        return true;
+    }
+
     private static async Task NotifyToolCallDeltaAsync(
         Func<StreamingToolCallDelta, Task>? onToolCallDelta,
         StreamingToolCallDelta delta,
@@ -362,6 +400,7 @@ internal static class OpenAiChatResponseParser
         public string? Id { get; set; }
         public string? Name { get; set; }
         public StringBuilder Arguments { get; } = new();
+        public bool DisplayPathEmitted { get; set; }
     }
 
     private static async Task AppendReasoningDelta(

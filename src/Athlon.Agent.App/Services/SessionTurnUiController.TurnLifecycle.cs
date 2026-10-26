@@ -253,14 +253,17 @@ public sealed partial class SessionTurnUiController
         // must start a new fold rather than merging back into the one before the reply.
         SealOpenActivityFoldBeforeContent(streamEvent);
 
-        if (notifyTracker)
+        var uiEvents = _displayCoordinator.MapForUi(streamEvent);
+        var suppressEditArgs = IsSuppressedEditArgs(streamEvent, uiEvents);
+        if (notifyTracker && !suppressEditArgs)
         {
-            _modifiedFilesTracker.Process(streamEvent);
-            _turnActivityTracker.Process(streamEvent);
-            TryAppendActivitySourceFromStreamEvent(streamEvent);
+            var tracked = TrackedStreamEvent(streamEvent, uiEvents);
+            _modifiedFilesTracker.Process(tracked);
+            _turnActivityTracker.Process(tracked);
+            TryAppendActivitySourceFromStreamEvent(tracked);
         }
 
-        foreach (var uiEvent in _displayCoordinator.MapForUi(streamEvent))
+        foreach (var uiEvent in uiEvents)
         {
             DispatchToChatView(uiEvent);
             _streaming.Process(uiEvent, Messages);
@@ -277,7 +280,8 @@ public sealed partial class SessionTurnUiController
             SealOpenActivityFoldBeforeContent(opensContent: true);
         }
 
-        if (streamEvent is AgentStreamEvent.ToolCallStart
+        if (!suppressEditArgs
+            && streamEvent is AgentStreamEvent.ToolCallStart
             or AgentStreamEvent.ToolCallArgs
             or AgentStreamEvent.ToolCallEnd
             or AgentStreamEvent.ToolCallResult
@@ -315,6 +319,35 @@ public sealed partial class SessionTurnUiController
         {
             SealActivitySegment();
         }
+    }
+
+    /// <summary>
+    /// Edit-argument chunks that no longer change the visible row. The path line was already published.
+    /// </summary>
+    private bool IsSuppressedEditArgs(AgentStreamEvent streamEvent, IReadOnlyList<AgentStreamEvent> uiEvents) =>
+        streamEvent is AgentStreamEvent.ToolCallArgs(var toolCallId, _)
+        && uiEvents.Count == 0
+        && IsStreamingEditTool(toolCallId);
+
+    /// <summary>
+    /// Edit tools track the path summary, not the raw argument JSON.
+    /// </summary>
+    private AgentStreamEvent TrackedStreamEvent(AgentStreamEvent streamEvent, IReadOnlyList<AgentStreamEvent> uiEvents)
+    {
+        if (streamEvent is AgentStreamEvent.ToolCallArgs(var toolCallId, _)
+            && IsStreamingEditTool(toolCallId)
+            && uiEvents.Count == 1)
+        {
+            return uiEvents[0];
+        }
+
+        return streamEvent;
+    }
+
+    private bool IsStreamingEditTool(string toolCallId)
+    {
+        var toolName = _turnActivityTracker.ResolveToolName(toolCallId);
+        return ToolCallStreamingJsonHelper.IsEditTool(toolName);
     }
 
     private async Task DispatcherYieldAsync()

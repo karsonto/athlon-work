@@ -54,7 +54,7 @@ internal sealed class ToolCallArgsDisplayCoordinator
         }
 
         _lastRawArgs[toolCallId] = rawJson;
-        if (!TryGetToolName(toolCallId, out var toolName) || !FileWriteToolArgumentsDisplay.IsFileWrite(toolName))
+        if (!TryGetToolName(toolCallId, out var toolName) || !ToolCallStreamingJsonHelper.IsEditTool(toolName))
         {
             return [new AgentStreamEvent.ToolCallArgs(toolCallId, rawJson)];
         }
@@ -64,27 +64,31 @@ internal sealed class ToolCallArgsDisplayCoordinator
             return [];
         }
 
-        if (!ToolCallStreamingJsonHelper.TryExtractStringProperty(rawJson, ToolPathNormalizer.PathArgumentName, out var path)
-            || string.IsNullOrWhiteSpace(path))
+        if (!ToolCallStreamingJsonHelper.TryExtractEditDisplayPath(rawJson, toolName, out var path))
         {
             return [];
         }
 
         _fileWritePathAnnounced.Add(toolCallId);
-        return [new AgentStreamEvent.ToolCallArgs(toolCallId, FileWriteToolArgumentsDisplay.FormatStreaming(path))];
+        var summary = FileWriteToolArgumentsDisplay.IsFileWrite(toolName)
+            ? FileWriteToolArgumentsDisplay.FormatStreaming(path)
+            : FileWriteToolArgumentsDisplay.FormatPath(path);
+        return [new AgentStreamEvent.ToolCallArgs(toolCallId, summary)];
     }
 
     private IReadOnlyList<AgentStreamEvent> MapToolCallEnd(string toolCallId)
     {
         if (string.IsNullOrWhiteSpace(toolCallId)
             || !TryGetToolName(toolCallId, out var toolName)
-            || !FileWriteToolArgumentsDisplay.IsFileWrite(toolName))
+            || !ToolCallStreamingJsonHelper.IsEditTool(toolName))
         {
             return [new AgentStreamEvent.ToolCallEnd(toolCallId)];
         }
 
         _lastRawArgs.TryGetValue(toolCallId, out var rawJson);
-        var summary = FileWriteToolArgumentsDisplay.FormatFinalFromRawJson(rawJson);
+        var summary = FileWriteToolArgumentsDisplay.IsFileWrite(toolName)
+            ? FileWriteToolArgumentsDisplay.FormatFinalFromRawJson(rawJson)
+            : FileWriteToolArgumentsDisplay.FormatEditPathSummary(rawJson, toolName);
         CleanupToolCall(toolCallId);
         return
         [

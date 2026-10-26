@@ -8,9 +8,105 @@ namespace Athlon.Agent.Core;
 /// </summary>
 public static class ToolCallStreamingJsonHelper
 {
+    /// <summary>
+    /// Prefix scanned for a display path. Edit payloads put <c>path</c> or the patch file header
+    /// first, so the window stays fixed instead of copying the growing body.
+    /// </summary>
+    public const int EditPathScanWindow = 8192;
+
+    private static readonly string[] ApplyPatchFileMarkers =
+    [
+        "*** Update File:",
+        "*** Add File:",
+        "*** Delete File:"
+    ];
+
     private static readonly Regex StringPropertyRegex = new(
         "\"(?<name>[A-Za-z_][A-Za-z0-9_]*)\"\\s*:\\s*\"(?<value>(?:\\\\.|[^\"\\\\])*)\"",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    public static bool IsEditTool(string? toolName) =>
+        toolName is "file_edit" or "file_write" or "apply_patch";
+
+    public static string PathOnlyArgumentsJson(string path) =>
+        JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            [ToolPathNormalizer.PathArgumentName] = path
+        });
+
+    /// <summary>
+    /// Path to show while an edit tool is still streaming. <c>file_edit</c> / <c>file_write</c> use
+    /// the <c>path</c> property; <c>apply_patch</c> also accepts the first V4A file header.
+    /// </summary>
+    public static bool TryExtractEditDisplayPath(string? partialJson, string? toolName, out string path)
+    {
+        if (TryExtractStringProperty(partialJson, ToolPathNormalizer.PathArgumentName, out path)
+            && !string.IsNullOrWhiteSpace(path))
+        {
+            return true;
+        }
+
+        if (string.Equals(toolName, "apply_patch", StringComparison.Ordinal)
+            && TryExtractApplyPatchFile(partialJson, out path))
+        {
+            return true;
+        }
+
+        path = string.Empty;
+        return false;
+    }
+
+    public static bool TryExtractApplyPatchFile(string? partial, out string path)
+    {
+        path = string.Empty;
+        if (string.IsNullOrEmpty(partial))
+        {
+            return false;
+        }
+
+        var matchIndex = -1;
+        var markerLength = 0;
+        foreach (var marker in ApplyPatchFileMarkers)
+        {
+            var index = partial.IndexOf(marker, StringComparison.Ordinal);
+            if (index < 0)
+            {
+                continue;
+            }
+
+            if (matchIndex < 0 || index < matchIndex)
+            {
+                matchIndex = index;
+                markerLength = marker.Length;
+            }
+        }
+
+        if (matchIndex < 0)
+        {
+            return false;
+        }
+
+        var start = matchIndex + markerLength;
+        while (start < partial.Length && partial[start] == ' ')
+        {
+            start++;
+        }
+
+        var end = start;
+        while (end < partial.Length
+               && partial[end] is not ('\n' or '\r' or '"' or '\\'))
+        {
+            end++;
+        }
+
+        if (end == start)
+        {
+            return false;
+        }
+
+        path = partial[start..end].Trim();
+        return path.Length > 0;
+    }
 
     public static bool TryExtractStringProperty(string? partialJson, string propertyName, out string value)
     {

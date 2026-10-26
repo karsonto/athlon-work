@@ -16,6 +16,7 @@ internal sealed class StreamingTokenBuffer
     private readonly object _bufferLock = new();
     private readonly object _scheduleLock = new();
     private readonly Queue<AgentStreamEvent> _pendingStreamEvents = new();
+    private readonly Dictionary<string, string> _pendingToolArgs = new(StringComparer.Ordinal);
     private readonly StringBuilder _streamingTokenBuffer = new();
     private readonly StringBuilder _streamingReasoningBuffer = new();
     private string? _pendingTextMessageId;
@@ -55,11 +56,46 @@ internal sealed class StreamingTokenBuffer
         }
     }
 
+    /// <summary>Keeps only the latest arguments snapshot per tool call. Older chunks are dropped.</summary>
+    public void RememberToolArgs(string toolCallId, string argsJson)
+    {
+        if (string.IsNullOrEmpty(toolCallId))
+        {
+            return;
+        }
+
+        lock (_bufferLock)
+        {
+            _pendingToolArgs[toolCallId] = argsJson;
+        }
+    }
+
+    public IReadOnlyList<AgentStreamEvent> DrainPendingToolArgs()
+    {
+        lock (_bufferLock)
+        {
+            if (_pendingToolArgs.Count == 0)
+            {
+                return Array.Empty<AgentStreamEvent>();
+            }
+
+            var events = new List<AgentStreamEvent>(_pendingToolArgs.Count);
+            foreach (var (toolCallId, argsJson) in _pendingToolArgs)
+            {
+                events.Add(new AgentStreamEvent.ToolCallArgs(toolCallId, argsJson));
+            }
+
+            _pendingToolArgs.Clear();
+            return events;
+        }
+    }
+
     public void ClearBuffers()
     {
         lock (_bufferLock)
         {
             _pendingStreamEvents.Clear();
+            _pendingToolArgs.Clear();
             _streamingTokenBuffer.Clear();
             _streamingReasoningBuffer.Clear();
             _pendingTextMessageId = null;

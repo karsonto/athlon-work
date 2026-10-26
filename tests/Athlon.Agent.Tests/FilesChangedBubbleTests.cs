@@ -854,8 +854,28 @@ public sealed class FilesChangedBubbleTests
             item => item.Kind == TurnActivityKind.Edited
                 && item.Status == "running"
                 && item.Verb == "Writing"
-                && item.Detail.Contains("b.ts", StringComparison.Ordinal));
+                && item.Detail.Contains("b.ts", StringComparison.Ordinal)
+                && item.Body is null);
         Assert.Equal(0, summary.ExploredFileCount);
+    }
+
+    [Fact]
+    public void SessionTurnActivityTracker_in_progress_edit_omits_argument_body()
+    {
+        var tracker = new SessionTurnActivityTracker();
+        tracker.BeginTurn();
+        tracker.Process(new AgentStreamEvent.ToolCallStart("c1", "file_edit", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs(
+            "c1",
+            """{"path":"a.cs","old_text":"huge-old","new_text":"huge-new"}"""));
+
+        var item = Assert.Single(tracker.Snapshot()!.Items);
+        Assert.Equal(TurnActivityKind.Edited, item.Kind);
+        Assert.Equal("Writing", item.Verb);
+        Assert.Contains("a.cs", item.Detail, StringComparison.Ordinal);
+        Assert.Null(item.Body);
+        Assert.DoesNotContain("huge-old", item.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("old_text", item.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

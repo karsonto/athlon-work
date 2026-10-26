@@ -1,6 +1,7 @@
 using System.Windows.Threading;
 using Athlon.Agent.App.Services.Streaming;
 using Athlon.Agent.App.ViewModels;
+using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.Tests;
 
@@ -43,6 +44,26 @@ public sealed class StreamingTokenBufferTests
 
         await dispatcher.InvokeAsync(buffer.StopFlushTimer);
         Assert.False(buffer.HasActiveFlushTimer);
+    }
+
+    [Fact]
+    public void DrainPendingToolArgs_keeps_only_the_latest_snapshot_per_call()
+    {
+        var buffer = new StreamingTokenBuffer(Dispatcher.CurrentDispatcher, new SessionStreamingUiContext());
+        buffer.RememberToolArgs("c1", """{"path":"a","old_text":"first"}""");
+        buffer.RememberToolArgs("c1", """{"path":"a","old_text":"second"}""");
+        buffer.RememberToolArgs("c2", """{"path":"b"}""");
+
+        var drained = buffer.DrainPendingToolArgs();
+
+        Assert.Equal(2, drained.Count);
+        Assert.Contains(
+            drained,
+            streamEvent => streamEvent is AgentStreamEvent.ToolCallArgs("c1", """{"path":"a","old_text":"second"}"""));
+        Assert.Contains(
+            drained,
+            streamEvent => streamEvent is AgentStreamEvent.ToolCallArgs("c2", """{"path":"b"}"""));
+        Assert.Empty(buffer.DrainPendingToolArgs());
     }
 
     private static Task<Dispatcher> StartStaDispatcherAsync()

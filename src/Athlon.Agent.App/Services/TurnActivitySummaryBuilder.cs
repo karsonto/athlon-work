@@ -193,7 +193,7 @@ public static class TurnActivitySummaryBuilder
                     inFlight ? "Writing" : "Edited",
                     editPath,
                     editPath,
-                    Body: detailBody,
+                    Body: inFlight ? null : detailBody,
                     Status: statusKey,
                     MessageId: messageId,
                     ToolCallId: toolCallId));

@@ -266,12 +266,21 @@ public sealed partial class SessionTurnUiController
 
     private void FlushBufferedStreamingToUi()
     {
+        FlushPendingToolArgsToUi();
         foreach (var streamEvent in _tokenBuffer.DrainPendingStreamEvents())
         {
             ProcessUiStreamEvents(streamEvent, notifyTracker: false);
         }
 
         FlushStreamingTokens();
+    }
+
+    private void FlushPendingToolArgsToUi()
+    {
+        foreach (var streamEvent in _tokenBuffer.DrainPendingToolArgs())
+        {
+            ProcessUiStreamEvents(streamEvent, notifyTracker: true);
+        }
     }
 
     private void NotifyChatViewAfterStreamEvent(AgentStreamEvent streamEvent)

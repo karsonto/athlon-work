@@ -52,6 +52,49 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
     }
 
     [Fact]
+    public async Task CompleteAsync_StreamResponse_EditTool_StopsDeltasAfterPathAndKeepsFullArguments()
+    {
+        var response = string.Join(
+            "\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_edit\",\"function\":{\"name\":\"file_edit\",\"arguments\":\"{\\\"path\\\":\\\"src/App.cs\\\",\\\"old_text\\\":\\\"\"}}]}}]}",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"AAAA\"}}]}}]}",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"BBBB\\\",\\\"new_text\\\":\\\"Z\\\"}\"}}]}}]}",
+            "data: [DONE]",
+            string.Empty);
+
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            var http = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(response, Encoding.UTF8)
+            };
+            http.Content.Headers.ContentType = new MediaTypeHeaderValue("text/event-stream");
+            return http;
+        });
+
+        var deltas = new List<StreamingToolCallDelta>();
+        var result = await CreateClient(handler, enableStreaming: true).CompleteAsync(
+            new AgentModelRequest(
+                [new AgentModelMessage("user", "hi")],
+                Array.Empty<ToolDefinition>()),
+            onToolCallDelta: delta =>
+            {
+                deltas.Add(delta);
+                return Task.CompletedTask;
+            });
+
+        var delta = Assert.Single(deltas);
+        Assert.Equal("file_edit", delta.Name);
+        Assert.Equal("""{"path":"src/App.cs"}""", delta.ArgumentsJson);
+        Assert.DoesNotContain("old_text", delta.ArgumentsJson, StringComparison.Ordinal);
+
+        var call = Assert.Single(result.ToolCalls);
+        Assert.Equal("src/App.cs", call.Arguments.GetString("path"));
+        Assert.Equal("AAAABBBB", call.Arguments.GetString("old_text"));
+        Assert.Equal("Z", call.Arguments.GetString("new_text"));
+    }
+
+    [Fact]
     public async Task CompleteAsync_StreamResponse_EmitsDeltasAndBuildsToolCalls()
     {
         var response = string.Join(

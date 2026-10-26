@@ -69,8 +69,16 @@ public sealed class SessionTurnActivityTracker
                 EnsurePendingTool(toolCallId, toolName);
                 break;
             case AgentStreamEvent.ToolCallArgs(var toolCallId, var argsJson):
-                _toolCallIdToArgs[toolCallId] = argsJson;
-                UpdatePendingToolArgs(toolCallId, argsJson);
+                if (IsEditTool(toolCallId))
+                {
+                    RememberEditPath(toolCallId, argsJson);
+                }
+                else
+                {
+                    _toolCallIdToArgs[toolCallId] = argsJson;
+                    UpdatePendingToolArgs(toolCallId, argsJson);
+                }
+
                 break;
             case AgentStreamEvent.ToolCallEnd(var toolCallId):
                 PromotePendingToolToRunning(toolCallId);
@@ -151,10 +159,54 @@ public sealed class SessionTurnActivityTracker
         if (_toolCallIdToArgs.TryGetValue(toolCallId, out var bufferedArgs)
             && !string.IsNullOrWhiteSpace(bufferedArgs))
         {
-            pending.ToolArgumentsText = FormatArgsForDisplay(bufferedArgs, toolName);
+            if (TurnActivitySummaryBuilder.EditTools.Contains(toolName))
+            {
+                RememberEditPath(toolCallId, bufferedArgs);
+                if (_toolCallIdToArgs.TryGetValue(toolCallId, out var pathSummary))
+                {
+                    pending.ToolArgumentsText = pathSummary;
+                }
+            }
+            else
+            {
+                pending.ToolArgumentsText = FormatArgsForDisplay(bufferedArgs, toolName);
+            }
         }
 
         _turnMessages.Add(pending);
+    }
+
+    private bool IsEditTool(string toolCallId)
+    {
+        _toolCallIdToName.TryGetValue(toolCallId, out var toolName);
+        return TurnActivitySummaryBuilder.EditTools.Contains(toolName ?? string.Empty);
+    }
+
+    /// <summary>In-flight edits keep the path only. The argument body never reaches the activity row.</summary>
+    private void RememberEditPath(string toolCallId, string argsJson)
+    {
+        _toolCallIdToName.TryGetValue(toolCallId, out var toolName);
+        if (!ToolCallStreamingJsonHelper.TryExtractEditDisplayPath(argsJson, toolName, out var path)
+            && ModifiedFilePathExtractor.ExtractPathFromArguments(argsJson) is { Length: > 0 } extracted)
+        {
+            path = extracted;
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        var summary = $"{ToolPathNormalizer.PathArgumentName} = {path}";
+        _toolCallIdToArgs[toolCallId] = summary;
+        var pending = FindToolMessage(toolCallId);
+        if (pending is null
+            || pending.ToolCallStatus is not (ToolCallDisplayStatus.Preparing or ToolCallDisplayStatus.Running))
+        {
+            return;
+        }
+
+        pending.ToolArgumentsText = summary;
     }
 
     private void UpdatePendingToolArgs(string toolCallId, string argsJson)

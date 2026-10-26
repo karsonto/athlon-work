@@ -88,7 +88,7 @@ public sealed partial class SessionTurnUiController
         _dispatcher = dispatcher;
         _tokenBuffer = new StreamingTokenBuffer(dispatcher, _streaming);
         _tokenBuffer.FlushTimerTick += (_, _) =>
-            FlushStreamingTokens();
+            FlushBufferedStreamingToUi();
         RequestScroll = requestScroll ?? NoOpScroll;
         RequestScrollImmediate = requestScrollImmediate ?? requestScroll ?? NoOpScroll;
         Messages = new ObservableCollection<ChatMessageViewModel>();
@@ -463,12 +463,21 @@ public sealed partial class SessionTurnUiController
                     return Task.CompletedTask;
                 case AgentStreamEvent.ToolCallOutput output:
                     return RunOnUiAsync(() => AcceptCommandOutput(output));
+                case AgentStreamEvent.ToolCallArgs(var toolCallId, var argsJson):
+                    _tokenBuffer.RememberToolArgs(toolCallId, argsJson);
+                    if (IsDisplayed)
+                    {
+                        _tokenBuffer.ScheduleFlush(true);
+                    }
+
+                    return Task.CompletedTask;
                 default:
                     if (!IsDisplayed)
                     {
                         _tokenBuffer.EnqueueEvent(streamEvent);
                         RunOnUiSync(() =>
                         {
+                            FlushPendingToolArgsToUi();
                             _modifiedFilesTracker.Process(streamEvent);
                             TryAppendActivitySourceFromStreamEvent(streamEvent);
                         });
