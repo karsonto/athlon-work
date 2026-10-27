@@ -350,8 +350,26 @@ public partial class BrowserWorkspaceView : UserControl
                 BrowserWebView.CoreWebView2.GoForward();
                 break;
             case BrowserChromeAction.Reload:
-                BrowserWebView.CoreWebView2.Reload();
+                _ = ReloadAsync();
                 break;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (BrowserWebView.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await BrowserDocumentLoad.ReloadAsync(BrowserWebView.CoreWebView2, CancellationToken.None)
+                .ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Browser reload failed: {ex.Message}");
         }
     }
 
@@ -362,9 +380,20 @@ public partial class BrowserWorkspaceView : UserControl
             return;
         }
 
+        _ = NavigateToAsync(url);
+    }
+
+    private async Task NavigateToAsync(string url)
+    {
+        if (BrowserWebView.CoreWebView2 is null)
+        {
+            return;
+        }
+
         try
         {
-            BrowserWebView.CoreWebView2.Navigate(url);
+            await BrowserDocumentLoad.NavigateAsync(BrowserWebView.CoreWebView2, url, CancellationToken.None)
+                .ConfigureAwait(true);
         }
         catch (Exception ex)
         {

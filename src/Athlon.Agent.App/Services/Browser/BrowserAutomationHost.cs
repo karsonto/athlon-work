@@ -71,7 +71,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
                     }
                     break;
                 case BrowserNavigateAction.Reload:
-                    webView.Reload();
+                    await BrowserDocumentLoad.ReloadAsync(webView, cancellationToken).ConfigureAwait(true);
                     break;
                 default:
                 {
@@ -83,7 +83,8 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
 
                     tab.AddressText = normalized;
                     tab.CurrentUrl = normalized;
-                    webView.Navigate(normalized);
+                    await BrowserDocumentLoad.NavigateAsync(webView, normalized, cancellationToken)
+                        .ConfigureAwait(true);
                     break;
                 }
             }
@@ -143,6 +144,9 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
             // Activate the Browser tab so ContentControl mounts WebView2 and registers it.
             var tab = EnsureBrowserTabCore();
             var webView = await WaitForWebViewAsync(tab.Id, cancellationToken).ConfigureAwait(true);
+            // A file navigation can still be committing. Reading before NavigationCompleted
+            // walks the previous document while the control is about to paint the new one.
+            await WaitForLoadingToFinishAsync(tab, cancellationToken).ConfigureAwait(true);
             await EnsureAriaHostInjectedAsync(webView).ConfigureAwait(true);
 
             var argsLiteral = string.IsNullOrWhiteSpace(argsJson) ? "{}" : argsJson.Trim();
@@ -162,8 +166,11 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
                 "}catch(e){return JSON.stringify({ok:false,error:String(e&&e.message||e)});} " +
                 "})()";
 
-            // ExecuteScriptAsync does not await Promises (returns "{}"); use CDP instead.
-            var raw = await EvaluateScriptAwaitingPromiseAsync(webView, script).ConfigureAwait(true);
+            // Run in the document currently painted. CDP Runtime.evaluate stays on a
+            // previous file:// execution context after Runtime.enable, so it can return
+            // the cached document while the WebView is already showing the new file.
+            var raw = await EvaluateScriptAwaitingPromiseAsync(webView, script, cancellationToken)
+                .ConfigureAwait(true);
             return UnwrapExecuteScriptJson(raw);
         }, cancellationToken);
 
@@ -348,12 +355,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
             await Dispatcher.Yield(DispatcherPriority.Loaded);
         }
 
-        var deadline = DateTime.UtcNow.AddSeconds(15);
-        while (tab.IsLoading && DateTime.UtcNow < deadline)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await Task.Delay(50, cancellationToken).ConfigureAwait(true);
-        }
+        await WaitForLoadingToFinishAsync(tab, cancellationToken).ConfigureAwait(true);
 
         try
         {
@@ -373,7 +375,8 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
                       });
                       return true;
                     })()
-                    """)
+                    """,
+                    cancellationToken)
                 .ConfigureAwait(true);
         }
         catch
@@ -577,55 +580,107 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         }
     }
 
-    /// <summary>
-    /// WebView2 ExecuteScriptAsync does not await Promises (serializes them as "{}").
-    /// Use CDP Runtime.evaluate with awaitPromise=true instead.
-    /// </summary>
-    private static async Task<string> EvaluateScriptAwaitingPromiseAsync(CoreWebView2 webView, string expression)
+    private static async Task WaitForLoadingToFinishAsync(
+        BrowserWorkspaceTabViewModel tab,
+        CancellationToken cancellationToken)
     {
-        var requestJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+        var deadline = DateTime.UtcNow.AddSeconds(BrowserDocumentLoad.NavigationTimeoutSeconds);
+        while (tab.IsLoading && DateTime.UtcNow < deadline)
         {
-            ["expression"] = expression,
-            ["awaitPromise"] = true,
-            ["returnByValue"] = true
-        });
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Delay(50, cancellationToken).ConfigureAwait(true);
+        }
+    }
 
-        var responseJson = await webView
-            .CallDevToolsProtocolMethodAsync("Runtime.evaluate", requestJson)
-            .ConfigureAwait(true);
+    /// <summary>
+    /// Runs <paramref name="expression"/> in the top-level document the WebView is painting,
+    /// and waits for a returned Promise.
+    /// <see cref="CoreWebView2.ExecuteScriptAsync"/> targets that document but serializes a
+    /// Promise as "{}". CDP <c>Runtime.evaluate</c> can await the Promise, but after
+    /// <c>Runtime.enable</c> it may stay bound to a cached file:// context.
+    /// </summary>
+    private static async Task<string> EvaluateScriptAwaitingPromiseAsync(
+        CoreWebView2 webView,
+        string expression,
+        CancellationToken cancellationToken)
+    {
+        var key = "__athlonEval" + Guid.NewGuid().ToString("N");
+        var starter =
+            "(function(){" +
+            $"var key='{key}';" +
+            "window[key]=null;" +
+            "Promise.resolve().then(function(){return (" + expression + ");}).then(function(value){" +
+            "window[key]=(typeof value==='string')?value:(JSON.stringify(value) ?? 'null');" +
+            "},function(error){" +
+            "window[key]=JSON.stringify({ok:false,error:String(error&&error.message||error)});" +
+            "});" +
+            "return 0;})()";
+        var probe =
+            "(function(){" +
+            $"var value=window['{key}'];" +
+            "if(value==null)return '';" +
+            "return value;" +
+            "})()";
 
-        using var doc = JsonDocument.Parse(responseJson);
-        var root = doc.RootElement;
-
-        if (root.TryGetProperty("exceptionDetails", out var exceptionDetails))
+        try
         {
-            var text = exceptionDetails.TryGetProperty("text", out var textEl)
-                ? textEl.GetString()
-                : null;
-            var description = exceptionDetails.TryGetProperty("exception", out var exEl)
-                && exEl.TryGetProperty("description", out var descEl)
-                    ? descEl.GetString()
-                    : null;
-            var message = !string.IsNullOrWhiteSpace(description)
-                ? description
-                : (text ?? "JavaScript evaluation failed");
-            return JsonElementFormatter.SerializeForDisplay(new { ok = false, error = message });
+            await webView.ExecuteScriptAsync(starter).ConfigureAwait(true);
+            var deadline = DateTime.UtcNow.AddSeconds(40);
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var raw = await webView.ExecuteScriptAsync(probe).ConfigureAwait(true);
+                if (TryReadCompletedEval(raw, out var value))
+                {
+                    return value;
+                }
+
+                if (DateTime.UtcNow >= deadline)
+                {
+                    return """{"ok":false,"error":"Timed out waiting for the page script result"}""";
+                }
+
+                await Task.Delay(50, cancellationToken).ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            try
+            {
+                await webView.ExecuteScriptAsync(
+                        "(function(){try{delete window['" + key + "'];}catch(e){}})()")
+                    .ConfigureAwait(true);
+            }
+            catch
+            {
+                // The document may have navigated away before cleanup.
+            }
+        }
+    }
+
+    private static bool TryReadCompletedEval(string raw, out string value)
+    {
+        value = string.Empty;
+        if (string.IsNullOrWhiteSpace(raw) || raw is "null" or "\"\"")
+        {
+            return false;
         }
 
-        if (!root.TryGetProperty("result", out var result)
-            || !result.TryGetProperty("value", out var value))
+        try
         {
-            return """{"ok":false,"error":"Empty CDP evaluate result"}""";
-        }
+            using var doc = JsonDocument.Parse(raw);
+            if (doc.RootElement.ValueKind != JsonValueKind.String)
+            {
+                return false;
+            }
 
-        return value.ValueKind switch
+            value = doc.RootElement.GetString() ?? string.Empty;
+            return value.Length > 0;
+        }
+        catch (JsonException)
         {
-            JsonValueKind.String => value.GetString() ?? """{"ok":false,"error":"Empty script result"}""",
-            JsonValueKind.Object or JsonValueKind.Array => JsonElementFormatter.FormatForDisplay(value, indented: true),
-            JsonValueKind.Null or JsonValueKind.Undefined =>
-                """{"ok":false,"error":"Empty script result"}""",
-            _ => JsonElementFormatter.FormatForDisplay(value, indented: true)
-        };
+            return false;
+        }
     }
 
     internal static string? TryLoadAriaHostScript()
