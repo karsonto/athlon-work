@@ -72,6 +72,12 @@ public sealed class KnowledgeGraphSettings
     /// <summary>How many chunks are sent in one extraction request.</summary>
     public int BatchSize { get; set; } = 4;
 
+    /// <summary>How many entities a search may place in the graph context.</summary>
+    public int MaxEntities { get; set; } = 8;
+
+    /// <summary>How many direct relations a search may place in the graph context.</summary>
+    public int MaxRelations { get; set; } = 10;
+
     public IReadOnlyList<string> NormalizedEntityTypes()
     {
         var types = (EntityTypes ?? [])

@@ -115,11 +115,11 @@ public sealed class KnowledgeStoreTests
         await sessionKnowledgeState.SaveAsync("session-1", new SessionKnowledgeSnapshot(true, new HashSet<string> { moduleA.Id }));
 
         var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), sessionKnowledgeState, settings);
-        var hits = await service.SearchAsync("session-1", "query");
+        var result = await service.SearchAsync("session-1", "query");
 
-        Assert.Single(hits);
-        Assert.Equal("?? A", hits[0].ModuleName);
-        Assert.Equal("a.md", hits[0].FileName);
+        Assert.Single(result.Hits);
+        Assert.Equal("?? A", result.Hits[0].ModuleName);
+        Assert.Equal("a.md", result.Hits[0].FileName);
     }
 
     [Fact]
@@ -141,13 +141,13 @@ public sealed class KnowledgeStoreTests
         ]);
 
         var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), RouterTestDependencies.CreateSessionKnowledgeState(), settings);
-        var hits = await service.SearchInScopeAsync(
+        var result = await service.SearchInScopeAsync(
             "query",
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { module.Id },
             docB.Id);
 
-        Assert.Single(hits);
-        Assert.Equal("b.md", hits[0].FileName);
+        Assert.Single(result.Hits);
+        Assert.Equal("b.md", result.Hits[0].FileName);
     }
 
     [Fact]
@@ -349,7 +349,7 @@ public sealed class KnowledgeStoreTests
     }
 
     [Fact]
-    public async Task KnowledgeSearchService_MergesVectorHitsWithOneHopGraphChunks()
+    public async Task KnowledgeSearchService_ReturnsGraphContextBesideVectorHits()
     {
         var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-graph-search-" + Guid.NewGuid().ToString("N"));
         var paths = new TestPathProvider(root);
@@ -364,12 +364,13 @@ public sealed class KnowledgeStoreTests
                 FileName = "notes.md",
                 FileType = ".md",
                 Status = KnowledgeDocumentStatus.Indexed,
-                ChunkCount = 3
+                ChunkCount = 4
             },
             [
                 new KnowledgeChunk { Id = "policy", ModuleId = module.Id, ChunkIndex = 0, Content = "policy", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [1, 0] },
                 new KnowledgeChunk { Id = "alice", ModuleId = module.Id, ChunkIndex = 1, Content = "alice bio", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [0, 1] },
-                new KnowledgeChunk { Id = "bob", ModuleId = module.Id, ChunkIndex = 2, Content = "bob bio", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [0, 1] }
+                new KnowledgeChunk { Id = "bob", ModuleId = module.Id, ChunkIndex = 2, Content = "bob bio", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [0, 1] },
+                new KnowledgeChunk { Id = "carol", ModuleId = module.Id, ChunkIndex = 3, Content = "carol bio", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [0, 1] }
             ],
             graph: new DocumentGraphCommit
             {
@@ -377,10 +378,22 @@ public sealed class KnowledgeStoreTests
                 Entities =
                 [
                     Entity("Alice", "person", "A founder", [0, 1], "alice"),
-                    Entity("Bob", "person", "A partner", [0, 1], "bob")
+                    Entity("Bob", "person", "A partner", [0, 1], "bob"),
+                    Entity("Carol", "person", "A colleague", [0, 1], "carol")
                 ],
                 Relations =
                 [
+                    new GraphRelationDraft
+                    {
+                        SourceNormalizedName = "alice",
+                        SourceType = "person",
+                        TargetNormalizedName = "carol",
+                        TargetType = "person",
+                        Description = "employs",
+                        Weight = 2,
+                        Evidence = "staff",
+                        ChunkId = "carol"
+                    },
                     new GraphRelationDraft
                     {
                         SourceNormalizedName = "alice",
@@ -396,15 +409,117 @@ public sealed class KnowledgeStoreTests
             });
 
         var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), RouterTestDependencies.CreateSessionKnowledgeState(), settings);
-        var hits = await service.SearchInScopeAsync(
+        var result = await service.SearchInScopeAsync(
             "Tell me about Alice",
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { module.Id });
 
-        Assert.Equal(3, hits.Count);
-        Assert.Equal("policy", hits[0].Content);
-        Assert.Contains(hits, hit => hit.Content == "alice bio" && hit.RelationSummary.Contains("Alice —knows→ Bob", StringComparison.Ordinal));
-        Assert.Contains(hits, hit => hit.Content == "bob bio");
-        Assert.All(hits.Skip(1), hit => Assert.True(hit.Score >= 0.25));
+        Assert.Single(result.Hits);
+        Assert.Equal("policy", result.Hits[0].Content);
+        Assert.DoesNotContain(result.Hits, hit => hit.Content is "alice bio" or "bob bio" or "carol bio");
+        var entity = Assert.Single(result.Graph.Entities);
+        Assert.Equal("Alice", entity.Name);
+        Assert.Equal("A founder", entity.Description);
+        Assert.Equal(2, result.Graph.Relations.Count);
+        Assert.Equal("Bob", result.Graph.Relations[0].TargetName);
+        Assert.Equal("knows", result.Graph.Relations[0].Description);
+        Assert.Equal(6, result.Graph.Relations[0].Weight);
+        Assert.Equal("alice bio", result.Graph.Relations[0].Evidence);
+        Assert.Equal("Carol", result.Graph.Relations[1].TargetName);
+        Assert.Equal(2, result.Graph.Relations[1].Weight);
+        Assert.Equal("carol bio", result.Graph.Relations[1].Evidence);
+    }
+
+    [Fact]
+    public async Task KnowledgeSearchService_LimitsGraphContextToTheSelectedDocument()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-graph-document-" + Guid.NewGuid().ToString("N"));
+        var paths = new TestPathProvider(root);
+        var settings = new AppSettings();
+        settings.Knowledge.Search.MinScore = 0.25;
+        var store = new SqliteKnowledgeStore(paths, settings);
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "space" });
+        var docA = new KnowledgeDocument
+        {
+            ModuleId = module.Id,
+            FileName = "a.md",
+            FileType = ".md",
+            Status = KnowledgeDocumentStatus.Indexed,
+            ChunkCount = 1
+        };
+        await store.CommitIndexedDocumentAsync(
+            docA,
+            [new KnowledgeChunk { Id = "alice-a", ModuleId = module.Id, ChunkIndex = 0, Content = "doc one", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [1, 0] }],
+            graph: new DocumentGraphCommit
+            {
+                Status = KnowledgeGraphStatus.Indexed,
+                Entities =
+                [
+                    Entity("Alice", "person", "From A", [0, 1], "alice-a"),
+                    Entity("Bob", "person", "A partner", [0, 1], "alice-a")
+                ],
+                Relations =
+                [
+                    new GraphRelationDraft
+                    {
+                        SourceNormalizedName = "alice",
+                        SourceType = "person",
+                        TargetNormalizedName = "bob",
+                        TargetType = "person",
+                        Description = "knows",
+                        Weight = 9,
+                        Evidence = "friends",
+                        ChunkId = "alice-a"
+                    }
+                ]
+            });
+        var docB = new KnowledgeDocument
+        {
+            ModuleId = module.Id,
+            FileName = "b.md",
+            FileType = ".md",
+            Status = KnowledgeDocumentStatus.Indexed,
+            ChunkCount = 1
+        };
+        await store.CommitIndexedDocumentAsync(
+            docB,
+            [new KnowledgeChunk { Id = "alice-b", ModuleId = module.Id, ChunkIndex = 0, Content = "doc two", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [0, 1] }],
+            graph: new DocumentGraphCommit
+            {
+                Status = KnowledgeGraphStatus.Indexed,
+                Entities =
+                [
+                    Entity("Alice", "person", "From B", [0, 1], "alice-b"),
+                    Entity("Dana", "person", "A colleague", [0, 1], "alice-b")
+                ],
+                Relations =
+                [
+                    new GraphRelationDraft
+                    {
+                        SourceNormalizedName = "alice",
+                        SourceType = "person",
+                        TargetNormalizedName = "dana",
+                        TargetType = "person",
+                        Description = "meets",
+                        Weight = 3,
+                        Evidence = "met",
+                        ChunkId = "alice-b"
+                    }
+                ]
+            });
+
+        var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), RouterTestDependencies.CreateSessionKnowledgeState(), settings);
+        var result = await service.SearchInScopeAsync(
+            "Alice",
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { module.Id },
+            docB.Id);
+
+        Assert.Empty(result.Hits);
+        Assert.Equal("Alice", Assert.Single(result.Graph.Entities).Name);
+        var relation = Assert.Single(result.Graph.Relations);
+        Assert.Equal("Dana", relation.TargetName);
+        Assert.Equal("meets", relation.Description);
+        Assert.Equal("doc two", relation.Evidence);
+        Assert.Equal("b.md", relation.FileName);
     }
 
     [Fact]

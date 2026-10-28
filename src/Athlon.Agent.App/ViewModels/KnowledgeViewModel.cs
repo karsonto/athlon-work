@@ -530,11 +530,11 @@ public sealed partial class KnowledgeViewModel : ObservableObject, IDisposable
 
         var documentId = _activeSearchDocumentId;
         var scopeText = ResolveSearchScopeText(moduleId, documentId);
-        var hits = await _searchService.SearchInScopeAsync(
+        var result = await _searchService.SearchInScopeAsync(
             SearchQuery,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { moduleId },
             documentId);
-        if (hits.Count == 0)
+        if (result.Hits.Count == 0 && result.Graph.IsEmpty)
         {
             SearchResults = _loc.Format("Knowledge_NoSearchHits", scopeText);
             return;
@@ -543,19 +543,55 @@ public sealed partial class KnowledgeViewModel : ObservableObject, IDisposable
         var builder = new StringBuilder();
         builder.AppendLine(_loc.Format("Knowledge_SearchScopeLine", scopeText));
         builder.AppendLine();
-        foreach (var hit in hits)
+        foreach (var hit in result.Hits)
         {
             builder.AppendLine($"score={hit.Score:0.000} | {hit.ModuleName} / {hit.FileName} / {hit.TitlePath}");
-            if (!string.IsNullOrWhiteSpace(hit.RelationSummary))
-            {
-                builder.AppendLine(hit.RelationSummary.Trim());
-            }
-
             builder.AppendLine(hit.Content.Trim());
             builder.AppendLine();
         }
 
+        AppendGraphSearch(builder, result.Graph);
         SearchResults = builder.ToString().TrimEnd();
+    }
+
+    private void AppendGraphSearch(StringBuilder builder, KnowledgeGraphSearchBlock graph)
+    {
+        if (graph.IsEmpty)
+        {
+            return;
+        }
+
+        builder.AppendLine(_loc["Knowledge_SearchGraphSection"]);
+        builder.AppendLine(_loc["Knowledge_SearchGraphEntities"]);
+        foreach (var entity in graph.Entities)
+        {
+            builder.Append("- ").Append(entity.Name);
+            if (!string.IsNullOrWhiteSpace(entity.EntityType))
+            {
+                builder.Append(" (").Append(entity.EntityType.Trim()).Append(')');
+            }
+
+            if (!string.IsNullOrWhiteSpace(entity.Description))
+            {
+                builder.Append(": ").Append(entity.Description.Trim());
+            }
+
+            builder.AppendLine();
+        }
+
+        builder.AppendLine(_loc["Knowledge_SearchGraphRelations"]);
+        foreach (var relation in graph.Relations)
+        {
+            var predicate = string.IsNullOrWhiteSpace(relation.Description) ? "相关" : relation.Description.Trim();
+            builder.AppendLine($"- {relation.SourceName} —{predicate}→ {relation.TargetName} (weight {relation.Weight})");
+            builder.AppendLine($"{relation.ModuleName} / {relation.FileName} / {relation.TitlePath}");
+            if (!string.IsNullOrWhiteSpace(relation.Evidence))
+            {
+                builder.AppendLine(relation.Evidence.Trim());
+            }
+
+            builder.AppendLine();
+        }
     }
 
     partial void OnSelectedModuleChanged(KnowledgeModuleItemViewModel? value)

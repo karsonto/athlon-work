@@ -96,13 +96,13 @@ public interface IKnowledgeGraphExtractor
 
 public interface IKnowledgeSearchService
 {
-    Task<IReadOnlyList<KnowledgeSearchHit>> SearchAsync(
+    Task<KnowledgeSearchResult> SearchAsync(
         string sessionId,
         string query,
         int? topK = null,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<KnowledgeSearchHit>> SearchInScopeAsync(
+    Task<KnowledgeSearchResult> SearchInScopeAsync(
         string query,
         IReadOnlySet<string> moduleIds,
         string? documentId = null,

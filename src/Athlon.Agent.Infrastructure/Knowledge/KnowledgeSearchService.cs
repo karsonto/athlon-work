@@ -9,7 +9,7 @@ public sealed class KnowledgeSearchService(
     ISessionKnowledgeState sessionKnowledgeState,
     AppSettings settings) : IKnowledgeSearchService
 {
-    public async Task<IReadOnlyList<KnowledgeSearchHit>> SearchAsync(
+    public async Task<KnowledgeSearchResult> SearchAsync(
         string sessionId,
         string query,
         int? topK = null,
@@ -17,19 +17,19 @@ public sealed class KnowledgeSearchService(
     {
         if (string.IsNullOrWhiteSpace(query) || string.IsNullOrWhiteSpace(sessionId))
         {
-            return Array.Empty<KnowledgeSearchHit>();
+            return KnowledgeSearchResult.Empty;
         }
 
         var selectedModules = await sessionKnowledgeState.GetModuleIdsAsync(sessionId, cancellationToken).ConfigureAwait(false);
         if (selectedModules.Count == 0)
         {
-            return Array.Empty<KnowledgeSearchHit>();
+            return KnowledgeSearchResult.Empty;
         }
 
         return await SearchInScopeAsync(query, selectedModules, documentId: null, topK, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<KnowledgeSearchHit>> SearchInScopeAsync(
+    public async Task<KnowledgeSearchResult> SearchInScopeAsync(
         string query,
         IReadOnlySet<string> moduleIds,
         string? documentId = null,
@@ -38,13 +38,13 @@ public sealed class KnowledgeSearchService(
     {
         if (string.IsNullOrWhiteSpace(query) || moduleIds.Count == 0)
         {
-            return Array.Empty<KnowledgeSearchHit>();
+            return KnowledgeSearchResult.Empty;
         }
 
         var queryVector = (await embeddingClient.EmbedAsync([query], cancellationToken).ConfigureAwait(false)).FirstOrDefault()?.Vector;
         if (queryVector is null || queryVector.Length == 0)
         {
-            return Array.Empty<KnowledgeSearchHit>();
+            return KnowledgeSearchResult.Empty;
         }
 
         var chunks = await store.ListSearchableChunksAsync(moduleIds, cancellationToken).ConfigureAwait(false);
@@ -57,7 +57,7 @@ public sealed class KnowledgeSearchService(
 
         if (chunks.Count == 0)
         {
-            return Array.Empty<KnowledgeSearchHit>();
+            return KnowledgeSearchResult.Empty;
         }
 
         var modules = (await store.ListModulesAsync(cancellationToken).ConfigureAwait(false))
@@ -68,25 +68,9 @@ public sealed class KnowledgeSearchService(
         var limit = Math.Clamp(topK ?? settings.Knowledge.Search.TopK, 1, 50);
         var minScore = settings.Knowledge.Search.MinScore;
         var maxContentChars = Math.Max(200, settings.Knowledge.Search.MaxContentCharsPerHit);
-        var vectorScores = chunks.ToDictionary(
-            chunk => chunk.Id,
-            chunk => CosineSimilarity(queryVector, chunk.Embedding),
-            StringComparer.OrdinalIgnoreCase);
-        var graphScores = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-        var relationLines = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        await ApplyGraphScoresAsync(query, queryVector, moduleIds, minScore, vectorScores, graphScores, relationLines, cancellationToken)
-            .ConfigureAwait(false);
-
-        return chunks
-            .Select(chunk =>
-            {
-                var vectorScore = vectorScores[chunk.Id];
-                graphScores.TryGetValue(chunk.Id, out var graphScore);
-                var vectorHit = vectorScore >= minScore;
-                var score = vectorHit ? Math.Max(vectorScore, graphScore) : graphScore;
-                return new { Chunk = chunk, Score = score, Keep = vectorHit || graphScore >= minScore };
-            })
-            .Where(item => item.Keep)
+        var hits = chunks
+            .Select(chunk => new { Chunk = chunk, Score = CosineSimilarity(queryVector, chunk.Embedding) })
+            .Where(item => item.Score >= minScore)
             .OrderByDescending(item => item.Score)
             .ThenBy(item => item.Chunk.ChunkIndex)
             .ThenBy(item => item.Chunk.Id, StringComparer.Ordinal)
@@ -95,10 +79,6 @@ public sealed class KnowledgeSearchService(
             {
                 documents.TryGetValue(item.Chunk.DocumentId, out var document);
                 modules.TryGetValue(item.Chunk.ModuleId, out var module);
-                var content = item.Chunk.Content.Length <= maxContentChars
-                    ? item.Chunk.Content
-                    : item.Chunk.Content[..maxContentChars] + "\n... (truncated)";
-                relationLines.TryGetValue(item.Chunk.Id, out var lines);
                 return new KnowledgeSearchHit(
                     item.Chunk.Id,
                     item.Chunk.DocumentId,
@@ -108,174 +88,209 @@ public sealed class KnowledgeSearchService(
                     item.Chunk.TitlePath,
                     item.Chunk.PageNumber,
                     item.Score,
-                    content,
-                    lines is null ? "" : string.Join("\n", lines));
+                    Truncate(item.Chunk.Content, maxContentChars));
             })
             .ToArray();
+        var graph = await BuildGraphContextAsync(
+                query,
+                queryVector,
+                moduleIds,
+                documentId,
+                minScore,
+                maxContentChars,
+                chunks,
+                modules,
+                documents,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return new KnowledgeSearchResult(hits, graph);
     }
 
-    private async Task ApplyGraphScoresAsync(
+    private async Task<KnowledgeGraphSearchBlock> BuildGraphContextAsync(
         string query,
         float[] queryVector,
         IReadOnlySet<string> moduleIds,
+        string? documentId,
         double minScore,
-        Dictionary<string, double> vectorScores,
-        Dictionary<string, double> graphScores,
-        Dictionary<string, List<string>> relationLines,
+        int maxContentChars,
+        IReadOnlyList<KnowledgeChunk> chunks,
+        IReadOnlyDictionary<string, KnowledgeModule> modules,
+        IReadOnlyDictionary<string, KnowledgeDocument> documents,
         CancellationToken cancellationToken)
     {
         var entities = await store.ListEntitiesAsync(moduleIds, cancellationToken).ConfigureAwait(false);
         if (entities.Count == 0)
         {
-            return;
+            return KnowledgeGraphSearchBlock.Empty;
         }
 
-        var seeds = new List<(KnowledgeEntity Entity, double Score)>();
+        var relations = await store.ListRelationsAsync(moduleIds, cancellationToken).ConfigureAwait(false);
+        var candidates = entities;
+        if (!string.IsNullOrWhiteSpace(documentId))
+        {
+            var mentions = await store.ListMentionsAsync(moduleIds, cancellationToken).ConfigureAwait(false);
+            relations = relations
+                .Where(relation => string.Equals(relation.DocumentId, documentId, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var mention in mentions)
+            {
+                if (string.Equals(mention.DocumentId, documentId, StringComparison.OrdinalIgnoreCase))
+                {
+                    allowed.Add(mention.EntityId);
+                }
+            }
+
+            foreach (var relation in relations)
+            {
+                allowed.Add(relation.SourceEntityId);
+                allowed.Add(relation.TargetEntityId);
+            }
+
+            candidates = entities
+                .Where(entity => allowed.Contains(entity.Id))
+                .ToArray();
+        }
+
+        var graphSettings = settings.Knowledge.Graph ?? new KnowledgeGraphSettings();
+        var maxEntities = Math.Clamp(graphSettings.MaxEntities, 1, 50);
+        var maxRelations = Math.Clamp(graphSettings.MaxRelations, 1, 50);
+        var selected = SelectEntities(candidates, query, queryVector, minScore, maxEntities);
+        if (selected.Count == 0)
+        {
+            return KnowledgeGraphSearchBlock.Empty;
+        }
+
+        var selectedIds = selected.Select(entity => entity.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var entityById = entities.ToDictionary(entity => entity.Id, StringComparer.OrdinalIgnoreCase);
+        var chunksById = chunks.ToDictionary(chunk => chunk.Id, StringComparer.OrdinalIgnoreCase);
+        var graphRelations = relations
+            .Where(relation => selectedIds.Contains(relation.SourceEntityId) || selectedIds.Contains(relation.TargetEntityId))
+            .OrderByDescending(relation => relation.Weight)
+            .ThenBy(relation => relation.Description, StringComparer.Ordinal)
+            .ThenBy(relation => relation.Id, StringComparer.Ordinal)
+            .Take(maxRelations)
+            .Select(relation => ToGraphRelation(relation, entityById, chunksById, modules, documents, maxContentChars))
+            .Where(relation => relation is not null)
+            .Cast<KnowledgeGraphSearchRelation>()
+            .ToArray();
+        var graphEntities = selected
+            .Select(entity => new KnowledgeGraphSearchEntity(entity.Name, entity.EntityType, entity.Description))
+            .ToArray();
+        return new KnowledgeGraphSearchBlock(graphEntities, graphRelations);
+    }
+
+    private static List<KnowledgeEntity> SelectEntities(
+        IReadOnlyList<KnowledgeEntity> entities,
+        string query,
+        float[] queryVector,
+        double minScore,
+        int maxEntities)
+    {
+        var named = new List<(KnowledgeEntity Entity, double Score)>();
+        var similar = new List<(KnowledgeEntity Entity, double Score)>();
         foreach (var entity in entities)
         {
             var score = CosineSimilarity(queryVector, entity.Embedding);
             if (QueryMentionsEntity(query, entity.Name))
             {
-                score = Math.Max(score, 1);
+                named.Add((entity, score));
             }
-
-            if (score >= minScore)
+            else if (score >= minScore)
             {
-                seeds.Add((entity, score));
+                similar.Add((entity, score));
             }
         }
 
-        if (seeds.Count == 0)
+        named.Sort(CompareEntityRank);
+        similar.Sort(CompareEntityRank);
+        var selected = new List<KnowledgeEntity>(Math.Min(maxEntities, named.Count + similar.Count));
+        foreach (var item in named)
         {
-            return;
+            if (selected.Count >= maxEntities)
+            {
+                break;
+            }
+
+            selected.Add(item.Entity);
         }
 
-        seeds = seeds
-            .OrderByDescending(seed => seed.Score)
-            .Take(MaxSeedEntities)
-            .ToList();
-        var seedIds = seeds.Select(seed => seed.Entity.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var seedScores = seeds.ToDictionary(seed => seed.Entity.Id, seed => seed.Score, StringComparer.OrdinalIgnoreCase);
-        var entityNames = entities.ToDictionary(entity => entity.Id, entity => entity.Name, StringComparer.OrdinalIgnoreCase);
-        var relations = await store.ListRelationsAsync(moduleIds, cancellationToken).ConfigureAwait(false);
-        var mentions = await store.ListMentionsAsync(moduleIds, cancellationToken).ConfigureAwait(false);
-        var chunksByEntity = mentions
-            .GroupBy(mention => mention.EntityId, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.Select(mention => mention.ChunkId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
-                StringComparer.OrdinalIgnoreCase);
-
-        void Boost(string? chunkId, double score)
+        foreach (var item in similar)
         {
-            if (string.IsNullOrWhiteSpace(chunkId) || !vectorScores.ContainsKey(chunkId))
+            if (selected.Count >= maxEntities)
             {
-                return;
+                break;
             }
 
-            var decayed = score * GraphHopDecay;
-            if (!graphScores.TryGetValue(chunkId, out var existing) || decayed > existing)
-            {
-                graphScores[chunkId] = decayed;
-            }
+            selected.Add(item.Entity);
         }
 
-        foreach (var seed in seeds)
-        {
-            if (chunksByEntity.TryGetValue(seed.Entity.Id, out var ownChunks))
-            {
-                foreach (var chunkId in ownChunks)
-                {
-                    Boost(chunkId, seed.Score);
-                }
-            }
-        }
-
-        foreach (var relation in relations)
-        {
-            var sourceIsSeed = seedIds.Contains(relation.SourceEntityId);
-            var targetIsSeed = seedIds.Contains(relation.TargetEntityId);
-            if (!sourceIsSeed && !targetIsSeed)
-            {
-                continue;
-            }
-
-            var score = 0d;
-            if (sourceIsSeed)
-            {
-                score = Math.Max(score, seedScores[relation.SourceEntityId]);
-            }
-
-            if (targetIsSeed)
-            {
-                score = Math.Max(score, seedScores[relation.TargetEntityId]);
-            }
-
-            Boost(relation.ChunkId, score);
-            if (sourceIsSeed && chunksByEntity.TryGetValue(relation.TargetEntityId, out var targetChunks))
-            {
-                foreach (var chunkId in targetChunks)
-                {
-                    Boost(chunkId, score);
-                }
-            }
-
-            if (targetIsSeed && chunksByEntity.TryGetValue(relation.SourceEntityId, out var sourceChunks))
-            {
-                foreach (var chunkId in sourceChunks)
-                {
-                    Boost(chunkId, score);
-                }
-            }
-
-            if (!entityNames.TryGetValue(relation.SourceEntityId, out var sourceName)
-                || !entityNames.TryGetValue(relation.TargetEntityId, out var targetName))
-            {
-                continue;
-            }
-
-            var predicate = string.IsNullOrWhiteSpace(relation.Description) ? "相关" : relation.Description.Trim();
-            var line = $"{sourceName} —{predicate}→ {targetName}";
-            void AddLine(string? chunkId)
-            {
-                if (string.IsNullOrWhiteSpace(chunkId))
-                {
-                    return;
-                }
-
-                if (!relationLines.TryGetValue(chunkId, out var lines))
-                {
-                    lines = [];
-                    relationLines[chunkId] = lines;
-                }
-
-                if (lines.Count < 4 && !lines.Contains(line, StringComparer.Ordinal))
-                {
-                    lines.Add(line);
-                }
-            }
-
-            AddLine(relation.ChunkId);
-            if (chunksByEntity.TryGetValue(relation.SourceEntityId, out var mentionedBySource))
-            {
-                foreach (var chunkId in mentionedBySource)
-                {
-                    AddLine(chunkId);
-                }
-            }
-
-            if (chunksByEntity.TryGetValue(relation.TargetEntityId, out var mentionedByTarget))
-            {
-                foreach (var chunkId in mentionedByTarget)
-                {
-                    AddLine(chunkId);
-                }
-            }
-        }
+        return selected;
     }
 
-    private const int MaxSeedEntities = 8;
-    private const double GraphHopDecay = 0.85;
+    private static int CompareEntityRank(
+        (KnowledgeEntity Entity, double Score) left,
+        (KnowledgeEntity Entity, double Score) right)
+    {
+        var byScore = right.Score.CompareTo(left.Score);
+        return byScore != 0
+            ? byScore
+            : string.Compare(left.Entity.Name, right.Entity.Name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static KnowledgeGraphSearchRelation? ToGraphRelation(
+        KnowledgeRelation relation,
+        IReadOnlyDictionary<string, KnowledgeEntity> entityById,
+        IReadOnlyDictionary<string, KnowledgeChunk> chunksById,
+        IReadOnlyDictionary<string, KnowledgeModule> modules,
+        IReadOnlyDictionary<string, KnowledgeDocument> documents,
+        int maxContentChars)
+    {
+        if (!entityById.TryGetValue(relation.SourceEntityId, out var source)
+            || !entityById.TryGetValue(relation.TargetEntityId, out var target))
+        {
+            return null;
+        }
+
+        documents.TryGetValue(relation.DocumentId, out var document);
+        modules.TryGetValue(relation.ModuleId, out var module);
+        var fileName = document?.FileName ?? relation.DocumentId;
+        var titlePath = "";
+        int? pageNumber = null;
+        var evidence = relation.Evidence ?? "";
+        if (!string.IsNullOrWhiteSpace(relation.ChunkId) && chunksById.TryGetValue(relation.ChunkId, out var chunk))
+        {
+            documents.TryGetValue(chunk.DocumentId, out var chunkDocument);
+            modules.TryGetValue(chunk.ModuleId, out var chunkModule);
+            document ??= chunkDocument;
+            module ??= chunkModule;
+            fileName = chunkDocument?.FileName ?? fileName;
+            titlePath = chunk.TitlePath;
+            pageNumber = chunk.PageNumber;
+            evidence = Truncate(chunk.Content, maxContentChars);
+        }
+
+        return new KnowledgeGraphSearchRelation(
+            source.Name,
+            target.Name,
+            relation.Description ?? "",
+            relation.Weight,
+            module?.Name ?? relation.ModuleId,
+            fileName,
+            titlePath,
+            pageNumber,
+            evidence);
+    }
+
+    private static string Truncate(string content, int maxContentChars)
+    {
+        if (string.IsNullOrEmpty(content) || content.Length <= maxContentChars)
+        {
+            return content ?? "";
+        }
+
+        return content[..maxContentChars] + "\n... (truncated)";
+    }
 
     internal static bool QueryMentionsEntity(string query, string name)
     {

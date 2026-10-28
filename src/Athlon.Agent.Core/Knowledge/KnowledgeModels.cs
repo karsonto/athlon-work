@@ -62,8 +62,39 @@ public sealed record KnowledgeSearchHit(
     string TitlePath,
     int? PageNumber,
     double Score,
-    string Content,
-    string RelationSummary = "");
+    string Content);
+
+public sealed record KnowledgeSearchResult(
+    IReadOnlyList<KnowledgeSearchHit> Hits,
+    KnowledgeGraphSearchBlock Graph)
+{
+    public static KnowledgeSearchResult Empty { get; } = new([], KnowledgeGraphSearchBlock.Empty);
+}
+
+public sealed record KnowledgeGraphSearchBlock(
+    IReadOnlyList<KnowledgeGraphSearchEntity> Entities,
+    IReadOnlyList<KnowledgeGraphSearchRelation> Relations)
+{
+    public static KnowledgeGraphSearchBlock Empty { get; } = new([], []);
+
+    public bool IsEmpty => Entities.Count == 0;
+}
+
+public sealed record KnowledgeGraphSearchEntity(
+    string Name,
+    string EntityType,
+    string Description);
+
+public sealed record KnowledgeGraphSearchRelation(
+    string SourceName,
+    string TargetName,
+    string Description,
+    int Weight,
+    string ModuleName,
+    string FileName,
+    string TitlePath,
+    int? PageNumber,
+    string Evidence);
 
 public sealed record KnowledgeModuleSummary(
     KnowledgeModule Module,

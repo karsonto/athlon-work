@@ -954,6 +954,15 @@ Error: {1}</value>
   <data name="Knowledge_SearchScopeLine" xml:space="preserve">
     <value>Scope: {0}</value>
   </data>
+  <data name="Knowledge_SearchGraphSection" xml:space="preserve">
+    <value>Graph</value>
+  </data>
+  <data name="Knowledge_SearchGraphEntities" xml:space="preserve">
+    <value>Entities</value>
+  </data>
+  <data name="Knowledge_SearchGraphRelations" xml:space="preserve">
+    <value>Relations</value>
+  </data>
   <data name="Knowledge_SearchScopeRequired" xml:space="preserve">
     <value>Select a knowledge space or document on the left first.</value>
   </data>

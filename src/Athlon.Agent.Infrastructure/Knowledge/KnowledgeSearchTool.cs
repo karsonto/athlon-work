@@ -41,8 +41,8 @@ public sealed class KnowledgeSearchTool(
 
         try
         {
-            var hits = await searchService.SearchAsync(sessionId, query, topK, cancellationToken).ConfigureAwait(false);
-            if (hits.Count == 0)
+            var result = await searchService.SearchAsync(sessionId, query, topK, cancellationToken).ConfigureAwait(false);
+            if (result.Hits.Count == 0 && result.Graph.IsEmpty)
             {
                 return ToolResult.Success(
                     "No knowledge hits",
@@ -50,21 +50,20 @@ public sealed class KnowledgeSearchTool(
             }
 
             var builder = new StringBuilder();
-            for (var i = 0; i < hits.Count; i++)
+            for (var i = 0; i < result.Hits.Count; i++)
             {
-                var hit = hits[i];
+                var hit = result.Hits[i];
                 builder.AppendLine($"[{i + 1}] score={hit.Score.ToString("0.000", CultureInfo.InvariantCulture)}");
-                builder.AppendLine($"Source: module={hit.ModuleName}; document={hit.FileName}; title={hit.TitlePath}; page={hit.PageNumber?.ToString(CultureInfo.InvariantCulture) ?? "n/a"}");
-                if (!string.IsNullOrWhiteSpace(hit.RelationSummary))
-                {
-                    builder.AppendLine(hit.RelationSummary.Trim());
-                }
-
+                builder.AppendLine(FormatSource(hit.ModuleName, hit.FileName, hit.TitlePath, hit.PageNumber));
                 builder.AppendLine(hit.Content.Trim());
                 builder.AppendLine();
             }
 
-            return ToolResult.Success($"Found {hits.Count} knowledge hits", builder.ToString().TrimEnd());
+            AppendGraph(builder, result.Graph);
+            var summary = result.Hits.Count > 0
+                ? $"Found {result.Hits.Count} knowledge hits"
+                : "Found graph context";
+            return ToolResult.Success(summary, builder.ToString().TrimEnd());
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -72,4 +71,47 @@ public sealed class KnowledgeSearchTool(
             return ToolResult.Failure("Knowledge search failed", exception.Message);
         }
     }
+
+    private static void AppendGraph(StringBuilder builder, KnowledgeGraphSearchBlock graph)
+    {
+        if (graph.IsEmpty)
+        {
+            return;
+        }
+
+        builder.AppendLine("Graph");
+        builder.AppendLine("Entities");
+        foreach (var entity in graph.Entities)
+        {
+            builder.Append("- ").Append(entity.Name);
+            if (!string.IsNullOrWhiteSpace(entity.EntityType))
+            {
+                builder.Append(" (").Append(entity.EntityType.Trim()).Append(')');
+            }
+
+            if (!string.IsNullOrWhiteSpace(entity.Description))
+            {
+                builder.Append(": ").Append(entity.Description.Trim());
+            }
+
+            builder.AppendLine();
+        }
+
+        builder.AppendLine("Relations");
+        foreach (var relation in graph.Relations)
+        {
+            var predicate = string.IsNullOrWhiteSpace(relation.Description) ? "相关" : relation.Description.Trim();
+            builder.AppendLine($"- {relation.SourceName} —{predicate}→ {relation.TargetName} (weight {relation.Weight.ToString(CultureInfo.InvariantCulture)})");
+            builder.AppendLine(FormatSource(relation.ModuleName, relation.FileName, relation.TitlePath, relation.PageNumber));
+            if (!string.IsNullOrWhiteSpace(relation.Evidence))
+            {
+                builder.AppendLine(relation.Evidence.Trim());
+            }
+
+            builder.AppendLine();
+        }
+    }
+
+    private static string FormatSource(string moduleName, string fileName, string titlePath, int? pageNumber) =>
+        $"Source: module={moduleName}; document={fileName}; title={titlePath}; page={pageNumber?.ToString(CultureInfo.InvariantCulture) ?? "n/a"}";
 }

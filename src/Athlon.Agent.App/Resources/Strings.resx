@@ -963,6 +963,15 @@
   <data name="Knowledge_SearchScopeLine" xml:space="preserve">
     <value>检索范围：{0}</value>
   </data>
+  <data name="Knowledge_SearchGraphSection" xml:space="preserve">
+    <value>图谱</value>
+  </data>
+  <data name="Knowledge_SearchGraphEntities" xml:space="preserve">
+    <value>实体</value>
+  </data>
+  <data name="Knowledge_SearchGraphRelations" xml:space="preserve">
+    <value>关系</value>
+  </data>
   <data name="Knowledge_SearchScopeRequired" xml:space="preserve">
     <value>请先在左侧选择一个知识空间或文档。</value>
   </data>
