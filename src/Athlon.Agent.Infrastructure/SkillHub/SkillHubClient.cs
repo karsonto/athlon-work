@@ -58,11 +58,45 @@ public sealed class SkillHubClient(
         return await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<string> GetManifestAsync(string skillId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(skillId))
+        {
+            throw new ArgumentException("Skill id is required.", nameof(skillId));
+        }
+
+        var baseUrl = RequireBaseUrl();
+        using var request = await CreateAuthorizedRequestAsync(
+                HttpMethod.Get,
+                $"{baseUrl}/agent/skills/manifest?id={Uri.EscapeDataString(skillId.Trim())}",
+                cancellationToken)
+            .ConfigureAwait(false);
+        var client = httpClientFactory.CreateClient("SkillHub");
+        using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<byte[]> DownloadObjectsAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default)
+    {
+        var baseUrl = RequireBaseUrl();
+        using var request = await CreateAuthorizedRequestAsync(
+                HttpMethod.Post,
+                $"{baseUrl}/agent/skills/objects",
+                cancellationToken)
+            .ConfigureAwait(false);
+        request.Content = JsonContent.Create(new ObjectRequest(hashes ?? []));
+        var client = httpClientFactory.CreateClient("SkillHub");
+        using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public static bool MatchesSha256(byte[] bytes, string? expectedHex)
     {
         if (string.IsNullOrWhiteSpace(expectedHex) || bytes.Length == 0)
         {
-            return true;
+            return false;
         }
 
         var hash = Convert.ToHexString(SHA256.HashData(bytes));
@@ -109,4 +143,6 @@ public sealed class SkillHubClient(
         throw new HttpRequestException(
             $"Skill Hub request failed ({(int)response.StatusCode}): {detail}");
     }
+
+    private sealed record ObjectRequest(IReadOnlyList<string> Hashes);
 }

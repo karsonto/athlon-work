@@ -10,6 +10,12 @@ public interface IAppPathProvider
     string CredentialsPath { get; }
     string SkillsPath { get; }
 
+    string HubSkillsPath => Path.Combine(RootPath, "skills-hub");
+
+    string SkillManifestDirectory => Path.Combine(ConfigPath, "skill-manifests");
+
+    string SkillAnchorsPath => Path.Combine(ConfigPath, "skill-anchors.json");
+
     string BehaviorPath => Path.Combine(RootPath, "behavior");
 
     void EnsureCreated();
@@ -29,6 +35,9 @@ public sealed class AppPathProvider : IAppPathProvider
     public string LogsPath => Path.Combine(RootPath, "logs");
     public string CredentialsPath => Path.Combine(RootPath, "credentials");
     public string SkillsPath => Path.Combine(RootPath, SkillsFolderName);
+    public string HubSkillsPath => Path.Combine(RootPath, "skills-hub");
+    public string SkillManifestDirectory => Path.Combine(ConfigPath, "skill-manifests");
+    public string SkillAnchorsPath => Path.Combine(ConfigPath, "skill-anchors.json");
     public string BehaviorPath => Path.Combine(RootPath, "behavior");
 
     public void EnsureCreated()
@@ -40,6 +49,8 @@ public sealed class AppPathProvider : IAppPathProvider
         Directory.CreateDirectory(LogsPath);
         Directory.CreateDirectory(CredentialsPath);
         Directory.CreateDirectory(SkillsPath);
+        Directory.CreateDirectory(HubSkillsPath);
+        Directory.CreateDirectory(SkillManifestDirectory);
         Directory.CreateDirectory(BehaviorPath);
         Directory.CreateDirectory(Path.Combine(RootPath, "debug", "logs"));
         Directory.CreateDirectory(Path.Combine(RootPath, "debug", "runs"));

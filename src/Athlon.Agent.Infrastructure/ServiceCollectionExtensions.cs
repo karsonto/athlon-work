@@ -108,6 +108,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<Athlon.Agent.Infrastructure.SkillHub.ISkillHubClient,
             Athlon.Agent.Infrastructure.SkillHub.SkillHubClient>();
         services.AddSingleton<Athlon.Agent.Infrastructure.SkillHub.SkillPackageInstaller>();
+        services.AddSingleton<Athlon.Agent.Infrastructure.SkillHub.ISkillHubUpdater,
+            Athlon.Agent.Infrastructure.SkillHub.SkillHubUpdater>();
         services.AddSingleton<IEventManager>(sp =>
         {
             var httpFactory = sp.GetRequiredService<IHttpClientFactory>();

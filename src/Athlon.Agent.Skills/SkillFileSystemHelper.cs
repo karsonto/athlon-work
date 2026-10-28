@@ -183,6 +183,8 @@ public static class SkillFileSystemHelper
         return map;
     }
 
+    public static string? TryReadSkillName(string skillDir) => ReadSkillName(skillDir);
+
     public static bool HasSkillFile(string dir)
     {
         if (!Directory.Exists(dir))

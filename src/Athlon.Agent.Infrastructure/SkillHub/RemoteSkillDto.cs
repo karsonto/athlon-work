@@ -10,6 +10,7 @@ public sealed class RemoteSkillDto
     public string Position { get; set; } = "";
     public long PackageSize { get; set; }
     public string PackageSha256 { get; set; } = "";
+    public long CommitSeq { get; set; }
     public string Download { get; set; } = "";
 }
 

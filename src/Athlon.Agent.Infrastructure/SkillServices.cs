@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Skills;
+using Athlon.Agent.Infrastructure.SkillHub;
 using Athlon.Agent.Skills.Repository;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -13,8 +14,11 @@ public static class SkillServiceCollectionExtensions
         {
             var paths = sp.GetRequiredService<IAppPathProvider>();
             var logger = sp.GetRequiredService<IAppLogger>().ForContext("SkillRepository");
-            return new FileSystemSkillRepository(
+            return new IntegritySkillRepository(
                 paths.SkillsPath,
+                paths.HubSkillsPath,
+                paths.SkillManifestDirectory,
+                paths.SkillAnchorsPath,
                 (dir, ex) => logger.Warning(
                     $"Skill load failed ({Path.GetFileName(dir)}): {ex.Message} [{dir}]"));
         });

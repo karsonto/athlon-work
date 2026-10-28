@@ -8,4 +8,8 @@ public interface ISkillHubClient
     Task<IReadOnlyList<RemoteSkillDto>> ListAsync(CancellationToken cancellationToken = default);
 
     Task<byte[]> DownloadAsync(string skillId, CancellationToken cancellationToken = default);
+
+    Task<string> GetManifestAsync(string skillId, CancellationToken cancellationToken = default);
+
+    Task<byte[]> DownloadObjectsAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default);
 }

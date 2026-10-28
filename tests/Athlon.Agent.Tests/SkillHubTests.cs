@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Infrastructure.SkillHub;
+using Athlon.Agent.Skills;
 
 namespace Athlon.Agent.Tests;
 
@@ -108,10 +109,95 @@ public sealed class SkillHubTests
     }
 
     [Fact]
-    public void MatchesSha256_accepts_empty_expected()
+    public void MatchesSha256_rejects_empty_expected()
     {
-        Assert.True(SkillHubClient.MatchesSha256([1, 2, 3], null));
-        Assert.True(SkillHubClient.MatchesSha256([1, 2, 3], ""));
+        Assert.False(SkillHubClient.MatchesSha256([1, 2, 3], null));
+        Assert.False(SkillHubClient.MatchesSha256([1, 2, 3], ""));
+    }
+
+    [Fact]
+    public void Canonical_manifest_matches_shared_vector()
+    {
+        var sha = new string('a', 64);
+        var json = SkillManifest.Canonical("demo", 1, [new SkillManifest.FileEntry("SKILL.md", 4, sha)]);
+        Assert.Equal(
+            "{\"commitSeq\":1,\"files\":[{\"path\":\"SKILL.md\",\"sha256\":\"" + sha + "\",\"size\":4}],\"skillId\":\"demo\"}",
+            json);
+        Assert.Equal(
+            "{\"commitSeq\":2,\"files\":[],\"skillId\":\"技能\"}",
+            SkillManifest.Canonical("技能", 2, []));
+    }
+
+    [Fact]
+    public void Materialize_reuses_local_bytes_and_verify_rejects_extra_or_rollback()
+    {
+        var body = Encoding.UTF8.GetBytes("hello");
+        var sha = SkillManifest.Sha256Hex(body);
+        var manifestText = SkillManifest.Canonical("demo", 1, [new SkillManifest.FileEntry("SKILL.md", body.Length, sha)]);
+        Assert.True(SkillManifest.TryParse(manifestText, out var manifest));
+        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-integrity", Guid.NewGuid().ToString("N"));
+        var dest = Path.Combine(root, "skill");
+        Directory.CreateDirectory(root);
+        try
+        {
+            SkillPackageInstaller.Materialize(
+                dest,
+                manifest!,
+                new Dictionary<string, byte[]> { [sha] = body },
+                new Dictionary<string, byte[]>());
+            Assert.True(SkillIntegrity.TryVerify(dest, manifestText, 0, "demo", out var error), error);
+            Assert.False(SkillIntegrity.TryVerify(dest, manifestText, 2, "demo", out _));
+            File.WriteAllText(Path.Combine(dest, "extra.txt"), "x");
+            Assert.False(SkillIntegrity.TryVerify(dest, manifestText, 0, "demo", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Unsigned_skill_stays_out_of_catalog_until_manifest_matches()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-catalog", Guid.NewGuid().ToString("N"));
+        var skills = Path.Combine(root, "skills");
+        var hub = Path.Combine(root, "skills-hub");
+        var manifests = Path.Combine(root, "config", "skill-manifests");
+        var anchors = Path.Combine(root, "config", "skill-anchors.json");
+        var local = Path.Combine(skills, "demo");
+        Directory.CreateDirectory(local);
+        File.WriteAllText(Path.Combine(local, "SKILL.md"), "---\nname: demo\ndescription: local\n---\n\nlocal\n");
+        var repo = new IntegritySkillRepository(skills, hub, manifests, anchors);
+        try
+        {
+            Assert.Empty(repo.GetAllSkills());
+
+            var files = SkillIntegrity.ListFiles(local);
+            var manifest = SkillManifest.Canonical("demo", 1, files);
+            Directory.CreateDirectory(manifests);
+            File.WriteAllText(Path.Combine(manifests, "demo.json"), manifest);
+            var loaded = Assert.Single(repo.GetAllSkills());
+            Assert.Contains("local", loaded.SkillContent, StringComparison.Ordinal);
+
+            var hubDir = Path.Combine(hub, "demo");
+            Directory.CreateDirectory(hubDir);
+            File.WriteAllText(Path.Combine(hubDir, "SKILL.md"), "---\nname: demo\ndescription: hub\n---\n\nhub\n");
+            var hubManifest = SkillManifest.Canonical("demo", 2, SkillIntegrity.ListFiles(hubDir));
+            File.WriteAllText(Path.Combine(manifests, "demo.json"), hubManifest);
+            File.WriteAllText(anchors, "{\"demo\":2}");
+            loaded = Assert.Single(repo.GetAllSkills());
+            Assert.Contains("hub", loaded.SkillContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     [Fact]

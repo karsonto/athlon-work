@@ -15,7 +15,10 @@ public sealed class SkillPackageInstaller(
 {
     private readonly IAppLogger _logger = logger.ForContext("SkillPackageInstaller");
 
-    public async Task InstallAsync(RemoteSkillDto skill, CancellationToken cancellationToken = default)
+    public Task InstallAsync(RemoteSkillDto skill, CancellationToken cancellationToken = default) =>
+        InstallAsync(skill, persistCatalog: true, cancellationToken);
+
+    internal async Task<bool> InstallAsync(RemoteSkillDto skill, bool persistCatalog, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(skill);
         if (string.IsNullOrWhiteSpace(skill.Id))
@@ -23,61 +26,167 @@ public sealed class SkillPackageInstaller(
             throw new ArgumentException("Skill id is required.", nameof(skill));
         }
 
+        var manifestText = (await client.GetManifestAsync(skill.Id, cancellationToken).ConfigureAwait(false)).TrimEnd('\r', '\n');
+        if (!SkillManifest.TryParse(manifestText, out var manifest) || manifest is null)
+        {
+            throw new InvalidOperationException("Skill manifest is invalid.");
+        }
+
+        if (manifest.CommitSeq < 1)
+        {
+            throw new InvalidOperationException("Skill manifest commit is invalid.");
+        }
+
+        var anchor = SkillAnchorStore.Get(paths.SkillAnchorsPath, manifest.SkillId);
+        if (manifest.CommitSeq < anchor)
+        {
+            throw new InvalidOperationException("Skill commit is older than the anchored version.");
+        }
+
+        var manifestPath = SkillAnchorStore.ManifestPath(paths.SkillManifestDirectory, manifest.SkillId);
+        if (manifest.CommitSeq == anchor
+            && File.Exists(manifestPath)
+            && string.Equals(SkillIntegrity.ReadUtf8(manifestPath).TrimEnd('\r', '\n'), manifestText, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
         var folderName = SanitizeFolderName(
-            string.IsNullOrWhiteSpace(skill.EnglishName) ? skill.Id : skill.EnglishName);
-        var bytes = await client.DownloadAsync(skill.Id, cancellationToken).ConfigureAwait(false);
-        if (bytes.Length == 0)
-        {
-            throw new InvalidOperationException("Downloaded skill package is empty.");
-        }
-
-        if (!SkillHubClient.MatchesSha256(bytes, skill.PackageSha256))
-        {
-            throw new InvalidOperationException("Skill package SHA-256 mismatch.");
-        }
-
+            string.IsNullOrWhiteSpace(skill.EnglishName) ? manifest.SkillId : skill.EnglishName);
         paths.EnsureCreated();
-        var stagingRoot = Path.Combine(Path.GetTempPath(), "athlon-skill-hub", IdGen.NewId());
-        var extractDir = Path.Combine(stagingRoot, "extract");
-        var zipPath = Path.Combine(stagingRoot, "package.zip");
-        Directory.CreateDirectory(extractDir);
+        var targetDir = Path.Combine(paths.HubSkillsPath, folderName);
+        var localHashes = IndexDirectory(targetDir);
+        var missing = manifest.Files
+            .Select(static file => file.Sha256)
+            .Where(hash => !localHashes.ContainsKey(hash))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "athlon-skill-hub", IdGen.NewId());
+        var assemblyDir = Path.Combine(stagingRoot, "skill");
+        Directory.CreateDirectory(assemblyDir);
         try
         {
-            await File.WriteAllBytesAsync(zipPath, bytes, cancellationToken).ConfigureAwait(false);
-            ExtractZipSafely(zipPath, extractDir);
-
-            var skillSourceDir = LocateSkillDirectory(extractDir)
-                ?? throw new InvalidOperationException("SKILL.md not found in package.");
-
-            var targetDir = Path.Combine(paths.SkillsPath, folderName);
-            if (Directory.Exists(targetDir))
+            var downloaded = missing.Length == 0
+                ? new Dictionary<string, byte[]>(StringComparer.Ordinal)
+                : await ReadObjectZipAsync(missing, stagingRoot, cancellationToken).ConfigureAwait(false);
+            Materialize(assemblyDir, manifest, localHashes, downloaded);
+            var canonical = SkillManifest.Canonical(manifest.SkillId, manifest.CommitSeq, SkillIntegrity.ListFiles(assemblyDir));
+            if (!string.Equals(canonical, manifestText, StringComparison.Ordinal))
             {
-                Directory.Delete(targetDir, recursive: true);
+                throw new InvalidOperationException("Assembled skill does not match the manifest.");
             }
 
-            CopyDirectory(skillSourceDir, targetDir);
-            _logger.Information("Installed skill package {Folder} from hub id {Id}", folderName, skill.Id);
+            ReplaceDirectory(assemblyDir, targetDir);
+            SetReadOnly(targetDir);
+            Directory.CreateDirectory(paths.SkillManifestDirectory);
+            await File.WriteAllTextAsync(manifestPath, manifestText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), cancellationToken)
+                .ConfigureAwait(false);
+            SkillAnchorStore.Advance(paths.SkillAnchorsPath, manifest.SkillId, manifest.CommitSeq);
+            _logger.Information("Installed skill package {Folder} from hub id {Id} at commit {Commit}", folderName, skill.Id, manifest.CommitSeq);
         }
         finally
         {
-            try
-            {
-                if (Directory.Exists(stagingRoot))
-                {
-                    Directory.Delete(stagingRoot, recursive: true);
-                }
-            }
-            catch
-            {
-                // best-effort cleanup
-            }
+            TryDelete(stagingRoot);
         }
 
+        if (persistCatalog)
+        {
+            await PersistCatalogAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return true;
+    }
+
+    internal async Task PersistCatalogAsync(CancellationToken cancellationToken)
+    {
         catalog.Reload();
         var installed = catalog.Skills;
+        settings.Skills = SkillSettingsMerger.Merge(paths.HubSkillsPath, installed, settings.Skills);
         settings.Skills = SkillSettingsMerger.Merge(paths.SkillsPath, installed, settings.Skills);
         await storage.SaveSettingsAsync(settings, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<Dictionary<string, byte[]>> ReadObjectZipAsync(
+        IReadOnlyList<string> hashes,
+        string stagingRoot,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await client.DownloadObjectsAsync(hashes, cancellationToken).ConfigureAwait(false);
+        if (bytes.Length == 0)
+        {
+            throw new InvalidOperationException("Skill object response is empty.");
+        }
+
+        var zipPath = Path.Combine(stagingRoot, "objects.zip");
+        var extractDir = Path.Combine(stagingRoot, "objects");
+        Directory.CreateDirectory(extractDir);
+        await File.WriteAllBytesAsync(zipPath, bytes, cancellationToken).ConfigureAwait(false);
+        ExtractZipSafely(zipPath, extractDir);
+        var map = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var file in Directory.EnumerateFiles(extractDir, "*", SearchOption.AllDirectories))
+        {
+            var content = await File.ReadAllBytesAsync(file, cancellationToken).ConfigureAwait(false);
+            var hash = SkillManifest.Sha256Hex(content);
+            var name = Path.GetFileName(file);
+            if (!string.Equals(name, hash, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Downloaded object hash does not match its name.");
+            }
+
+            map[hash] = content;
+        }
+
+        return map;
+    }
+
+    internal static Dictionary<string, byte[]> IndexDirectory(string directory)
+    {
+        var map = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        if (!Directory.Exists(directory))
+        {
+            return map;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+        {
+            var content = File.ReadAllBytes(file);
+            map[SkillManifest.Sha256Hex(content)] = content;
+        }
+
+        return map;
+    }
+
+    internal static void Materialize(
+        string destination,
+        SkillManifest.Parsed manifest,
+        IReadOnlyDictionary<string, byte[]> localHashes,
+        IReadOnlyDictionary<string, byte[]> downloaded)
+    {
+        foreach (var file in manifest.Files)
+        {
+            if (!downloaded.TryGetValue(file.Sha256, out var content)
+                && !localHashes.TryGetValue(file.Sha256, out content))
+            {
+                throw new InvalidOperationException($"Missing skill object {file.Sha256}.");
+            }
+
+            if (content.LongLength != file.Size || !string.Equals(SkillManifest.Sha256Hex(content), file.Sha256, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Skill object {file.Sha256} does not match the manifest.");
+            }
+
+            var target = Path.GetFullPath(Path.Combine(destination, file.Path.Replace('/', Path.DirectorySeparatorChar)));
+            var root = Path.GetFullPath(destination);
+            EnsureUnderRoot(root, target);
+            var parent = Path.GetDirectoryName(target);
+            if (!string.IsNullOrEmpty(parent))
+            {
+                Directory.CreateDirectory(parent);
+            }
+
+            File.WriteAllBytes(target, content);
+        }
     }
 
     internal static string SanitizeFolderName(string name)
@@ -175,6 +284,51 @@ public sealed class SkillPackageInstaller(
                 StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException($"Zip entry escapes destination: {candidate}");
+        }
+    }
+
+    private static void ReplaceDirectory(string sourceDir, string destinationDir)
+    {
+        if (Directory.Exists(destinationDir))
+        {
+            ClearReadOnly(destinationDir);
+            Directory.Delete(destinationDir, recursive: true);
+        }
+
+        CopyDirectory(sourceDir, destinationDir);
+    }
+
+    private static void SetReadOnly(string directory)
+    {
+        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, File.GetAttributes(file) | FileAttributes.ReadOnly);
+        }
+    }
+
+    private static void ClearReadOnly(string directory)
+    {
+        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+        }
+    }
+
+    private static void TryDelete(string directory)
+    {
+        try
+        {
+            if (!Directory.Exists(directory))
+            {
+                return;
+            }
+
+            ClearReadOnly(directory);
+            Directory.Delete(directory, recursive: true);
+        }
+        catch
+        {
+            // best-effort cleanup
         }
     }
 
