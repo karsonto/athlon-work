@@ -168,6 +168,7 @@ public sealed class KnowledgeStoreTests
             new FakeEmbeddingClient([1, 0]),
             new KnowledgeDocumentExtractor(settings, new NoKnowledgeOcr(), new NoOpLogger()),
             new KnowledgeChunker(settings),
+            new EmptyGraphExtractor(),
             new NoOpLogger());
         var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "??" });
         var sourcePath = Path.Combine(root, "source.md");
@@ -202,6 +203,7 @@ public sealed class KnowledgeStoreTests
             new FakeEmbeddingClient([1, 0]),
             new KnowledgeDocumentExtractor(settings, new NoKnowledgeOcr(), new NoOpLogger()),
             new KnowledgeChunker(settings),
+            new EmptyGraphExtractor(),
             new NoOpLogger());
         var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "??" });
         var sourcePath = Path.Combine(root, "empty.txt");
@@ -257,10 +259,315 @@ public sealed class KnowledgeStoreTests
         Assert.Single(searchable);
     }
 
+    [Fact]
+    public async Task CommitIndexedDocumentAsync_ReplacesGraphAndDropsOrphansWhenDocumentIsDeleted()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-graph-" + Guid.NewGuid().ToString("N"));
+        var paths = new TestPathProvider(root);
+        var settings = new AppSettings();
+        var store = new SqliteKnowledgeStore(paths, settings);
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "space" });
+        var first = await store.CommitIndexedDocumentAsync(
+            new KnowledgeDocument
+            {
+                ModuleId = module.Id,
+                FileName = "a.md",
+                FileType = ".md",
+                Status = KnowledgeDocumentStatus.Indexed,
+                ChunkCount = 1
+            },
+            [
+                new KnowledgeChunk
+                {
+                    Id = "chunk-a",
+                    DocumentId = "",
+                    ModuleId = module.Id,
+                    Content = "alice bio",
+                    EmbeddingModel = "test",
+                    EmbeddingDimension = 2,
+                    Embedding = [1, 0]
+                }
+            ],
+            graph: GraphWith("alice", "bob", "chunk-a"));
+
+        var entities = await store.ListEntitiesAsync(new HashSet<string> { module.Id });
+        Assert.Equal(2, entities.Count);
+        Assert.Single(await store.ListRelationsAsync(new HashSet<string> { module.Id }));
+
+        var second = await store.CommitIndexedDocumentAsync(
+            new KnowledgeDocument
+            {
+                ModuleId = module.Id,
+                FileName = "b.md",
+                FileType = ".md",
+                Status = KnowledgeDocumentStatus.Indexed,
+                ChunkCount = 1
+            },
+            [
+                new KnowledgeChunk
+                {
+                    Id = "chunk-b",
+                    ModuleId = module.Id,
+                    Content = "carol bio",
+                    EmbeddingModel = "test",
+                    EmbeddingDimension = 2,
+                    Embedding = [0, 1]
+                }
+            ],
+            graph: new DocumentGraphCommit
+            {
+                Status = KnowledgeGraphStatus.Indexed,
+                Entities = [Entity("Carol", "person", "Carol", [0, 1], "chunk-b")]
+            });
+
+        await store.CommitIndexedDocumentAsync(
+            first,
+            [
+                new KnowledgeChunk
+                {
+                    Id = "chunk-a2",
+                    ModuleId = module.Id,
+                    Content = "alice again",
+                    EmbeddingModel = "test",
+                    EmbeddingDimension = 2,
+                    Embedding = [1, 0]
+                }
+            ],
+            graph: GraphWith("alice", "bob", "chunk-a2"));
+
+        entities = await store.ListEntitiesAsync(new HashSet<string> { module.Id });
+        Assert.Equal(3, entities.Select(entity => entity.NormalizedName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+
+        await store.DeleteDocumentAsync(first.Id);
+        entities = await store.ListEntitiesAsync(new HashSet<string> { module.Id });
+        Assert.Single(entities);
+        Assert.Equal("carol", entities[0].NormalizedName);
+
+        await store.DeleteDocumentAsync(second.Id);
+        Assert.Empty(await store.ListEntitiesAsync(new HashSet<string> { module.Id }));
+        Assert.Empty(await store.ListRelationsAsync(new HashSet<string> { module.Id }));
+    }
+
+    [Fact]
+    public async Task KnowledgeSearchService_MergesVectorHitsWithOneHopGraphChunks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-graph-search-" + Guid.NewGuid().ToString("N"));
+        var paths = new TestPathProvider(root);
+        var settings = new AppSettings();
+        settings.Knowledge.Search.MinScore = 0.25;
+        var store = new SqliteKnowledgeStore(paths, settings);
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "space" });
+        await store.CommitIndexedDocumentAsync(
+            new KnowledgeDocument
+            {
+                ModuleId = module.Id,
+                FileName = "notes.md",
+                FileType = ".md",
+                Status = KnowledgeDocumentStatus.Indexed,
+                ChunkCount = 3
+            },
+            [
+                new KnowledgeChunk { Id = "policy", ModuleId = module.Id, ChunkIndex = 0, Content = "policy", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [1, 0] },
+                new KnowledgeChunk { Id = "alice", ModuleId = module.Id, ChunkIndex = 1, Content = "alice bio", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [0, 1] },
+                new KnowledgeChunk { Id = "bob", ModuleId = module.Id, ChunkIndex = 2, Content = "bob bio", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [0, 1] }
+            ],
+            graph: new DocumentGraphCommit
+            {
+                Status = KnowledgeGraphStatus.Indexed,
+                Entities =
+                [
+                    Entity("Alice", "person", "A founder", [0, 1], "alice"),
+                    Entity("Bob", "person", "A partner", [0, 1], "bob")
+                ],
+                Relations =
+                [
+                    new GraphRelationDraft
+                    {
+                        SourceNormalizedName = "alice",
+                        SourceType = "person",
+                        TargetNormalizedName = "bob",
+                        TargetType = "person",
+                        Description = "knows",
+                        Weight = 6,
+                        Evidence = "friends",
+                        ChunkId = "alice"
+                    }
+                ]
+            });
+
+        var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), RouterTestDependencies.CreateSessionKnowledgeState(), settings);
+        var hits = await service.SearchInScopeAsync(
+            "Tell me about Alice",
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { module.Id });
+
+        Assert.Equal(3, hits.Count);
+        Assert.Equal("policy", hits[0].Content);
+        Assert.Contains(hits, hit => hit.Content == "alice bio" && hit.RelationSummary.Contains("Alice —knows→ Bob", StringComparison.Ordinal));
+        Assert.Contains(hits, hit => hit.Content == "bob bio");
+        Assert.All(hits.Skip(1), hit => Assert.True(hit.Score >= 0.25));
+    }
+
+    [Fact]
+    public async Task ImportDocumentAsync_WhenGraphExtractionFails_StillPersistsChunks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-graph-fail-" + Guid.NewGuid().ToString("N"));
+        var paths = new TestPathProvider(root);
+        paths.EnsureCreated();
+        var settings = new AppSettings();
+        settings.Knowledge.Graph.Enabled = true;
+        var store = new SqliteKnowledgeStore(paths, settings);
+        var indexer = new KnowledgeIndexerService(
+            paths,
+            settings,
+            store,
+            new FakeEmbeddingClient([1, 0]),
+            new KnowledgeDocumentExtractor(settings, new NoKnowledgeOcr(), new NoOpLogger()),
+            new KnowledgeChunker(settings),
+            new ThrowingGraphExtractor(),
+            new NoOpLogger());
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "space" });
+        var sourcePath = Path.Combine(root, "source.md");
+        await File.WriteAllTextAsync(sourcePath, "Acme was founded by Ada.");
+
+        var document = await indexer.ImportDocumentAsync(module.Id, sourcePath);
+
+        Assert.Equal(KnowledgeDocumentStatus.Indexed, document.Status);
+        Assert.Equal(KnowledgeGraphStatus.Failed, document.GraphStatus);
+        Assert.Contains("boom", document.GraphError, StringComparison.Ordinal);
+        Assert.NotEmpty(await store.ListSearchableChunksAsync(new HashSet<string> { module.Id }));
+        Assert.Empty(await store.ListEntitiesAsync(new HashSet<string> { module.Id }));
+    }
+
+    [Fact]
+    public async Task RebuildModuleGraphAsync_ReplacesEntitiesWithoutReembeddingChunkText()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-graph-rebuild-" + Guid.NewGuid().ToString("N"));
+        var paths = new TestPathProvider(root);
+        paths.EnsureCreated();
+        var settings = new AppSettings();
+        settings.Knowledge.Embedding.Model = "chunk-model";
+        var store = new SqliteKnowledgeStore(paths, settings);
+        var embeddings = new RecordingEmbeddingClient([1, 0]);
+        var indexer = new KnowledgeIndexerService(
+            paths,
+            settings,
+            store,
+            embeddings,
+            new KnowledgeDocumentExtractor(settings, new NoKnowledgeOcr(), new NoOpLogger()),
+            new KnowledgeChunker(settings),
+            new NamedEntityExtractor("Acme", "organization"),
+            new NoOpLogger());
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "space" });
+        var sourcePath = Path.Combine(root, "source.md");
+        await File.WriteAllTextAsync(sourcePath, "hello knowledge");
+        var document = await indexer.ImportDocumentAsync(module.Id, sourcePath);
+        var chunkModel = (await store.ListDocumentChunksAsync(document.Id)).Single().EmbeddingModel;
+        embeddings.Texts.Clear();
+
+        var rebuild = new KnowledgeIndexerService(
+            paths,
+            settings,
+            store,
+            embeddings,
+            new KnowledgeDocumentExtractor(settings, new NoKnowledgeOcr(), new NoOpLogger()),
+            new KnowledgeChunker(settings),
+            new NamedEntityExtractor("Beta", "person"),
+            new NoOpLogger());
+        var result = await rebuild.RebuildModuleGraphAsync(module.Id);
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal(0, result.Failed);
+        var entities = await store.ListEntitiesAsync(new HashSet<string> { module.Id });
+        Assert.Single(entities);
+        Assert.Equal("beta", entities[0].NormalizedName);
+        Assert.Equal(chunkModel, (await store.ListDocumentChunksAsync(document.Id)).Single().EmbeddingModel);
+        Assert.DoesNotContain(embeddings.Texts, text => text.Contains("hello knowledge", StringComparison.Ordinal));
+        Assert.Contains(embeddings.Texts, text => text.Contains("Beta", StringComparison.Ordinal));
+    }
+
+    private static DocumentGraphCommit GraphWith(string source, string target, string chunkId) => new()
+    {
+        Status = KnowledgeGraphStatus.Indexed,
+        Entities =
+        [
+            Entity(source, "person", source, [1, 0], chunkId),
+            Entity(target, "organization", target, [0, 1], chunkId)
+        ],
+        Relations =
+        [
+            new GraphRelationDraft
+            {
+                SourceNormalizedName = source,
+                SourceType = "person",
+                TargetNormalizedName = target,
+                TargetType = "organization",
+                Description = "works at",
+                Weight = 4,
+                Evidence = "employed",
+                ChunkId = chunkId
+            }
+        ]
+    };
+
+    private static GraphEntityDraft Entity(string name, string type, string description, float[] embedding, string chunkId) => new()
+    {
+        Name = name,
+        NormalizedName = name.ToLowerInvariant(),
+        EntityType = type,
+        Description = description,
+        Embedding = embedding,
+        EmbeddingDimension = embedding.Length,
+        EmbeddingModel = "test",
+        ChunkIds = [chunkId]
+    };
+
     private sealed class FakeEmbeddingClient(float[] vector) : IEmbeddingClient
     {
         public Task<IReadOnlyList<EmbeddingVector>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<EmbeddingVector>>(texts.Select(text => new EmbeddingVector(text, vector)).ToArray());
+    }
+
+    private sealed class RecordingEmbeddingClient(float[] vector) : IEmbeddingClient
+    {
+        public List<string> Texts { get; } = [];
+
+        public Task<IReadOnlyList<EmbeddingVector>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken = default)
+        {
+            Texts.AddRange(texts);
+            return Task.FromResult<IReadOnlyList<EmbeddingVector>>(texts.Select(text => new EmbeddingVector(text, vector)).ToArray());
+        }
+    }
+
+    private sealed class EmptyGraphExtractor : IKnowledgeGraphExtractor
+    {
+        public Task<KnowledgeGraphExtraction> ExtractAsync(
+            IReadOnlyList<KnowledgeChunk> chunks,
+            IReadOnlyList<string> entityTypes,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new KnowledgeGraphExtraction([], []));
+    }
+
+    private sealed class ThrowingGraphExtractor : IKnowledgeGraphExtractor
+    {
+        public Task<KnowledgeGraphExtraction> ExtractAsync(
+            IReadOnlyList<KnowledgeChunk> chunks,
+            IReadOnlyList<string> entityTypes,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("boom");
+    }
+
+    private sealed class NamedEntityExtractor(string name, string type) : IKnowledgeGraphExtractor
+    {
+        public Task<KnowledgeGraphExtraction> ExtractAsync(
+            IReadOnlyList<KnowledgeChunk> chunks,
+            IReadOnlyList<string> entityTypes,
+            CancellationToken cancellationToken = default)
+        {
+            var chunk = chunks[0];
+            return Task.FromResult(new KnowledgeGraphExtraction(
+                [new ExtractedKnowledgeEntity(chunk.Id, name, name.ToLowerInvariant(), type, "Described")],
+                []));
+        }
     }
 
     private sealed class NoKnowledgeOcr : IKnowledgePageOcr

@@ -99,6 +99,38 @@
                                     </StackPanel>
                                 </DockPanel>
 
+                                <DockPanel Margin="0,0,0,12" LastChildFill="True">
+                                    <CheckBox DockPanel.Dock="Right"
+                                              VerticalAlignment="Center"
+                                              Margin="12,0,0,0"
+                                              Style="{StaticResource McpToggleSwitchStyle}"
+                                              IsChecked="{Binding GraphEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              ToolTip="{loc:Localize Key=Knowledge_GraphEnabledHint}" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Localize Key=Knowledge_GraphEnabled}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Text="{loc:Localize Key=Knowledge_GraphEnabledHint}"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </DockPanel>
+
+                                <TextBlock Text="{loc:Localize Key=Knowledge_GraphEntityTypes}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="{loc:Localize Key=Knowledge_GraphEntityTypesHint}"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,2,0,4" />
+                                <TextBox Text="{Binding EntityTypesText, UpdateSourceTrigger=PropertyChanged}"
+                                         LostFocus="GraphEntityTypesBox_OnLostFocus"
+                                         Margin="0,0,0,12" />
+
                                 <!-- Empty state: no module selected -->
                                 <Border x:Name="KnowledgeModuleEmptyState"
                                         BorderThickness="2"
@@ -228,6 +260,14 @@
                                            TextWrapping="Wrap"
                                            VerticalAlignment="Center" />
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Content="{loc:Localize Key=Knowledge_ViewGraph}"
+                                            Command="{Binding ViewGraphCommand}"
+                                            Style="{StaticResource GhostButtonStyle}"
+                                            Margin="0,0,8,0" />
+                                    <Button Content="{loc:Localize Key=Knowledge_RebuildGraph}"
+                                            Command="{Binding RebuildGraphCommand}"
+                                            Style="{StaticResource GhostButtonStyle}"
+                                            Margin="0,0,8,0" />
                                     <Button Content="{loc:Localize Key=Knowledge_Reindex}"
                                             Command="{Binding ReindexSelectedDocumentCommand}"
                                             Style="{StaticResource GhostButtonStyle}" />

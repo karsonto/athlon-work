@@ -55,6 +55,11 @@ public sealed class KnowledgeSearchTool(
                 var hit = hits[i];
                 builder.AppendLine($"[{i + 1}] score={hit.Score.ToString("0.000", CultureInfo.InvariantCulture)}");
                 builder.AppendLine($"Source: module={hit.ModuleName}; document={hit.FileName}; title={hit.TitlePath}; page={hit.PageNumber?.ToString(CultureInfo.InvariantCulture) ?? "n/a"}");
+                if (!string.IsNullOrWhiteSpace(hit.RelationSummary))
+                {
+                    builder.AppendLine(hit.RelationSummary.Trim());
+                }
+
                 builder.AppendLine(hit.Content.Trim());
                 builder.AppendLine();
             }

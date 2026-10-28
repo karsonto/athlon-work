@@ -11,6 +11,7 @@ public sealed class KnowledgeIndexerService(
     IEmbeddingClient embeddingClient,
     KnowledgeDocumentExtractor extractor,
     KnowledgeChunker chunker,
+    IKnowledgeGraphExtractor graphExtractor,
     IAppLogger logger) : IKnowledgeIndexer
 {
     private readonly IAppLogger _logger = logger.ForContext("KnowledgeIndexer");
@@ -58,7 +59,7 @@ public sealed class KnowledgeIndexerService(
         try
         {
             var indexed = await BuildIndexedDocumentAsync(document, progress, cancellationToken).ConfigureAwait(false);
-            var committed = await store.CommitIndexedDocumentAsync(indexed.Document, indexed.Chunks, cancellationToken).ConfigureAwait(false);
+            var committed = await store.CommitIndexedDocumentAsync(indexed.Document, indexed.Chunks, cancellationToken, indexed.Graph).ConfigureAwait(false);
             Report(progress, "完成", $"{document.FileName} 索引完成", indexed.Chunks.Count, indexed.Chunks.Count, 100);
             return committed;
         }
@@ -81,7 +82,7 @@ public sealed class KnowledgeIndexerService(
         try
         {
             var indexed = await BuildIndexedDocumentAsync(document, progress, cancellationToken).ConfigureAwait(false);
-            await store.CommitIndexedDocumentAsync(indexed.Document, indexed.Chunks, cancellationToken).ConfigureAwait(false);
+            await store.CommitIndexedDocumentAsync(indexed.Document, indexed.Chunks, cancellationToken, indexed.Graph).ConfigureAwait(false);
             Report(progress, "完成", $"{document.FileName} 索引完成", indexed.Chunks.Count, indexed.Chunks.Count, 100);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -91,7 +92,54 @@ public sealed class KnowledgeIndexerService(
         }
     }
 
-    private async Task<(KnowledgeDocument Document, IReadOnlyList<KnowledgeChunk> Chunks)> BuildIndexedDocumentAsync(
+    public async Task<KnowledgeGraphRebuildResult> RebuildModuleGraphAsync(
+        string moduleId,
+        CancellationToken cancellationToken = default,
+        IProgress<KnowledgeIndexingProgress>? progress = null)
+    {
+        if (string.IsNullOrWhiteSpace(moduleId))
+        {
+            throw new ArgumentException("moduleId is required.", nameof(moduleId));
+        }
+
+        var documents = (await store.ListDocumentsAsync(moduleId, cancellationToken).ConfigureAwait(false))
+            .Where(document => document.Status == KnowledgeDocumentStatus.Indexed)
+            .ToArray();
+        var succeeded = 0;
+        var failed = 0;
+        for (var index = 0; index < documents.Length; index++)
+        {
+            var document = documents[index];
+            try
+            {
+                Report(progress, "抽取图谱", $"正在重建 {document.FileName}", index, documents.Length, index / (double)Math.Max(1, documents.Length) * 100);
+                var chunks = await store.ListDocumentChunksAsync(document.Id, cancellationToken).ConfigureAwait(false);
+                var graph = await BuildGraphCommitAsync(chunks, cancellationToken).ConfigureAwait(false);
+                await store.ReplaceDocumentGraphAsync(document.Id, graph, cancellationToken).ConfigureAwait(false);
+                succeeded++;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                failed++;
+                _logger.Warning("Knowledge graph rebuild failed for {DocumentId}: {Message}", document.Id, exception.Message);
+                await store.SetDocumentGraphStatusAsync(document.Id, KnowledgeGraphStatus.Failed, exception.Message, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            Report(
+                progress,
+                "抽取图谱",
+                $"{document.FileName} 已处理",
+                index + 1,
+                documents.Length,
+                (index + 1) / (double)documents.Length * 100);
+        }
+
+        Report(progress, "完成", "图谱重建结束", documents.Length, documents.Length, 100);
+        return new KnowledgeGraphRebuildResult(succeeded, failed);
+    }
+
+    private async Task<(KnowledgeDocument Document, IReadOnlyList<KnowledgeChunk> Chunks, DocumentGraphCommit Graph)> BuildIndexedDocumentAsync(
         KnowledgeDocument document,
         IProgress<KnowledgeIndexingProgress>? progress,
         CancellationToken cancellationToken)
@@ -137,11 +185,75 @@ public sealed class KnowledgeIndexerService(
             chunks[i].EmbeddingDimension = embeddings[i].Vector.Length;
         }
 
-        Report(progress, "写入索引", $"正在写入 {document.FileName} 的索引", chunks.Count, chunks.Count, 95);
         document.Status = KnowledgeDocumentStatus.Indexed;
         document.ChunkCount = chunks.Count;
         document.LastError = "";
-        return (document, chunks);
+
+        DocumentGraphCommit graph;
+        var graphSettings = settings.Knowledge.Graph ??= new KnowledgeGraphSettings();
+        if (!graphSettings.Enabled)
+        {
+            document.GraphStatus = KnowledgeGraphStatus.Skipped;
+            document.GraphError = "";
+            graph = DocumentGraphCommit.Skipped();
+        }
+        else
+        {
+            try
+            {
+                Report(progress, "抽取图谱", $"正在抽取 {document.FileName} 的实体和关系", 0, 1, 91);
+                graph = await BuildGraphCommitAsync(chunks, cancellationToken).ConfigureAwait(false);
+                document.GraphStatus = graph.Status;
+                document.GraphError = "";
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger.Warning("Knowledge graph extraction failed for {DocumentId}: {Message}", document.Id, exception.Message);
+                document.GraphStatus = KnowledgeGraphStatus.Failed;
+                document.GraphError = exception.Message;
+                graph = DocumentGraphCommit.Failed(exception.Message);
+            }
+        }
+
+        Report(progress, "写入索引", $"正在写入 {document.FileName} 的索引", chunks.Count, chunks.Count, 95);
+        return (document, chunks, graph);
+    }
+
+    private async Task<DocumentGraphCommit> BuildGraphCommitAsync(
+        IReadOnlyList<KnowledgeChunk> chunks,
+        CancellationToken cancellationToken)
+    {
+        var graphSettings = settings.Knowledge.Graph ??= new KnowledgeGraphSettings();
+        var extraction = await graphExtractor
+            .ExtractAsync(chunks, graphSettings.NormalizedEntityTypes(), cancellationToken)
+            .ConfigureAwait(false);
+        var graph = KnowledgeGraphMerger.Build(extraction);
+        await EmbedGraphEntitiesAsync(graph, cancellationToken).ConfigureAwait(false);
+        return graph;
+    }
+
+    private async Task EmbedGraphEntitiesAsync(DocumentGraphCommit graph, CancellationToken cancellationToken)
+    {
+        if (graph.Entities.Count == 0)
+        {
+            return;
+        }
+
+        var texts = graph.Entities
+            .Select(entity => string.IsNullOrWhiteSpace(entity.Description) ? entity.Name : $"{entity.Name}\n{entity.Description}")
+            .ToArray();
+        var embeddings = await embeddingClient.EmbedAsync(texts, cancellationToken).ConfigureAwait(false);
+        if (embeddings.Count != graph.Entities.Count)
+        {
+            throw new InvalidOperationException($"实体 Embedding 返回数量不匹配。Expected {graph.Entities.Count}, got {embeddings.Count}.");
+        }
+
+        for (var i = 0; i < graph.Entities.Count; i++)
+        {
+            graph.Entities[i].Embedding = embeddings[i].Vector;
+            graph.Entities[i].EmbeddingModel = settings.Knowledge.Embedding.Model;
+            graph.Entities[i].EmbeddingDimension = embeddings[i].Vector.Length;
+        }
     }
 
     private void CleanupImportArtifacts(KnowledgeDocument document)

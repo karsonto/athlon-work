@@ -27,8 +27,44 @@ public interface IKnowledgeStore
     Task<KnowledgeDocument> SaveDocumentAsync(KnowledgeDocument document, CancellationToken cancellationToken = default);
     Task DeleteDocumentAsync(string documentId, CancellationToken cancellationToken = default);
     Task ReplaceChunksAsync(string documentId, IReadOnlyList<KnowledgeChunk> chunks, CancellationToken cancellationToken = default);
-    Task<KnowledgeDocument> CommitIndexedDocumentAsync(KnowledgeDocument document, IReadOnlyList<KnowledgeChunk> chunks, CancellationToken cancellationToken = default);
+    Task<KnowledgeDocument> CommitIndexedDocumentAsync(
+        KnowledgeDocument document,
+        IReadOnlyList<KnowledgeChunk> chunks,
+        CancellationToken cancellationToken = default,
+        DocumentGraphCommit? graph = null);
+
+    Task ReplaceDocumentGraphAsync(
+        string documentId,
+        DocumentGraphCommit graph,
+        CancellationToken cancellationToken = default);
+
+    Task SetDocumentGraphStatusAsync(
+        string documentId,
+        KnowledgeGraphStatus status,
+        string error,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<KnowledgeChunk>> ListDocumentChunksAsync(
+        string documentId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<KnowledgeChunk>> ListSearchableChunksAsync(IReadOnlySet<string> moduleIds, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<KnowledgeEntity>> ListEntitiesAsync(
+        IReadOnlySet<string> moduleIds,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<KnowledgeRelation>> ListRelationsAsync(
+        IReadOnlySet<string> moduleIds,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<KnowledgeEntityMention>> ListMentionsAsync(
+        IReadOnlySet<string> moduleIds,
+        CancellationToken cancellationToken = default);
+
+    Task<KnowledgeModuleGraph> GetModuleGraphAsync(
+        string moduleId,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IKnowledgeIndexer
@@ -43,6 +79,19 @@ public interface IKnowledgeIndexer
         string documentId,
         CancellationToken cancellationToken = default,
         IProgress<KnowledgeIndexingProgress>? progress = null);
+
+    Task<KnowledgeGraphRebuildResult> RebuildModuleGraphAsync(
+        string moduleId,
+        CancellationToken cancellationToken = default,
+        IProgress<KnowledgeIndexingProgress>? progress = null);
+}
+
+public interface IKnowledgeGraphExtractor
+{
+    Task<KnowledgeGraphExtraction> ExtractAsync(
+        IReadOnlyList<KnowledgeChunk> chunks,
+        IReadOnlyList<string> entityTypes,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IKnowledgeSearchService

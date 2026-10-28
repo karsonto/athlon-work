@@ -4,7 +4,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Athlon.Agent.Infrastructure.Knowledge;
 
-public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings settings) : IKnowledgeStore
+public sealed partial class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings settings) : IKnowledgeStore
 {
     private readonly SemaphoreSlim _lock = new(1, 1);
 
@@ -40,6 +40,8 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
                     status TEXT NOT NULL,
                     last_error TEXT NOT NULL DEFAULT '',
                     chunk_count INTEGER NOT NULL DEFAULT 0,
+                    graph_status TEXT NOT NULL DEFAULT 'Pending',
+                    graph_error TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY (module_id) REFERENCES knowledge_modules(id) ON DELETE CASCADE
@@ -69,7 +71,67 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
                     ON knowledge_chunks(module_id);
                 CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_document
                     ON knowledge_chunks(document_id);
+
+                CREATE TABLE IF NOT EXISTS knowledge_entities (
+                    id TEXT PRIMARY KEY,
+                    module_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    normalized_name TEXT NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    embedding_model TEXT NOT NULL DEFAULT '',
+                    embedding_dimension INTEGER NOT NULL DEFAULT 0,
+                    embedding_blob BLOB NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (module_id) REFERENCES knowledge_modules(id) ON DELETE CASCADE
+                );
+
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_entities_key
+                    ON knowledge_entities(module_id, entity_type, normalized_name);
+                CREATE INDEX IF NOT EXISTS idx_knowledge_entities_module
+                    ON knowledge_entities(module_id);
+
+                CREATE TABLE IF NOT EXISTS knowledge_entity_mentions (
+                    id TEXT PRIMARY KEY,
+                    entity_id TEXT NOT NULL,
+                    document_id TEXT NOT NULL,
+                    chunk_id TEXT NOT NULL,
+                    module_id TEXT NOT NULL,
+                    FOREIGN KEY (entity_id) REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+                    FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+                    FOREIGN KEY (module_id) REFERENCES knowledge_modules(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_knowledge_mentions_document
+                    ON knowledge_entity_mentions(document_id);
+                CREATE INDEX IF NOT EXISTS idx_knowledge_mentions_entity
+                    ON knowledge_entity_mentions(entity_id);
+                CREATE INDEX IF NOT EXISTS idx_knowledge_mentions_module
+                    ON knowledge_entity_mentions(module_id);
+
+                CREATE TABLE IF NOT EXISTS knowledge_relations (
+                    id TEXT PRIMARY KEY,
+                    module_id TEXT NOT NULL,
+                    source_entity_id TEXT NOT NULL,
+                    target_entity_id TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    weight INTEGER NOT NULL DEFAULT 1,
+                    evidence TEXT NOT NULL DEFAULT '',
+                    document_id TEXT NOT NULL,
+                    chunk_id TEXT NOT NULL,
+                    FOREIGN KEY (module_id) REFERENCES knowledge_modules(id) ON DELETE CASCADE,
+                    FOREIGN KEY (source_entity_id) REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+                    FOREIGN KEY (target_entity_id) REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+                    FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_knowledge_relations_module
+                    ON knowledge_relations(module_id);
+                CREATE INDEX IF NOT EXISTS idx_knowledge_relations_document
+                    ON knowledge_relations(document_id);
                 """, cancellationToken).ConfigureAwait(false);
+            await EnsureDocumentGraphColumnsAsync(connection, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -190,10 +252,10 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
         command.CommandText = """
             INSERT INTO knowledge_documents
                 (id, module_id, file_name, file_type, original_path, extracted_path, content_hash,
-                 status, last_error, chunk_count, created_at, updated_at)
+                 status, last_error, chunk_count, graph_status, graph_error, created_at, updated_at)
             VALUES
                 ($id, $moduleId, $fileName, $fileType, $originalPath, $extractedPath, $contentHash,
-                 $status, $lastError, $chunkCount, $createdAt, $updatedAt)
+                 $status, $lastError, $chunkCount, $graphStatus, $graphError, $createdAt, $updatedAt)
             ON CONFLICT(id) DO UPDATE SET
                 module_id = excluded.module_id,
                 file_name = excluded.file_name,
@@ -204,6 +266,8 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
                 status = excluded.status,
                 last_error = excluded.last_error,
                 chunk_count = excluded.chunk_count,
+                graph_status = excluded.graph_status,
+                graph_error = excluded.graph_error,
                 updated_at = excluded.updated_at;
             """;
         AddDocumentParameters(command, document);
@@ -214,11 +278,16 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
     public async Task DeleteDocumentAsync(string documentId, CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetDocumentAsync(documentId, cancellationToken).ConfigureAwait(false);
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = "DELETE FROM knowledge_documents WHERE id = $id;";
         Add(command, "$id", documentId);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        if (existing is not null)
+        {
+            await DeleteOrphanEntitiesAsync(connection, null, existing.ModuleId, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async Task ReplaceChunksAsync(string documentId, IReadOnlyList<KnowledgeChunk> chunks, CancellationToken cancellationToken = default)
@@ -268,12 +337,18 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
     public async Task<KnowledgeDocument> CommitIndexedDocumentAsync(
         KnowledgeDocument document,
         IReadOnlyList<KnowledgeChunk> chunks,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DocumentGraphCommit? graph = null)
     {
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
         document.Id = IdGen.EnsureId(document.Id);
         document.CreatedAt = document.CreatedAt == default ? DateTimeOffset.UtcNow : document.CreatedAt;
         document.UpdatedAt = DateTimeOffset.UtcNow;
+        if (graph is not null)
+        {
+            document.GraphStatus = graph.Status;
+            document.GraphError = graph.Error ?? "";
+        }
 
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -284,10 +359,10 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
             saveDocument.CommandText = """
                 INSERT INTO knowledge_documents
                     (id, module_id, file_name, file_type, original_path, extracted_path, content_hash,
-                     status, last_error, chunk_count, created_at, updated_at)
+                     status, last_error, chunk_count, graph_status, graph_error, created_at, updated_at)
                 VALUES
                     ($id, $moduleId, $fileName, $fileType, $originalPath, $extractedPath, $contentHash,
-                     $status, $lastError, $chunkCount, $createdAt, $updatedAt)
+                     $status, $lastError, $chunkCount, $graphStatus, $graphError, $createdAt, $updatedAt)
                 ON CONFLICT(id) DO UPDATE SET
                     module_id = excluded.module_id,
                     file_name = excluded.file_name,
@@ -298,6 +373,8 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
                     status = excluded.status,
                     last_error = excluded.last_error,
                     chunk_count = excluded.chunk_count,
+                    graph_status = excluded.graph_status,
+                    graph_error = excluded.graph_error,
                     updated_at = excluded.updated_at;
                 """;
             AddDocumentParameters(saveDocument, document);
@@ -337,6 +414,12 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
             Add(insert, "$embeddingBlob", chunk.Embedding is null ? null : SerializeVector(chunk.Embedding));
             Add(insert, "$createdAt", FormatDate(chunk.CreatedAt == default ? DateTimeOffset.UtcNow : chunk.CreatedAt));
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (graph is not null)
+        {
+            await ApplyDocumentGraphAsync(connection, (SqliteTransaction)transaction, document, graph, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -443,6 +526,8 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
         Add(command, "$status", document.Status.ToString());
         Add(command, "$lastError", document.LastError);
         Add(command, "$chunkCount", document.ChunkCount);
+        Add(command, "$graphStatus", document.GraphStatus.ToString());
+        Add(command, "$graphError", document.GraphError ?? "");
         Add(command, "$createdAt", FormatDate(document.CreatedAt));
         Add(command, "$updatedAt", FormatDate(document.UpdatedAt));
     }
@@ -461,6 +546,10 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
             : KnowledgeDocumentStatus.Pending,
         LastError = reader.GetString(reader.GetOrdinal("last_error")),
         ChunkCount = reader.GetInt32(reader.GetOrdinal("chunk_count")),
+        GraphStatus = Enum.TryParse<KnowledgeGraphStatus>(ReadOptionalString(reader, "graph_status"), out var graphStatus)
+            ? graphStatus
+            : KnowledgeGraphStatus.Pending,
+        GraphError = ReadOptionalString(reader, "graph_error"),
         CreatedAt = ParseDate(reader.GetString(reader.GetOrdinal("created_at"))),
         UpdatedAt = ParseDate(reader.GetString(reader.GetOrdinal("updated_at")))
     };
@@ -484,6 +573,19 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
             Embedding = reader.IsDBNull(blobOrdinal) ? null : DeserializeVector((byte[])reader.GetValue(blobOrdinal)),
             CreatedAt = ParseDate(reader.GetString(reader.GetOrdinal("created_at")))
         };
+    }
+
+    private static string ReadOptionalString(SqliteDataReader reader, string column)
+    {
+        try
+        {
+            var ordinal = reader.GetOrdinal(column);
+            return reader.IsDBNull(ordinal) ? "" : reader.GetString(ordinal);
+        }
+        catch (IndexOutOfRangeException)
+        {
+            return "";
+        }
     }
 
     private static string FormatDate(DateTimeOffset value) => value.ToUniversalTime().ToString("O");

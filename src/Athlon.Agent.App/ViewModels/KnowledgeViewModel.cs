@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
+using System.Windows;
+using Athlon.Agent.App.Windows;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
@@ -53,6 +55,8 @@ public sealed partial class KnowledgeViewModel : ObservableObject, IDisposable
         DocumentPreview = _loc["Knowledge_SelectDocumentPreview"];
         _ocrEnabled = settings.Knowledge.Ocr.Enabled;
         _splitByPageEnabled = settings.Knowledge.Chunking.SplitByPage;
+        _graphEnabled = settings.Knowledge.Graph.Enabled;
+        _entityTypesText = string.Join(", ", settings.Knowledge.Graph.NormalizedEntityTypes());
         RefreshLocalizedStrings();
     }
 
@@ -93,6 +97,12 @@ public sealed partial class KnowledgeViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _splitByPageEnabled;
 
+    [ObservableProperty]
+    private bool _graphEnabled;
+
+    [ObservableProperty]
+    private string _entityTypesText = "";
+
     partial void OnOcrEnabledChanged(bool value)
     {
         if (_settings.Knowledge.Ocr.Enabled == value)
@@ -114,6 +124,38 @@ public sealed partial class KnowledgeViewModel : ObservableObject, IDisposable
         _settings.Knowledge.Chunking.SplitByPage = value;
         _ = PersistKnowledgeSettingAsync();
     }
+
+    partial void OnGraphEnabledChanged(bool value)
+    {
+        if (_settings.Knowledge.Graph.Enabled == value)
+        {
+            return;
+        }
+
+        _settings.Knowledge.Graph.Enabled = value;
+        _ = PersistKnowledgeSettingAsync();
+    }
+
+    public void CommitEntityTypes()
+    {
+        var parsed = KnowledgeGraphSettings.ParseEntityTypes(EntityTypesText).ToList();
+        var current = _settings.Knowledge.Graph.NormalizedEntityTypes();
+        EntityTypesText = string.Join(", ", parsed);
+        if (current.SequenceEqual(parsed, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _settings.Knowledge.Graph.EntityTypes = parsed;
+        _ = PersistKnowledgeSettingAsync();
+    }
+
+    public bool CanViewGraph() => SelectedModule is not null && !IsIndexing;
+
+    public bool CanRebuildGraph() =>
+        SelectedModule is not null
+        && !IsIndexing
+        && Documents.Any(document => document.Document.Status == KnowledgeDocumentStatus.Indexed);
 
     private async Task PersistKnowledgeSettingAsync()
     {
@@ -504,6 +546,11 @@ public sealed partial class KnowledgeViewModel : ObservableObject, IDisposable
         foreach (var hit in hits)
         {
             builder.AppendLine($"score={hit.Score:0.000} | {hit.ModuleName} / {hit.FileName} / {hit.TitlePath}");
+            if (!string.IsNullOrWhiteSpace(hit.RelationSummary))
+            {
+                builder.AppendLine(hit.RelationSummary.Trim());
+            }
+
             builder.AppendLine(hit.Content.Trim());
             builder.AppendLine();
         }
@@ -517,6 +564,78 @@ public sealed partial class KnowledgeViewModel : ObservableObject, IDisposable
         ModuleDescription = value?.Module.Description ?? "";
         LoadDocumentsFromCache(value?.Module.Id);
         OnPropertyChanged(nameof(HasModuleSelected));
+        NotifyGraphCommands();
+    }
+
+    partial void OnIsIndexingChanged(bool value) => NotifyGraphCommands();
+
+    private void NotifyGraphCommands()
+    {
+        ViewGraphCommand.NotifyCanExecuteChanged();
+        RebuildGraphCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanViewGraph))]
+    private async Task ViewGraphAsync()
+    {
+        if (SelectedModule is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var graph = await _store.GetModuleGraphAsync(SelectedModule.Module.Id);
+            var owner = Application.Current?.MainWindow;
+            KnowledgeGraphWindow.Show(graph, SelectedModule.Module.Name, owner);
+        }
+        catch (Exception exception)
+        {
+            _notifier.Warning("Knowledge_TitleDialog", "Knowledge_RebuildGraphFailed", exception.Message);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRebuildGraph))]
+    private async Task RebuildGraphAsync()
+    {
+        if (SelectedModule is null)
+        {
+            return;
+        }
+
+        CommitEntityTypes();
+        var name = SelectedModule.Module.Name;
+        if (!_notifier.ConfirmYesNo("Knowledge_RebuildGraphTitle", "Knowledge_RebuildGraphMessage", name))
+        {
+            return;
+        }
+
+        var moduleId = SelectedModule.Module.Id;
+        try
+        {
+            IsIndexing = true;
+            IndexingProgress = 0;
+            IndexingProgressText = _loc["Knowledge_IndexingPrepare"];
+            var progress = new Progress<KnowledgeIndexingProgress>(value =>
+                UpdateIndexingProgress(value, fileIndex: 0, fileCount: 1));
+            var result = await _indexer.RebuildModuleGraphAsync(moduleId, progress: progress);
+            InvalidateCache();
+            await RefreshAsync(moduleId);
+            StatusText = result.Failed == 0
+                ? _loc.Format("Knowledge_RebuildGraphDone", result.Succeeded)
+                : _loc.Format("Knowledge_RebuildGraphPartial", result.Succeeded, result.Failed);
+            IndexingProgress = result.Failed == 0 ? 100 : Math.Clamp(IndexingProgress, 0, 99);
+            IndexingProgressText = StatusText;
+            KnowledgeDataChanged?.Invoke();
+        }
+        catch (Exception exception)
+        {
+            _notifier.Warning("Knowledge_TitleDialog", "Knowledge_RebuildGraphFailed", exception.Message);
+        }
+        finally
+        {
+            IsIndexing = false;
+        }
     }
 
     partial void OnSelectedDocumentChanged(KnowledgeDocumentItemViewModel? value)

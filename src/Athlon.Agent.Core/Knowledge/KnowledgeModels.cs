@@ -31,6 +31,8 @@ public sealed class KnowledgeDocument
     public KnowledgeDocumentStatus Status { get; set; } = KnowledgeDocumentStatus.Pending;
     public string LastError { get; set; } = "";
     public int ChunkCount { get; set; }
+    public KnowledgeGraphStatus GraphStatus { get; set; } = KnowledgeGraphStatus.Pending;
+    public string GraphError { get; set; } = "";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -60,7 +62,8 @@ public sealed record KnowledgeSearchHit(
     string TitlePath,
     int? PageNumber,
     double Score,
-    string Content);
+    string Content,
+    string RelationSummary = "");
 
 public sealed record KnowledgeModuleSummary(
     KnowledgeModule Module,

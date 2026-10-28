@@ -876,6 +876,42 @@
   <data name="Knowledge_SplitByPageHint" xml:space="preserve">
     <value>开启后，带「# Page N」标记的文档（如 PDF）按页切成检索切片并记录页码；单页过长时仍按字符窗口继续切分。关闭则整篇按固定窗口切分。</value>
   </data>
+  <data name="Knowledge_GraphEnabled" xml:space="preserve">
+    <value>导入时构建知识图谱</value>
+  </data>
+  <data name="Knowledge_GraphEnabledHint" xml:space="preserve">
+    <value>开启后，上传和重新索引会抽取组织、人物、地点、事件及它们之间的关系。关闭后新的导入不再抽取；重新索引文档会清掉该文档上的旧图谱。已有图谱可用「重建图谱」更新。</value>
+  </data>
+  <data name="Knowledge_GraphEntityTypes" xml:space="preserve">
+    <value>实体类型</value>
+  </data>
+  <data name="Knowledge_GraphEntityTypesHint" xml:space="preserve">
+    <value>用逗号分隔。只保留这些类型，默认 organization, person, geo, event。</value>
+  </data>
+  <data name="Knowledge_ViewGraph" xml:space="preserve">
+    <value>查看图谱</value>
+  </data>
+  <data name="Knowledge_RebuildGraph" xml:space="preserve">
+    <value>重建图谱</value>
+  </data>
+  <data name="Knowledge_RebuildGraphTitle" xml:space="preserve">
+    <value>重建知识图谱</value>
+  </data>
+  <data name="Knowledge_RebuildGraphMessage" xml:space="preserve">
+    <value>将根据「{0}」里已索引的文档重新抽取实体和关系，并更新该空间的图谱。文档切片不会重新计算。</value>
+  </data>
+  <data name="Knowledge_RebuildGraphDone" xml:space="preserve">
+    <value>图谱已更新，共 {0} 个文档。</value>
+  </data>
+  <data name="Knowledge_RebuildGraphPartial" xml:space="preserve">
+    <value>图谱更新完成：成功 {0} 个，失败 {1} 个。</value>
+  </data>
+  <data name="Knowledge_RebuildGraphFailed" xml:space="preserve">
+    <value>重建图谱失败：{0}</value>
+  </data>
+  <data name="Knowledge_GraphWindowTitle" xml:space="preserve">
+    <value>{0} · 知识图谱</value>
+  </data>
   <data name="Knowledge_Name" xml:space="preserve">
     <value>名称</value>
   </data>

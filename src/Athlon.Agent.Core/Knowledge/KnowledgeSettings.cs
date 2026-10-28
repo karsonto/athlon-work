@@ -8,6 +8,7 @@ public sealed class KnowledgeSettings
     public KnowledgeChunkSettings Chunking { get; set; } = new();
     public KnowledgeSearchSettings Search { get; set; } = new();
     public KnowledgeOcrSettings Ocr { get; set; } = new();
+    public KnowledgeGraphSettings Graph { get; set; } = new();
 }
 
 public sealed class KnowledgeOcrSettings
@@ -56,4 +57,44 @@ public sealed class KnowledgeSearchSettings
     public int TopK { get; set; } = 8;
     public double MinScore { get; set; } = 0.25;
     public int MaxContentCharsPerHit { get; set; } = 1200;
+}
+
+public sealed class KnowledgeGraphSettings
+{
+    public static readonly string[] DefaultEntityTypes = ["organization", "person", "geo", "event"];
+
+    /// <summary>When true, import and reindex extract entities and relations after chunk embeddings.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>GraphRAG-style entity types. The extractor keeps only these labels.</summary>
+    public List<string> EntityTypes { get; set; } = [.. DefaultEntityTypes];
+
+    /// <summary>How many chunks are sent in one extraction request.</summary>
+    public int BatchSize { get; set; } = 4;
+
+    public IReadOnlyList<string> NormalizedEntityTypes()
+    {
+        var types = (EntityTypes ?? [])
+            .Select(type => type.Trim().ToLowerInvariant())
+            .Where(type => type.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return types.Length == 0 ? DefaultEntityTypes : types;
+    }
+
+    public static IReadOnlyList<string> ParseEntityTypes(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return DefaultEntityTypes;
+        }
+
+        var types = text
+            .Split([',', '，', ';', '；', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(type => type.ToLowerInvariant())
+            .Where(type => type.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return types.Length == 0 ? DefaultEntityTypes : types;
+    }
 }

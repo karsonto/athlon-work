@@ -867,6 +867,42 @@ Error: {1}</value>
   <data name="Knowledge_SplitByPageHint" xml:space="preserve">
     <value>When on, documents with "# Page N" markers (e.g. PDFs) are chunked per page with page numbers stored. Oversized pages still use the character window. When off, the whole document uses fixed-size windows.</value>
   </data>
+  <data name="Knowledge_GraphEnabled" xml:space="preserve">
+    <value>Build a knowledge graph on import</value>
+  </data>
+  <data name="Knowledge_GraphEnabledHint" xml:space="preserve">
+    <value>When on, upload and reindex extract organizations, people, places, events, and their relations. When off, new imports skip extraction; reindexing a document clears that document's previous graph. Use Rebuild graph to refresh an existing graph.</value>
+  </data>
+  <data name="Knowledge_GraphEntityTypes" xml:space="preserve">
+    <value>Entity types</value>
+  </data>
+  <data name="Knowledge_GraphEntityTypesHint" xml:space="preserve">
+    <value>Comma-separated. Only these types are kept. Default: organization, person, geo, event.</value>
+  </data>
+  <data name="Knowledge_ViewGraph" xml:space="preserve">
+    <value>View graph</value>
+  </data>
+  <data name="Knowledge_RebuildGraph" xml:space="preserve">
+    <value>Rebuild graph</value>
+  </data>
+  <data name="Knowledge_RebuildGraphTitle" xml:space="preserve">
+    <value>Rebuild knowledge graph</value>
+  </data>
+  <data name="Knowledge_RebuildGraphMessage" xml:space="preserve">
+    <value>Re-extract entities and relations from indexed documents in "{0}" and update that space's graph. Document chunks are not recomputed.</value>
+  </data>
+  <data name="Knowledge_RebuildGraphDone" xml:space="preserve">
+    <value>Graph updated for {0} document(s).</value>
+  </data>
+  <data name="Knowledge_RebuildGraphPartial" xml:space="preserve">
+    <value>Graph update finished: {0} succeeded, {1} failed.</value>
+  </data>
+  <data name="Knowledge_RebuildGraphFailed" xml:space="preserve">
+    <value>Graph rebuild failed: {0}</value>
+  </data>
+  <data name="Knowledge_GraphWindowTitle" xml:space="preserve">
+    <value>{0} · Knowledge graph</value>
+  </data>
   <data name="Knowledge_Name" xml:space="preserve">
     <value>Name</value>
   </data>
