@@ -16,9 +16,16 @@ public sealed class SkillPackageInstaller(
     private readonly IAppLogger _logger = logger.ForContext("SkillPackageInstaller");
 
     public Task InstallAsync(RemoteSkillDto skill, CancellationToken cancellationToken = default) =>
-        InstallAsync(skill, persistCatalog: true, cancellationToken);
+        InstallAsync(skill, persistCatalog: true, fullDownload: false, cancellationToken);
 
-    internal async Task<bool> InstallAsync(RemoteSkillDto skill, bool persistCatalog, CancellationToken cancellationToken = default)
+    public Task InstallAsync(RemoteSkillDto skill, bool fullDownload, CancellationToken cancellationToken = default) =>
+        InstallAsync(skill, persistCatalog: true, fullDownload, cancellationToken);
+
+    internal async Task<bool> InstallAsync(
+        RemoteSkillDto skill,
+        bool persistCatalog,
+        bool fullDownload,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(skill);
         if (string.IsNullOrWhiteSpace(skill.Id))
@@ -44,18 +51,21 @@ public sealed class SkillPackageInstaller(
         }
 
         var manifestPath = SkillAnchorStore.ManifestPath(paths.SkillManifestDirectory, manifest.SkillId);
-        if (manifest.CommitSeq == anchor
-            && File.Exists(manifestPath)
-            && string.Equals(SkillIntegrity.ReadUtf8(manifestPath).TrimEnd('\r', '\n'), manifestText, StringComparison.Ordinal))
+        var folderName = SanitizeFolderName(
+            string.IsNullOrWhiteSpace(skill.EnglishName) ? manifest.SkillId : skill.EnglishName);
+        paths.EnsureCreated();
+        var targetDir = Path.Combine(paths.SkillsPath, folderName);
+        var localName = Directory.Exists(targetDir) ? SkillFileSystemHelper.TryReadSkillName(targetDir) : null;
+        if (!fullDownload
+            && !string.IsNullOrWhiteSpace(localName)
+            && SkillIntegrity.TryVerify(targetDir, manifestText, anchorCommitSeq: 0, localName, out _))
         {
             return false;
         }
 
-        var folderName = SanitizeFolderName(
-            string.IsNullOrWhiteSpace(skill.EnglishName) ? manifest.SkillId : skill.EnglishName);
-        paths.EnsureCreated();
-        var targetDir = Path.Combine(paths.HubSkillsPath, folderName);
-        var localHashes = IndexDirectory(targetDir);
+        var localHashes = fullDownload
+            ? new Dictionary<string, byte[]>(StringComparer.Ordinal)
+            : IndexDirectory(targetDir);
         var missing = manifest.Files
             .Select(static file => file.Sha256)
             .Where(hash => !localHashes.ContainsKey(hash))
@@ -102,7 +112,6 @@ public sealed class SkillPackageInstaller(
     {
         catalog.Reload();
         var installed = catalog.Skills;
-        settings.Skills = SkillSettingsMerger.Merge(paths.HubSkillsPath, installed, settings.Skills);
         settings.Skills = SkillSettingsMerger.Merge(paths.SkillsPath, installed, settings.Skills);
         await storage.SaveSettingsAsync(settings, cancellationToken).ConfigureAwait(false);
     }

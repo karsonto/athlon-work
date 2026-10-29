@@ -164,13 +164,12 @@ public sealed class SkillHubTests
     {
         var root = Path.Combine(Path.GetTempPath(), "athlon-skill-catalog", Guid.NewGuid().ToString("N"));
         var skills = Path.Combine(root, "skills");
-        var hub = Path.Combine(root, "skills-hub");
         var manifests = Path.Combine(root, "config", "skill-manifests");
         var anchors = Path.Combine(root, "config", "skill-anchors.json");
         var local = Path.Combine(skills, "demo");
         Directory.CreateDirectory(local);
         File.WriteAllText(Path.Combine(local, "SKILL.md"), "---\nname: demo\ndescription: local\n---\n\nlocal\n");
-        var repo = new IntegritySkillRepository(skills, hub, manifests, anchors);
+        var repo = new IntegritySkillRepository(skills, manifests, anchors);
         try
         {
             Assert.Empty(repo.GetAllSkills());
@@ -181,15 +180,6 @@ public sealed class SkillHubTests
             File.WriteAllText(Path.Combine(manifests, "demo.json"), manifest);
             var loaded = Assert.Single(repo.GetAllSkills());
             Assert.Contains("local", loaded.SkillContent, StringComparison.Ordinal);
-
-            var hubDir = Path.Combine(hub, "demo");
-            Directory.CreateDirectory(hubDir);
-            File.WriteAllText(Path.Combine(hubDir, "SKILL.md"), "---\nname: demo\ndescription: hub\n---\n\nhub\n");
-            var hubManifest = SkillManifest.Canonical("demo", 2, SkillIntegrity.ListFiles(hubDir));
-            File.WriteAllText(Path.Combine(manifests, "demo.json"), hubManifest);
-            File.WriteAllText(anchors, "{\"demo\":2}");
-            loaded = Assert.Single(repo.GetAllSkills());
-            Assert.Contains("hub", loaded.SkillContent, StringComparison.Ordinal);
         }
         finally
         {
@@ -201,87 +191,32 @@ public sealed class SkillHubTests
     }
 
     [Fact]
-    public void Select_skips_remote_catalog_when_no_local_manifest_exists()
+    public void Classify_offers_use_update_or_installed_from_local_files()
     {
-        var remote = new RemoteSkillDto { Id = "s1", EnglishName = "demo", CommitSeq = 3 };
-
-        Assert.Empty(SkillUpdateSelector.Select([], [remote]));
-    }
-
-    [Fact]
-    public void Select_skips_remote_skills_that_are_not_installed()
-    {
-        var local = Revisions(("demo", 1));
-        var remote = new RemoteSkillDto { Id = "s9", EnglishName = "other", Name = "其他", CommitSeq = 4 };
-
-        Assert.Empty(SkillUpdateSelector.Select(local, [remote]));
-    }
-
-    [Fact]
-    public void Select_skips_remote_skills_at_or_behind_the_local_commit()
-    {
-        var local = Revisions(("demo", 2));
-        var same = new RemoteSkillDto { Id = "s1", EnglishName = "demo", CommitSeq = 2 };
-        var older = new RemoteSkillDto { Id = "s1", EnglishName = "demo", CommitSeq = 1 };
-
-        Assert.Empty(SkillUpdateSelector.Select(local, [same, older]));
-    }
-
-    [Fact]
-    public void Select_includes_a_newer_remote_commit_matched_by_english_name()
-    {
-        var local = Revisions(("demo", 1));
-        var installed = new RemoteSkillDto { Id = "s1", EnglishName = "demo", CommitSeq = 3 };
-        var other = new RemoteSkillDto { Id = "s2", EnglishName = "other", CommitSeq = 9 };
-
-        var selected = SkillUpdateSelector.Select(local, [installed, other]);
-
-        var skill = Assert.Single(selected);
-        Assert.Equal("s1", skill.Id);
-    }
-
-    [Fact]
-    public void Select_includes_a_matched_skill_when_the_list_omits_commit_seq()
-    {
-        var local = Revisions(("demo", 4));
-        var remote = new RemoteSkillDto { Id = "s1", EnglishName = "doc/skills", Name = "demo" };
-
-        var selected = SkillUpdateSelector.Select(local, [remote]);
-
-        Assert.Single(selected);
-    }
-
-    [Fact]
-    public void Select_matches_sanitized_hub_folder_when_platform_id_differs()
-    {
-        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "demo", "doc_skills" };
-        var local = new[] { new SkillUpdateSelector.LocalSkillRevision("demo", 1, keys) };
-        var remote = new RemoteSkillDto { Id = "s1", EnglishName = "doc/skills", CommitSeq = 2 };
-
-        var selected = SkillUpdateSelector.Select(local, [remote]);
-
-        Assert.Equal("s1", Assert.Single(selected).Id);
-    }
-
-    [Fact]
-    public void ReadLocalRevisions_indexes_manifest_commit_and_hub_folder()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-sync", Guid.NewGuid().ToString("N"));
-        var manifests = Path.Combine(root, "skill-manifests");
-        var hub = Path.Combine(root, "skills-hub", "doc-skills");
-        Directory.CreateDirectory(manifests);
-        Directory.CreateDirectory(hub);
+        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-classify", Guid.NewGuid().ToString("N"));
+        var skills = Path.Combine(root, "skills");
+        var local = Path.Combine(skills, "doc-skills");
+        Directory.CreateDirectory(local);
         try
         {
-            File.WriteAllText(
-                Path.Combine(manifests, "demo.json"),
-                SkillManifest.Canonical("demo", 2, []));
-            File.WriteAllText(Path.Combine(hub, "SKILL.md"), "---\nname: demo\ndescription: hub\n---\n\nhub\n");
+            Assert.Equal(SkillInstallClassifier.Use, SkillInstallClassifier.Classify(null, "not-json", 0));
+            Assert.Equal(SkillInstallClassifier.Use, SkillInstallClassifier.Classify(local, "not-json", 0));
 
-            var revision = Assert.Single(SkillUpdateSelector.ReadLocalRevisions(manifests, Path.Combine(root, "skills-hub")));
-            Assert.Equal("demo", revision.SkillId);
-            Assert.Equal(2, revision.CommitSeq);
-            Assert.Contains("doc-skills", revision.MatchKeys);
+            File.WriteAllText(Path.Combine(local, "SKILL.md"), "---\nname: doc-skills\ndescription: docs\n---\n\nbody\n");
+            var manifest = SkillManifest.Canonical("doc-skills", 3, SkillIntegrity.ListFiles(local));
+            Assert.Equal(SkillInstallClassifier.Installed, SkillInstallClassifier.Classify(local, manifest, 3));
+
+            File.WriteAllText(Path.Combine(local, "extra.txt"), "changed");
+            Assert.Equal(SkillInstallClassifier.Update, SkillInstallClassifier.Classify(local, manifest, 3));
+            Assert.Equal(SkillInstallClassifier.Installed, SkillInstallClassifier.Classify(local, manifest, 4));
+
+            var found = SkillInstallClassifier.FindInstalledDirectory(skills, new RemoteSkillDto
+            {
+                Id = "s1",
+                EnglishName = "doc-skills",
+                Name = "文档技能"
+            });
+            Assert.Equal(local, found);
         }
         finally
         {
@@ -312,12 +247,4 @@ public sealed class SkillHubTests
         var objectJson = """{"type":"ready"}""";
         Assert.Equal(objectJson, Athlon.Agent.App.Views.SkillHubPageView.UnwrapWebMessageJson(objectJson));
     }
-
-    private static IReadOnlyList<SkillUpdateSelector.LocalSkillRevision> Revisions(
-        params (string SkillId, long CommitSeq)[] skills) =>
-        skills.Select(static skill => new SkillUpdateSelector.LocalSkillRevision(
-                skill.SkillId,
-                skill.CommitSeq,
-                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { skill.SkillId }))
-            .ToArray();
 }

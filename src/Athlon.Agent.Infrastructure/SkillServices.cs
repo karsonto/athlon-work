@@ -16,7 +16,6 @@ public static class SkillServiceCollectionExtensions
             var logger = sp.GetRequiredService<IAppLogger>().ForContext("SkillRepository");
             return new IntegritySkillRepository(
                 paths.SkillsPath,
-                paths.HubSkillsPath,
                 paths.SkillManifestDirectory,
                 paths.SkillAnchorsPath,
                 (dir, ex) => logger.Warning(

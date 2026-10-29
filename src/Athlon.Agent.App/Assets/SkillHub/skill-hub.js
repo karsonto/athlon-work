@@ -1,15 +1,18 @@
 (function () {
   'use strict';
 
+  var PAGE_SIZE = 8;
+
   var state = {
     items: [],
     installed: {},
     installing: {},
-    lastResult: null, // { id, ok, error } short-lived install feedback
     query: '',
     category: '',
-    featuredExpanded: false,
-    featuredLimit: 6
+    position: '',
+    sort: '',
+    page: 1,
+    detailId: null
   };
 
   function post(payload) {
@@ -26,32 +29,28 @@
       .replace(/"/g, '&quot;');
   }
 
+  function displayName(item) {
+    return ((item && (item.name || item.englishName)) || '').trim();
+  }
+
   function initial(item) {
-    var name = (item.name || item.englishName || '?').trim();
+    var name = displayName(item);
     return name ? name.charAt(0).toUpperCase() : '?';
   }
 
-  function displayName(item) {
-    return (item.name || item.englishName || '').trim();
+  function toneClass(item) {
+    var name = displayName(item);
+    var n = 0;
+    for (var i = 0; i < name.length; i++) n = (n + name.charCodeAt(i)) % 5;
+    return 'icon-tone-' + n;
   }
 
-  function englishNameSuffix(item) {
-    var en = (item.englishName || '').trim();
-    if (!en) return '';
-    var primary = displayName(item);
-    // Avoid duplicating when name already is / equals the english id.
-    if (!primary || primary.toLowerCase() === en.toLowerCase()) return '';
-    return en;
-  }
-
-  function nameHtml(item, nameClass, enClass) {
-    var primary = displayName(item);
-    var en = englishNameSuffix(item);
-    var html = '<div class="' + nameClass + '">' + escapeHtml(primary) + '</div>';
-    if (en) {
-      html += '<div class="' + enClass + '">' + escapeHtml(en) + '</div>';
-    }
-    return html;
+  function formatSize(bytes) {
+    var n = Number(bytes);
+    if (!n || n < 0) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10 * 1024 ? 1 : 0) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
   function isInstalled(item) {
@@ -64,16 +63,178 @@
     return false;
   }
 
+  function findItem(id) {
+    var wanted = String(id == null ? '' : id);
+    for (var i = 0; i < state.items.length; i++) {
+      if (String(state.items[i].id) === wanted) return state.items[i];
+    }
+    return null;
+  }
+
+  function uniqueValues(items, field) {
+    var seen = [];
+    items.forEach(function (item) {
+      var value = (item[field] || '').trim();
+      if (value && seen.indexOf(value) < 0) seen.push(value);
+    });
+    seen.sort(function (a, b) { return a.localeCompare(b, 'zh'); });
+    return seen;
+  }
+
   function filteredItems() {
     var q = state.query.trim().toLowerCase();
-    return state.items.filter(function (item) {
+    var items = state.items.filter(function (item) {
       if (state.category && (item.category || '') !== state.category) return false;
+      if (state.position && (item.position || '') !== state.position) return false;
       if (!q) return true;
       var hay = [item.name, item.englishName, item.description, item.category, item.position]
         .join(' ')
         .toLowerCase();
       return hay.indexOf(q) >= 0;
     });
+    if (state.sort === 'name') {
+      items.sort(function (a, b) { return displayName(a).localeCompare(displayName(b), 'zh'); });
+    } else if (state.sort === 'category') {
+      items.sort(function (a, b) {
+        var byCat = (a.category || '').localeCompare(b.category || '', 'zh');
+        return byCat || displayName(a).localeCompare(displayName(b), 'zh');
+      });
+    }
+    return items;
+  }
+
+  function tagsHtml(item) {
+    var tags = [];
+    if ((item.category || '').trim()) tags.push(item.category.trim());
+    if ((item.position || '').trim()) tags.push(item.position.trim());
+    if (!tags.length) return '';
+    return '<div class="tag-row">' + tags.map(function (tag) {
+      return '<span class="tag">' + escapeHtml(tag) + '</span>';
+    }).join('') + '</div>';
+  }
+
+  function actionOf(item) {
+    var action = String(item && item.availability || '').toLowerCase();
+    if (action === 'update' || action === 'installed' || action === 'use') return action;
+    return isInstalled(item) ? 'installed' : 'use';
+  }
+
+  function useButtonHtml(item, extraClass) {
+    var action = actionOf(item);
+    var pending = state.installing[item.id];
+    var installing = !!pending;
+    var cls = 'use-btn' + (action === 'installed' ? ' installed' : '') + (extraClass ? ' ' + extraClass : '');
+    var label = installing
+      ? (pending === 'update' ? '更新中…' : '下载中…')
+      : (action === 'update' ? '更新' : action === 'installed' ? '已安装' : '使用');
+    var disabled = installing || action === 'installed' ? ' disabled' : '';
+    var attrs = disabled
+      ? ''
+      : ' data-action="add" data-id="' + escapeHtml(item.id) + '" data-mode="' + action + '"';
+    return '<button type="button" class="' + cls + '"' + disabled + attrs + '>' + label + '</button>';
+  }
+
+  function renderChips() {
+    var host = document.getElementById('categoryChips');
+    if (!host) return;
+    var cats = uniqueValues(state.items, 'category');
+    var chips = [{ value: '', label: '全部' }].concat(cats.map(function (c) {
+      return { value: c, label: c };
+    }));
+    host.innerHTML = chips.map(function (chip) {
+      var active = chip.value === state.category ? ' active' : '';
+      return '<button type="button" class="chip' + active + '" data-action="category" data-value="' +
+        escapeHtml(chip.value) + '">' + escapeHtml(chip.label) + '</button>';
+    }).join('');
+  }
+
+  function renderPositionFilter() {
+    var select = document.getElementById('positionFilter');
+    if (!select) return;
+    var current = state.position;
+    var positions = uniqueValues(state.items, 'position');
+    if (current && positions.indexOf(current) < 0) current = '';
+    state.position = current;
+    select.innerHTML = '<option value="">全部岗位</option>' + positions.map(function (p) {
+      return '<option value="' + escapeHtml(p) + '"' + (p === current ? ' selected' : '') + '>' +
+        escapeHtml(p) + '</option>';
+    }).join('');
+  }
+
+  function renderGrid(items) {
+    var grid = document.getElementById('grid');
+    var pager = document.getElementById('pager');
+    var count = document.getElementById('resultCount');
+    if (!grid || !pager) return;
+    if (count) count.textContent = items.length ? ('共 ' + items.length + ' 个') : '';
+    if (!items.length) {
+      grid.innerHTML = '';
+      pager.hidden = true;
+      pager.innerHTML = '';
+      return;
+    }
+    var pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    if (state.page > pages) state.page = pages;
+    if (state.page < 1) state.page = 1;
+    var start = (state.page - 1) * PAGE_SIZE;
+    var pageItems = items.slice(start, start + PAGE_SIZE);
+    grid.innerHTML = pageItems.map(function (item) {
+      return '<article class="skill-card">' +
+        '<div class="card-top">' +
+        '<div class="skill-icon ' + toneClass(item) + '">' + escapeHtml(initial(item)) + '</div>' +
+        '<h3 class="card-name">' + escapeHtml(displayName(item)) + '</h3>' +
+        '</div>' +
+        '<p class="card-desc">' + escapeHtml(item.description || '暂无说明') + '</p>' +
+        tagsHtml(item) +
+        '<div class="card-actions">' +
+        useButtonHtml(item) +
+        '<button type="button" class="detail-btn" data-action="detail" data-id="' + escapeHtml(item.id) + '">详情</button>' +
+        '</div>' +
+        '</article>';
+    }).join('');
+    renderPager(pages);
+  }
+
+  function renderPager(pages) {
+    var pager = document.getElementById('pager');
+    if (!pager) return;
+    if (pages <= 1) {
+      pager.hidden = true;
+      pager.innerHTML = '';
+      return;
+    }
+    pager.hidden = false;
+    var html = '<button type="button" class="page-btn" data-action="page" data-page="' + (state.page - 1) + '"' +
+      (state.page <= 1 ? ' disabled' : '') + '>‹</button>';
+    var tokens = pageTokens(state.page, pages);
+    tokens.forEach(function (token) {
+      if (token === '…') {
+        html += '<span class="page-gap">…</span>';
+        return;
+      }
+      var active = token === state.page ? ' active' : '';
+      html += '<button type="button" class="page-btn' + active + '" data-action="page" data-page="' + token + '">' +
+        token + '</button>';
+    });
+    html += '<button type="button" class="page-btn" data-action="page" data-page="' + (state.page + 1) + '"' +
+      (state.page >= pages ? ' disabled' : '') + '>›</button>';
+    pager.innerHTML = html;
+  }
+
+  function pageTokens(current, pages) {
+    if (pages <= 7) {
+      var all = [];
+      for (var i = 1; i <= pages; i++) all.push(i);
+      return all;
+    }
+    var tokens = [1];
+    var start = Math.max(2, current - 1);
+    var end = Math.min(pages - 1, current + 1);
+    if (start > 2) tokens.push('…');
+    for (var n = start; n <= end; n++) tokens.push(n);
+    if (end < pages - 1) tokens.push('…');
+    tokens.push(pages);
+    return tokens;
   }
 
   function setStatus(message, show) {
@@ -88,156 +249,75 @@
     el.textContent = message;
   }
 
-  function setMeta(id, text) {
-    var el = document.getElementById(id);
-    if (el) el.textContent = text || '';
+  function metaRow(label, value) {
+    if (!value) return '';
+    return '<tr><th>' + escapeHtml(label) + '</th><td>' + value + '</td></tr>';
   }
 
-  function renderDiscover(items) {
-    var section = document.getElementById('discover');
-    var grid = document.getElementById('discoverGrid');
-    if (!section || !grid) return;
-    var discover = items.slice(0, 3);
-    if (!discover.length || state.category || state.query) {
-      section.hidden = true;
-      grid.innerHTML = '';
+  function renderDrawer() {
+    var drawer = document.getElementById('drawer');
+    var backdrop = document.getElementById('drawerBackdrop');
+    var body = document.getElementById('drawerBody');
+    if (!drawer || !backdrop || !body) return;
+    var item = state.detailId ? findItem(state.detailId) : null;
+    if (!item) {
+      drawer.hidden = true;
+      drawer.setAttribute('aria-hidden', 'true');
+      backdrop.hidden = true;
+      body.innerHTML = '';
       return;
     }
-    section.hidden = false;
-    setMeta('discoverMeta', discover.length + ' featured this week');
-    grid.innerHTML = discover.map(function (item) {
-      return '<article class="discover-card">' +
-        '<div class="discover-icon">' + escapeHtml(initial(item)) + '</div>' +
-        nameHtml(item, 'discover-name', 'discover-en') +
-        '<div class="discover-desc">' + escapeHtml(item.description || '') + '</div>' +
-        '<div class="discover-badge">' + escapeHtml(item.category || 'Skill') + '</div>' +
-        '</article>';
-    }).join('');
-  }
-
-  function actionHtml(item) {
-    var installed = isInstalled(item);
-    var installing = !!state.installing[item.id];
-    var last = state.lastResult && state.lastResult.id === item.id ? state.lastResult : null;
-    if (installed) {
-      // Local skill already present — never show Add.
-      return '<span class="installed-label">Installed</span>';
-    }
-    if (installing) {
-      return '<button type="button" class="add-btn" disabled>Adding\u2026</button>';
-    }
-    if (last && last.ok) {
-      return '<button type="button" class="add-btn added" data-action="add" data-id="' + escapeHtml(item.id) + '">\u2713 Added</button>';
-    }
-    if (last && !last.ok) {
-      return '<span class="result-flash">Retry</span>' +
-        '<button type="button" class="add-btn" data-action="add" data-id="' + escapeHtml(item.id) + '">Add</button>';
-    }
-    return '<button type="button" class="add-btn" data-action="add" data-id="' + escapeHtml(item.id) + '">Add</button>';
-  }
-
-  function renderRow(item) {
-    return '<div class="skill-row" data-id="' + escapeHtml(item.id) + '">' +
-      '<div class="skill-row-icon">' + escapeHtml(initial(item)) + '</div>' +
-      '<div class="skill-row-body">' +
-      nameHtml(item, 'skill-row-name', 'skill-row-en') +
-      '<div class="skill-row-desc">' + escapeHtml(item.description || '') + '</div>' +
+    drawer.hidden = false;
+    drawer.setAttribute('aria-hidden', 'false');
+    backdrop.hidden = false;
+    var size = formatSize(item.packageSize);
+    var version = item.commitSeq ? String(item.commitSeq) : '';
+    var english = (item.englishName || '').trim();
+    var name = displayName(item);
+    if (english && english.toLowerCase() === name.toLowerCase()) english = '';
+    var rows = metaRow('标识', english ? '<span class="mono">' + escapeHtml(english) + '</span>' : '') +
+      metaRow('分类', escapeHtml((item.category || '').trim())) +
+      metaRow('岗位', escapeHtml((item.position || '').trim())) +
+      metaRow('体积', escapeHtml(size)) +
+      metaRow('版本', version ? escapeHtml(version) : '');
+    body.innerHTML =
+      '<div class="detail-head">' +
+      '<div class="skill-icon ' + toneClass(item) + '">' + escapeHtml(initial(item)) + '</div>' +
+      '<div><h3 class="detail-name">' + escapeHtml(name) + '</h3>' + tagsHtml(item) + '</div>' +
       '</div>' +
-      actionHtml(item) +
-      '</div>';
+      '<p class="detail-note">安装后写入本地 skills 目录，并在下次对话的技能目录中可用。</p>' +
+      (rows ? '<table class="meta-table"><tbody>' + rows + '</tbody></table>' : '') +
+      '<section class="detail-block"><h3>说明</h3><p class="detail-copy">' +
+      escapeHtml(item.description || '暂无说明') + '</p></section>' +
+      '<div class="drawer-actions">' + useButtonHtml(item) + '</div>';
   }
 
-  function renderFeatured(items) {
-    var section = document.getElementById('featured');
-    var list = document.getElementById('featuredList');
-    var more = document.getElementById('featuredMore');
-    if (!section || !list || !more) return;
-
-    if (state.category || state.query) {
-      section.hidden = true;
-      list.innerHTML = '';
-      more.hidden = true;
-      return;
-    }
-
-    var featured = items.slice(3);
-    if (!featured.length) {
-      section.hidden = true;
-      list.innerHTML = '';
-      more.hidden = true;
-      return;
-    }
-
-    section.hidden = false;
-    setMeta('featuredMeta', state.featuredExpanded ? featured.length + ' skills' : state.featuredLimit + ' of ' + featured.length + ' shown');
-    var visible = state.featuredExpanded ? featured : featured.slice(0, state.featuredLimit);
-    list.innerHTML = visible.map(renderRow).join('');
-    var hiddenCount = featured.length - state.featuredLimit;
-    if (!state.featuredExpanded && hiddenCount > 0) {
-      more.hidden = false;
-      more.textContent = 'Show ' + hiddenCount + ' more skills';
-    } else {
-      more.hidden = true;
-    }
+  function openDetail(id) {
+    state.detailId = id;
+    renderDrawer();
   }
 
-  function renderCategories(items) {
-    var host = document.getElementById('categorySections');
-    if (!host) return;
-
-    var byCategory = {};
-    items.forEach(function (item) {
-      var key = (item.category || '').trim() || 'Other';
-      if (!byCategory[key]) byCategory[key] = [];
-      byCategory[key].push(item);
-    });
-
-    var keys = Object.keys(byCategory).sort(function (a, b) {
-      return a.localeCompare(b, 'zh');
-    });
-
-    host.innerHTML = keys.map(function (key) {
-      var rows = byCategory[key].map(renderRow).join('');
-      return '<section class="section">' +
-        '<div class="section-head">' +
-        '<h2 class="section-title">' + escapeHtml(key) + '</h2>' +
-        '<span class="section-meta">' + byCategory[key].length + ' skills</span>' +
-        '</div>' +
-        '<div class="skill-list">' + rows + '</div>' +
-        '</section>';
-    }).join('');
-  }
-
-  function fillCategoryFilter(items) {
-    var select = document.getElementById('categoryFilter');
-    if (!select) return;
-    var current = state.category;
-    var cats = [];
-    items.forEach(function (item) {
-      var c = (item.category || '').trim();
-      if (c && cats.indexOf(c) < 0) cats.push(c);
-    });
-    cats.sort(function (a, b) { return a.localeCompare(b, 'zh'); });
-    select.innerHTML = '<option value="">All Categories</option>' +
-      cats.map(function (c) {
-        return '<option value="' + escapeHtml(c) + '"' +
-          (c === current ? ' selected' : '') + '>' + escapeHtml(c) + '</option>';
-      }).join('');
+  function closeDetail() {
+    state.detailId = null;
+    renderDrawer();
   }
 
   function render() {
     var items = filteredItems();
     if (!state.items.length) {
-      document.getElementById('discover').hidden = true;
-      document.getElementById('featured').hidden = true;
-      document.getElementById('categorySections').innerHTML = '';
+      document.getElementById('grid').innerHTML = '';
+      document.getElementById('pager').hidden = true;
+      document.getElementById('resultCount').textContent = '';
+      renderChips();
+      renderPositionFilter();
+      renderDrawer();
       return;
     }
     setStatus('', false);
-    fillCategoryFilter(state.items);
-    renderDiscover(items);
-    renderFeatured(items);
-    renderCategories(items);
+    renderChips();
+    renderPositionFilter();
+    renderGrid(items);
+    renderDrawer();
   }
 
   function decodeBase64Utf8(b64) {
@@ -263,19 +343,47 @@
       document.documentElement.style.backgroundColor = bg;
       document.body.style.backgroundColor = bg;
     }
-    if (text) {
-      document.body.style.color = text;
-    }
+    if (text) document.body.style.color = text;
+  }
+
+  function themeScheme() {
+    var root = document.documentElement;
+    var scheme = getComputedStyle(root).getPropertyValue('--hub-scheme').trim();
+    if (scheme === 'dark' || scheme === 'light') return scheme;
+    var bg = getComputedStyle(root).getPropertyValue('--hub-bg').trim();
+    var hex = bg.replace('#', '');
+    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    if (!/^[0-9a-fA-F]{6}/.test(hex)) return 'light';
+    var r = parseInt(hex.slice(0, 2), 16);
+    var g = parseInt(hex.slice(2, 4), 16);
+    var b = parseInt(hex.slice(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 < 140 ? 'dark' : 'light';
   }
 
   function applyThemeUpdate(tokensB64) {
     var tokensCss = decodeBase64Utf8(tokensB64);
     var tokensEl = document.getElementById('skill-hub-theme-tokens');
-    if (tokensEl) {
-      tokensEl.textContent = tokensCss;
-    }
+    if (tokensEl) tokensEl.textContent = tokensCss;
     applyThemeTokensToRoot(tokensCss);
+    var scheme = themeScheme();
+    document.documentElement.dataset.theme = scheme;
+    document.documentElement.style.colorScheme = scheme;
     syncThemeSurfaces();
+  }
+
+  function markInstalled(names, id) {
+    (names || []).forEach(function (name) {
+      var key = String(name || '').trim().toLowerCase();
+      if (key) state.installed[key] = true;
+    });
+    if (id) {
+      state.items.forEach(function (item) {
+        if (item && String(item.id) === String(id)) {
+          item.installed = true;
+          item.availability = 'installed';
+        }
+      });
+    }
   }
 
   function onHostMessage(data) {
@@ -291,53 +399,36 @@
       state.items = data.items || [];
       state.installed = {};
       state.installing = {};
-      state.lastResult = null;
+      state.page = 1;
       (data.installed || []).forEach(function (name) {
         var key = String(name || '').trim().toLowerCase();
         if (key) state.installed[key] = true;
       });
-      // Prefer per-item installed flags from host.
       state.items.forEach(function (item) {
         if (item && item.installed) {
-          [item.englishName, item.name, item.id].forEach(function (name) {
-            var key = String(name || '').trim().toLowerCase();
-            if (key) state.installed[key] = true;
-          });
+          markInstalled([item.englishName, item.name, item.id], item.id);
         }
       });
       if (data.error) {
         setStatus(data.error, true);
-        document.getElementById('discover').hidden = true;
-        document.getElementById('featured').hidden = true;
-        document.getElementById('categorySections').innerHTML = '';
-        fillCategoryFilter([]);
+        state.items = [];
+        closeDetail();
+        render();
         return;
       }
-      if (!state.items.length) {
-        setStatus(data.emptyMessage || 'No skills available.', true);
-      }
+      if (!state.items.length) setStatus(data.emptyMessage || '暂无可用技能。', true);
+      if (state.detailId && !findItem(state.detailId)) closeDetail();
       render();
       return;
     }
     if (data.type === 'installResult') {
       var resultId = data.id == null ? '' : String(data.id);
-      if (resultId) {
-        delete state.installing[resultId];
-      } else {
-        state.installing = {};
-      }
+      if (resultId) delete state.installing[resultId];
+      else state.installing = {};
       if (data.ok) {
-        var keys = [data.englishName, data.name, data.id];
-        keys.forEach(function (name) {
-          var key = String(name || '').trim().toLowerCase();
-          if (key) state.installed[key] = true;
-        });
-        state.items.forEach(function (item) {
-          if (item && String(item.id) === resultId) item.installed = true;
-        });
-      } else {
-        state.lastResult = { id: resultId, ok: false, error: data.error };
-        if (data.error) setStatus(data.error, true);
+        markInstalled([data.englishName, data.name, data.id], resultId);
+      } else if (data.error) {
+        setStatus(data.error, true);
       }
       render();
     }
@@ -345,28 +436,65 @@
 
   document.getElementById('search').addEventListener('input', function (e) {
     state.query = e.target.value || '';
+    state.page = 1;
     render();
   });
-  document.getElementById('categoryFilter').addEventListener('change', function (e) {
-    state.category = e.target.value || '';
+  document.getElementById('positionFilter').addEventListener('change', function (e) {
+    state.position = e.target.value || '';
+    state.page = 1;
+    render();
+  });
+  document.getElementById('sortFilter').addEventListener('change', function (e) {
+    state.sort = e.target.value || '';
+    state.page = 1;
     render();
   });
   document.getElementById('manageBtn').addEventListener('click', function () {
     post({ type: 'manage' });
   });
-  document.getElementById('featuredMore').addEventListener('click', function () {
-    state.featuredExpanded = true;
-    render();
+  document.getElementById('drawerClose').addEventListener('click', closeDetail);
+  document.getElementById('drawerBackdrop').addEventListener('click', closeDetail);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeDetail();
   });
-  document.getElementById('content').addEventListener('click', function (e) {
+
+  document.getElementById('app').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-action]');
+    if (!btn || btn.disabled) return;
+    var action = btn.getAttribute('data-action');
+    if (action === 'category') {
+      state.category = btn.getAttribute('data-value') || '';
+      state.page = 1;
+      render();
+      return;
+    }
+    if (action === 'page') {
+      var page = Number(btn.getAttribute('data-page'));
+      if (!page || page < 1) return;
+      state.page = page;
+      render();
+      return;
+    }
+    if (action === 'detail') {
+      openDetail(btn.getAttribute('data-id'));
+      return;
+    }
+    if (action === 'add') {
+      beginInstall(btn.getAttribute('data-id'), btn.getAttribute('data-mode'));
+    }
+  });
+
+  function beginInstall(id, mode) {
+    if (!id) return;
+    state.installing[id] = mode === 'update' ? 'update' : 'use';
+    render();
+    post({ type: 'add', id: id, mode: state.installing[id] });
+  }
+
+  document.getElementById('drawer').addEventListener('click', function (e) {
     var btn = e.target.closest('[data-action="add"]');
     if (!btn || btn.disabled) return;
-    var id = btn.getAttribute('data-id');
-    if (!id) return;
-    state.installing[id] = true;
-    state.lastResult = null;
-    render();
-    post({ type: 'add', id: id });
+    beginInstall(btn.getAttribute('data-id'), btn.getAttribute('data-mode'));
   });
 
   if (window.chrome && window.chrome.webview) {
@@ -375,8 +503,6 @@
     });
   }
 
-  // Host executes this script after load to push theme tokens (SkillHubThemeStyles.BuildThemeUpdateScript).
   window.applyThemeUpdate = applyThemeUpdate;
-
   post({ type: 'ready' });
 })();

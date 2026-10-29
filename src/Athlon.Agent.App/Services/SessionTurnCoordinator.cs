@@ -4,7 +4,6 @@ using Athlon.Agent.Core;
 using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Infrastructure;
-using Athlon.Agent.Skills;
 
 namespace Athlon.Agent.App.Services;
 
@@ -13,7 +12,6 @@ public sealed class SessionTurnCoordinator
     private readonly SessionTurnHost _turnHost;
     private readonly QueuedTurnPresenter _queuedTurnPresenter;
     private readonly SessionUiCache _uiCache;
-    private readonly IAgentSkillCatalog _skillCatalog;
     private readonly ISkillRuntime _skillRuntime;
     private readonly IMcpRegistry _mcpRegistry;
     private readonly IUserQuestionState _userQuestions;
@@ -22,7 +20,6 @@ public sealed class SessionTurnCoordinator
         SessionTurnHost turnHost,
         QueuedTurnPresenter queuedTurnPresenter,
         SessionUiCache uiCache,
-        IAgentSkillCatalog skillCatalog,
         ISkillRuntime skillRuntime,
         IMcpRegistry mcpRegistry,
         IUserQuestionState userQuestions)
@@ -30,7 +27,6 @@ public sealed class SessionTurnCoordinator
         _turnHost = turnHost;
         _queuedTurnPresenter = queuedTurnPresenter;
         _uiCache = uiCache;
-        _skillCatalog = skillCatalog;
         _skillRuntime = skillRuntime;
         _mcpRegistry = mcpRegistry;
         _userQuestions = userQuestions;
@@ -139,8 +135,6 @@ public sealed class SessionTurnCoordinator
         var expanded = McpComposerExpander.Expand(composerText, _mcpRegistry);
         return SkillComposerExpander.Expand(expanded, _skillRuntime.GetSkills());
     }
-
-    public void ReloadSkills() => _skillCatalog.Reload();
 
     public async Task HandleTurnCompletedAsync(
         SessionTurnCompletedEventArgs e,

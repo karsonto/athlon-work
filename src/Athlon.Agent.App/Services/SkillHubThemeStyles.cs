@@ -11,20 +11,21 @@ internal static class SkillHubThemeStyles
     {
         var isLight = AppThemeManager.CurrentKind == AppThemeKind.Light;
         var chrome = AppThemeManager.Current.Chrome;
-        var accentFg = isLight ? "#FFFFFF" : AppThemeColor.ToHex(chrome.Text);
-        var iconBg = AppThemeColor.ToHex(isLight ? chrome.PanelAlt : chrome.SurfaceHover);
-        // Badges stay neutral in both themes (no AccentSubtle blue wash).
+        var accentFg = "#FFFFFF";
+        var iconBg = AppThemeColor.ToHex(chrome.PanelAlt);
         var badgeBg = AppThemeColor.ToHex(chrome.PanelAlt);
-        // Light Add button: neutral slate; dark keeps accent-tint for contrast on dark panels.
-        var btnBg = AppThemeColor.ToHex(isLight ? chrome.PanelAlt : chrome.AccentSubtle);
-        var btnHover = AppThemeColor.ToHex(isLight ? chrome.SurfaceHover : chrome.AccentHover);
+        // Installed / secondary controls stay neutral. Dark hover must differ from the panel fill.
+        var btnBg = AppThemeColor.ToHex(chrome.PanelAlt);
+        var btnHover = AppThemeColor.ToHex(isLight ? chrome.SurfaceHover : chrome.MenuHover);
+        var panelHover = AppThemeColor.ToHex(isLight ? chrome.SurfaceHover : chrome.MenuHover);
         var btnFg = AppThemeColor.ToHex(chrome.Text);
+        var scheme = isLight ? "light" : "dark";
 
         return $$"""
             :root {
               --hub-bg: {{AppThemeColor.ToHex(chrome.ChatBackgroundTop)}};
               --hub-panel: {{AppThemeColor.ToHex(chrome.Panel)}};
-              --hub-panel-hover: {{AppThemeColor.ToHex(chrome.SurfaceHover)}};
+              --hub-panel-hover: {{panelHover}};
               --hub-border: {{AppThemeColor.ToHex(chrome.Border)}};
               --hub-text: {{AppThemeColor.ToHex(chrome.Text)}};
               --hub-muted: {{AppThemeColor.ToHex(chrome.SubtleText)}};
@@ -36,6 +37,7 @@ internal static class SkillHubThemeStyles
               --hub-btn-fg: {{btnFg}};
               --hub-icon-bg: {{iconBg}};
               --hub-badge-bg: {{badgeBg}};
+              --hub-scheme: {{scheme}};
             }
             """;
     }

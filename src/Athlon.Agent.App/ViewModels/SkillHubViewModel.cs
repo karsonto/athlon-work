@@ -1,4 +1,3 @@
-using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Athlon.Agent.App.Localization;
@@ -66,7 +65,8 @@ public sealed partial class SkillHubViewModel : ObservableObject
             }
 
             _items = await _client.ListAsync(cancellationToken).ConfigureAwait(true);
-            EmitCatalog();
+            var availability = await ClassifyAllAsync(cancellationToken).ConfigureAwait(true);
+            EmitCatalog(availability);
         }
         catch (Exception ex)
         {
@@ -124,7 +124,9 @@ public sealed partial class SkillHubViewModel : ObservableObject
                 return;
             }
 
-            await InstallAsync(id, cancellationToken).ConfigureAwait(true);
+            var fullDownload = !root.TryGetProperty("mode", out var modeEl)
+                || !string.Equals(modeEl.GetString(), SkillInstallClassifier.Update, StringComparison.OrdinalIgnoreCase);
+            await InstallAsync(id, fullDownload, cancellationToken).ConfigureAwait(true);
         }
     }
 
@@ -145,7 +147,7 @@ public sealed partial class SkillHubViewModel : ObservableObject
         };
     }
 
-    private async Task InstallAsync(string skillId, CancellationToken cancellationToken)
+    private async Task InstallAsync(string skillId, bool fullDownload, CancellationToken cancellationToken)
     {
         var skill = _items.FirstOrDefault(item =>
             string.Equals(item.Id, skillId, StringComparison.Ordinal)
@@ -160,7 +162,8 @@ public sealed partial class SkillHubViewModel : ObservableObject
 
         try
         {
-            await _installer.InstallAsync(skill, cancellationToken).ConfigureAwait(true);
+            await _installer.InstallAsync(skill, fullDownload, cancellationToken).ConfigureAwait(true);
+            _catalog.Reload();
             // Notify WebView before sidebar refresh so Adding cannot stick if UI work is slow.
             EmitInstallResult(skillId, ok: true, englishName: skill.EnglishName, name: skill.Name);
             _notifier.InfoText("SkillHub_Title", _localization.Format("SkillHub_InstallSuccess", skill.Name));
@@ -180,14 +183,50 @@ public sealed partial class SkillHubViewModel : ObservableObject
         }
     }
 
-    private void EmitCatalog()
+    private async Task<IReadOnlyDictionary<string, string>> ClassifyAllAsync(CancellationToken cancellationToken)
     {
-        var installedKeys = CollectInstalledKeys();
+        var availability = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var item in _items)
+        {
+            availability[item.Id] = await ClassifyAsync(item, cancellationToken).ConfigureAwait(true);
+        }
+
+        return availability;
+    }
+
+    private async Task<string> ClassifyAsync(RemoteSkillDto item, CancellationToken cancellationToken)
+    {
+        var directory = SkillInstallClassifier.FindInstalledDirectory(_paths.SkillsPath, item);
+        if (directory is null)
+        {
+            return SkillInstallClassifier.Use;
+        }
+
+        try
+        {
+            var manifestText = (await _client.GetManifestAsync(item.Id, cancellationToken).ConfigureAwait(true))
+                .TrimEnd('\r', '\n');
+            var anchorId = SkillManifest.TryParse(manifestText, out var manifest) && manifest is not null
+                ? manifest.SkillId
+                : item.Id;
+            var anchor = SkillAnchorStore.Get(_paths.SkillAnchorsPath, anchorId);
+            return SkillInstallClassifier.Classify(directory, manifestText, anchor);
+        }
+        catch (Exception)
+        {
+            return SkillInstallClassifier.Installed;
+        }
+    }
+
+    private void EmitCatalog(IReadOnlyDictionary<string, string> availability)
+    {
         var payload = new
         {
             type = "catalog",
-            items = _items.Select(item => ToWireItem(item, IsInstalled(item, installedKeys))),
-            installed = installedKeys.ToList(),
+            items = _items.Select(item => ToWireItem(
+                item,
+                availability.TryGetValue(item.Id, out var action) ? action : SkillInstallClassifier.Use)),
+            installed = Array.Empty<string>(),
             emptyMessage = _localization["SkillHub_Empty"]
         };
         CatalogJsonReady?.Invoke(this, JsonSerializer.Serialize(payload, AppJson.Options));
@@ -224,117 +263,7 @@ public sealed partial class SkillHubViewModel : ObservableObject
         CatalogJsonReady?.Invoke(this, JsonSerializer.Serialize(payload, AppJson.Options));
     }
 
-    /// <summary>
-    /// Keys used to match remote hub items to local installs: folder names, SKILL.md names,
-    /// and sanitized englishName targets used by <see cref="SkillPackageInstaller"/>.
-    /// </summary>
-    private HashSet<string> CollectInstalledKeys()
-    {
-        _catalog.Reload();
-        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var skill in _catalog.Skills)
-        {
-            AddKey(keys, skill.Name);
-            AddKey(keys, skill.SkillId);
-            if (!string.IsNullOrWhiteSpace(skill.SkillDirectory))
-            {
-                AddKey(keys, Path.GetFileName(skill.SkillDirectory.TrimEnd(
-                    Path.DirectorySeparatorChar,
-                    Path.AltDirectorySeparatorChar)));
-            }
-        }
-
-        if (!Directory.Exists(_paths.SkillsPath))
-        {
-            return keys;
-        }
-
-        foreach (var dir in Directory.EnumerateDirectories(_paths.SkillsPath))
-        {
-            if (!SkillFileSystemHelper.HasSkillFile(dir))
-            {
-                continue;
-            }
-
-            AddKey(keys, Path.GetFileName(dir));
-            try
-            {
-                var loaded = SkillFileSystemHelper.LoadSkillFromDirectory(dir);
-                AddKey(keys, loaded.Name);
-            }
-            catch
-            {
-                // skip unreadable folders
-            }
-        }
-
-        return keys;
-    }
-
-    private bool IsInstalled(RemoteSkillDto item, HashSet<string> installedKeys)
-    {
-        if (installedKeys.Count == 0)
-        {
-            return false;
-        }
-
-        foreach (var candidate in EnumerateMatchKeys(item))
-        {
-            if (installedKeys.Contains(candidate))
-            {
-                return true;
-            }
-
-            // Folder may have been sanitized on install (path separators → _).
-            try
-            {
-                var sanitized = SkillPackageInstaller.SanitizeFolderName(candidate);
-                if (installedKeys.Contains(sanitized))
-                {
-                    return true;
-                }
-            }
-            catch (ArgumentException)
-            {
-                // ignore invalid names
-            }
-
-            if (SkillFileSystemHelper.SkillExists(_paths.SkillsPath, candidate))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static IEnumerable<string> EnumerateMatchKeys(RemoteSkillDto item)
-    {
-        if (!string.IsNullOrWhiteSpace(item.EnglishName))
-        {
-            yield return item.EnglishName.Trim();
-        }
-
-        if (!string.IsNullOrWhiteSpace(item.Name))
-        {
-            yield return item.Name.Trim();
-        }
-
-        if (!string.IsNullOrWhiteSpace(item.Id))
-        {
-            yield return item.Id.Trim();
-        }
-    }
-
-    private static void AddKey(HashSet<string> keys, string? value)
-    {
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            keys.Add(value.Trim());
-        }
-    }
-
-    private static object ToWireItem(RemoteSkillDto item, bool installed) =>
+    private static object ToWireItem(RemoteSkillDto item, string availability) =>
         new
         {
             id = item.Id,
@@ -345,8 +274,10 @@ public sealed partial class SkillHubViewModel : ObservableObject
             position = item.Position,
             packageSize = item.PackageSize,
             packageSha256 = item.PackageSha256,
+            commitSeq = item.CommitSeq,
             download = item.Download,
-            installed
+            availability,
+            installed = string.Equals(availability, SkillInstallClassifier.Installed, StringComparison.Ordinal)
         };
 
     [RelayCommand]

@@ -4,26 +4,23 @@ using Athlon.Agent.Skills.Repository;
 namespace Athlon.Agent.Infrastructure.SkillHub;
 
 /// <summary>
-/// Loads skills from the local directory and the hub directory. A skill enters the catalog only
-/// when its files match the manifest outside the skill directory.
+/// Loads skills from the local skills directory. A skill enters the catalog only when its files
+/// match the manifest outside the skill directory.
 /// </summary>
 public sealed class IntegritySkillRepository : IAgentSkillRepository
 {
     private readonly string _skillsPath;
-    private readonly string _hubSkillsPath;
     private readonly string _manifestDirectory;
     private readonly string _anchorsPath;
     private readonly Action<string, Exception>? _onSkillLoadFailed;
 
     public IntegritySkillRepository(
         string skillsPath,
-        string hubSkillsPath,
         string manifestDirectory,
         string anchorsPath,
         Action<string, Exception>? onSkillLoadFailed = null)
     {
         _skillsPath = skillsPath;
-        _hubSkillsPath = hubSkillsPath;
         _manifestDirectory = manifestDirectory;
         _anchorsPath = anchorsPath;
         _onSkillLoadFailed = onSkillLoadFailed;
@@ -48,8 +45,7 @@ public sealed class IntegritySkillRepository : IAgentSkillRepository
     public IReadOnlyList<AgentSkill> GetAllSkills()
     {
         var byName = new Dictionary<string, AgentSkill>(StringComparer.Ordinal);
-        LoadRoot(_skillsPath, byName, replaceExisting: false);
-        LoadRoot(_hubSkillsPath, byName, replaceExisting: true);
+        LoadRoot(_skillsPath, byName);
         return byName.Values.ToArray();
     }
 
@@ -58,7 +54,7 @@ public sealed class IntegritySkillRepository : IAgentSkillRepository
     public AgentSkillRepositoryInfo GetRepositoryInfo() =>
         new("filesystem", _skillsPath, writeable: false);
 
-    private void LoadRoot(string root, Dictionary<string, AgentSkill> byName, bool replaceExisting)
+    private void LoadRoot(string root, Dictionary<string, AgentSkill> byName)
     {
         if (!Directory.Exists(root))
         {
@@ -73,12 +69,7 @@ public sealed class IntegritySkillRepository : IAgentSkillRepository
             }
 
             var name = SkillFileSystemHelper.TryReadSkillName(dir);
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                continue;
-            }
-
-            if (!replaceExisting && byName.ContainsKey(name))
+            if (string.IsNullOrWhiteSpace(name) || byName.ContainsKey(name))
             {
                 continue;
             }

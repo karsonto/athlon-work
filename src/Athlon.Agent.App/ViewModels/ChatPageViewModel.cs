@@ -4,7 +4,6 @@ using System.Windows;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
-using Athlon.Agent.Infrastructure.SkillHub;
 using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.App.Services.Speech;
 using Athlon.Agent.Core;
@@ -19,7 +18,6 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
 {
     private readonly ComposerCoordinator _composer;
     private readonly SessionTurnCoordinator _sessionTurns;
-    private readonly ISkillHubUpdater _skillHubUpdater;
     private readonly IImageAttachmentReader _imageAttachmentReader;
     private readonly IChatDocumentAttachmentExtractor _documentExtractor;
     private readonly IChatScrollService _chatScroll;
@@ -50,7 +48,6 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
     public ChatPageViewModel(
         ComposerCoordinator composer,
         SessionTurnCoordinator sessionTurns,
-        ISkillHubUpdater skillHubUpdater,
         IImageAttachmentReader imageAttachmentReader,
         IChatDocumentAttachmentExtractor documentExtractor,
         IChatScrollService chatScroll,
@@ -61,7 +58,6 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
     {
         _composer = composer;
         _sessionTurns = sessionTurns;
-        _skillHubUpdater = skillHubUpdater;
         _imageAttachmentReader = imageAttachmentReader;
         _documentExtractor = documentExtractor;
         _chatScroll = chatScroll;
@@ -183,8 +179,6 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
 
         var displayedSessionId = _getDisplayedSessionId!();
         var session = _getSession!();
-        await _skillHubUpdater.SyncAsync().ConfigureAwait(true);
-        _sessionTurns.ReloadSkills();
 
         var pendingDocs = PendingDocumentAttachments.ToArray();
         var extractionResults = new List<ChatDocumentExtractionResult>();

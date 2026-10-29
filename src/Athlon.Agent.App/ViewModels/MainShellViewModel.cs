@@ -15,7 +15,6 @@ using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.RuntimeDiagnostics;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.App.Services;
-using Athlon.Agent.Infrastructure.SkillHub;
 using Athlon.Agent.App.Services.ComputerUse;
 using Athlon.Agent.App.Services.Diagnostics;
 using Athlon.Agent.App.Services.SlashCommands;
@@ -45,7 +44,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly AppSettings _appSettings;
     private readonly IImpSsoSessionStore? _ssoSessionStore;
     private readonly IAgentSkillCatalog _skillCatalog;
-    private readonly ISkillHubUpdater _skillHubUpdater;
     /// <summary>For switch-diagnostic queueing gaps, which are logged rather than emitted.</summary>
     private readonly IAppLogger _logger;
     private readonly SessionTurnCoordinator _sessionTurns;
@@ -135,7 +133,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ChatPageViewModel chatPage,
         ScheduleViewModel schedulePageVm,
         SkillHubViewModel skillHubVm,
-        ISkillHubUpdater skillHubUpdater,
         ILocalizationService localization,
         IUserNotifier notifier,
         ILongTermMemory longTermMemory,
@@ -169,7 +166,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _longTermMemory = longTermMemory;
         _athlonWebServer = athlonWebServer;
         _skillCatalog = skillCatalog;
-        _skillHubUpdater = skillHubUpdater;
         _logger = logger;
         _appSettings = settings;
         _contextSidebarEdgeGutterWidth = 0;
@@ -515,7 +511,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public async Task InitializeAsync()
     {
         await Settings.InitializeAsync().ConfigureAwait(true);
-        await _skillHubUpdater.SyncAsync().ConfigureAwait(true);
         OnSkillConfigurationChanged();
         await RefreshMcpRuntimeAsync().ConfigureAwait(true);
 
