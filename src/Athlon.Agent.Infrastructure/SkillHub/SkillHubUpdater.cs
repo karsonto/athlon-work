@@ -5,6 +5,7 @@ namespace Athlon.Agent.Infrastructure.SkillHub;
 public sealed class SkillHubUpdater(
     ISkillHubClient client,
     SkillPackageInstaller installer,
+    IAppPathProvider paths,
     IAppLogger logger) : ISkillHubUpdater
 {
     private readonly IAppLogger _logger = logger.ForContext("SkillHubUpdater");
@@ -12,6 +13,12 @@ public sealed class SkillHubUpdater(
     public async Task SyncAsync(CancellationToken cancellationToken = default)
     {
         if (!client.IsConfigured)
+        {
+            return;
+        }
+
+        var local = SkillUpdateSelector.ReadLocalRevisions(paths.SkillManifestDirectory, paths.HubSkillsPath);
+        if (local.Count == 0)
         {
             return;
         }
@@ -28,7 +35,7 @@ public sealed class SkillHubUpdater(
         }
 
         var changed = false;
-        foreach (var skill in skills)
+        foreach (var skill in SkillUpdateSelector.Select(local, skills))
         {
             try
             {

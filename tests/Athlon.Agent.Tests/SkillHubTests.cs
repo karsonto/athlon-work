@@ -201,6 +201,98 @@ public sealed class SkillHubTests
     }
 
     [Fact]
+    public void Select_skips_remote_catalog_when_no_local_manifest_exists()
+    {
+        var remote = new RemoteSkillDto { Id = "s1", EnglishName = "demo", CommitSeq = 3 };
+
+        Assert.Empty(SkillUpdateSelector.Select([], [remote]));
+    }
+
+    [Fact]
+    public void Select_skips_remote_skills_that_are_not_installed()
+    {
+        var local = Revisions(("demo", 1));
+        var remote = new RemoteSkillDto { Id = "s9", EnglishName = "other", Name = "其他", CommitSeq = 4 };
+
+        Assert.Empty(SkillUpdateSelector.Select(local, [remote]));
+    }
+
+    [Fact]
+    public void Select_skips_remote_skills_at_or_behind_the_local_commit()
+    {
+        var local = Revisions(("demo", 2));
+        var same = new RemoteSkillDto { Id = "s1", EnglishName = "demo", CommitSeq = 2 };
+        var older = new RemoteSkillDto { Id = "s1", EnglishName = "demo", CommitSeq = 1 };
+
+        Assert.Empty(SkillUpdateSelector.Select(local, [same, older]));
+    }
+
+    [Fact]
+    public void Select_includes_a_newer_remote_commit_matched_by_english_name()
+    {
+        var local = Revisions(("demo", 1));
+        var installed = new RemoteSkillDto { Id = "s1", EnglishName = "demo", CommitSeq = 3 };
+        var other = new RemoteSkillDto { Id = "s2", EnglishName = "other", CommitSeq = 9 };
+
+        var selected = SkillUpdateSelector.Select(local, [installed, other]);
+
+        var skill = Assert.Single(selected);
+        Assert.Equal("s1", skill.Id);
+    }
+
+    [Fact]
+    public void Select_includes_a_matched_skill_when_the_list_omits_commit_seq()
+    {
+        var local = Revisions(("demo", 4));
+        var remote = new RemoteSkillDto { Id = "s1", EnglishName = "doc/skills", Name = "demo" };
+
+        var selected = SkillUpdateSelector.Select(local, [remote]);
+
+        Assert.Single(selected);
+    }
+
+    [Fact]
+    public void Select_matches_sanitized_hub_folder_when_platform_id_differs()
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "demo", "doc_skills" };
+        var local = new[] { new SkillUpdateSelector.LocalSkillRevision("demo", 1, keys) };
+        var remote = new RemoteSkillDto { Id = "s1", EnglishName = "doc/skills", CommitSeq = 2 };
+
+        var selected = SkillUpdateSelector.Select(local, [remote]);
+
+        Assert.Equal("s1", Assert.Single(selected).Id);
+    }
+
+    [Fact]
+    public void ReadLocalRevisions_indexes_manifest_commit_and_hub_folder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-sync", Guid.NewGuid().ToString("N"));
+        var manifests = Path.Combine(root, "skill-manifests");
+        var hub = Path.Combine(root, "skills-hub", "doc-skills");
+        Directory.CreateDirectory(manifests);
+        Directory.CreateDirectory(hub);
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(manifests, "demo.json"),
+                SkillManifest.Canonical("demo", 2, []));
+            File.WriteAllText(Path.Combine(hub, "SKILL.md"), "---\nname: demo\ndescription: hub\n---\n\nhub\n");
+
+            var revision = Assert.Single(SkillUpdateSelector.ReadLocalRevisions(manifests, Path.Combine(root, "skills-hub")));
+            Assert.Equal("demo", revision.SkillId);
+            Assert.Equal(2, revision.CommitSeq);
+            Assert.Contains("doc-skills", revision.MatchKeys);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void ReadWireId_supports_string_and_number()
     {
         using var stringDoc = JsonDocument.Parse("""{"type":"add","id":"abc-1"}""");
@@ -220,4 +312,12 @@ public sealed class SkillHubTests
         var objectJson = """{"type":"ready"}""";
         Assert.Equal(objectJson, Athlon.Agent.App.Views.SkillHubPageView.UnwrapWebMessageJson(objectJson));
     }
+
+    private static IReadOnlyList<SkillUpdateSelector.LocalSkillRevision> Revisions(
+        params (string SkillId, long CommitSeq)[] skills) =>
+        skills.Select(static skill => new SkillUpdateSelector.LocalSkillRevision(
+                skill.SkillId,
+                skill.CommitSeq,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { skill.SkillId }))
+            .ToArray();
 }
