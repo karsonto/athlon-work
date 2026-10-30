@@ -14,6 +14,7 @@ using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.RuntimeDiagnostics;
 using Athlon.Agent.Core.Sso;
+using Athlon.Agent.App.Controls;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Services.ComputerUse;
 using Athlon.Agent.App.Services.Diagnostics;
@@ -472,6 +473,59 @@ public partial class MainShellViewModel
 
     private void OnForkChatRequested(object? sender, string messageId) =>
         _ = ForkChatFromMessageAsync(messageId);
+
+    private void OnReportDownloadRequested(object? sender, ReportDownloadRequest request) =>
+        _ = DownloadReportAsync(request);
+
+    private async Task DownloadReportAsync(ReportDownloadRequest request)
+    {
+        try
+        {
+            await EnsureDisplayedSessionReadyAsync().ConfigureAwait(true);
+            var message = _session.Messages.FirstOrDefault(item =>
+                string.Equals(item.Id, request.MessageId, StringComparison.Ordinal)
+                && item.Role == MessageRole.Assistant);
+            if (message is null || string.IsNullOrWhiteSpace(message.Content))
+            {
+                ShowShellToast(_loc["Chat_DownloadEmpty"], ShellToastKind.Info);
+                return;
+            }
+
+            var images = new List<ImageAttachment>();
+            foreach (var item in _session.Messages)
+            {
+                BrowserScreenshotMarkdown.Collect(item.ImageAttachments, images);
+            }
+
+            var word = string.Equals(request.Format, "docx", StringComparison.Ordinal);
+            var dialog = new SaveFileDialog
+            {
+                Title = _loc["Chat_DownloadDialogTitle"],
+                FileName = _loc["Chat_DownloadDefaultName"] + (word ? ".docx" : ".md"),
+                Filter = word ? _loc["Chat_DownloadWordFilter"] : _loc["Chat_DownloadMarkdownFilter"],
+                DefaultExt = word ? ".docx" : ".md",
+                AddExtension = true
+            };
+            if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.FileName))
+            {
+                return;
+            }
+
+            if (word)
+            {
+                ReportDocumentExporter.WriteDocx(dialog.FileName, message.Content, images);
+            }
+            else
+            {
+                ReportDocumentExporter.WriteMarkdown(dialog.FileName, message.Content, images);
+            }
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Download report failed: {ex.Message}");
+            ShowShellToast(_loc.Format("Chat_DownloadFailed", ex.Message), ShellToastKind.Error);
+        }
+    }
 
     private async Task ForkChatFromMessageAsync(string? messageId)
     {

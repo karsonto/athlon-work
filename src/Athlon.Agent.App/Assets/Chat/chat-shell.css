@@ -87,6 +87,39 @@ html.replaying .message-row { animation: none; }
   margin-top: 4px;
   padding: 0 2px;
 }
+.message-download {
+  position: relative;
+  display: inline-flex;
+}
+.message-download-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 128px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.message-download-menu[hidden] {
+  display: none !important;
+}
+.message-download-item {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--assistant-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.message-download-item:hover {
+  background: rgba(127, 127, 127, 0.12);
+}
 .message-action-btn {
   display: inline-flex;
   align-items: center;

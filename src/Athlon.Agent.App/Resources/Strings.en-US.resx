@@ -157,6 +157,33 @@
   <data name="Chat_Copy" xml:space="preserve">
     <value>Copy</value>
   </data>
+  <data name="Chat_Download" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="Chat_DownloadMarkdown" xml:space="preserve">
+    <value>Markdown</value>
+  </data>
+  <data name="Chat_DownloadWord" xml:space="preserve">
+    <value>Word</value>
+  </data>
+  <data name="Chat_DownloadDialogTitle" xml:space="preserve">
+    <value>Save report</value>
+  </data>
+  <data name="Chat_DownloadDefaultName" xml:space="preserve">
+    <value>Report</value>
+  </data>
+  <data name="Chat_DownloadMarkdownFilter" xml:space="preserve">
+    <value>Markdown (*.md)|*.md</value>
+  </data>
+  <data name="Chat_DownloadWordFilter" xml:space="preserve">
+    <value>Word (*.docx)|*.docx</value>
+  </data>
+  <data name="Chat_DownloadFailed" xml:space="preserve">
+    <value>Couldn't save the report: {0}</value>
+  </data>
+  <data name="Chat_DownloadEmpty" xml:space="preserve">
+    <value>This message has no report to save</value>
+  </data>
   <data name="Chat_Fork" xml:space="preserve">
     <value>Fork</value>
   </data>

@@ -25,7 +25,7 @@ public sealed class BrowserToolsPromptContributor(IBrowserWorkspaceState browser
             builder.AppendLine("8. UI interaction uses browser_aria_*; network and console analysis uses browser_network_* and browser_console_read.");
             builder.AppendLine("9. browser_get_cookies reads the stored cookies for the current site (approval required); omit url to use the open page, or pass an http(s) URL.");
             builder.AppendLine("10. After browser_navigate or browser_aria_interact, call browser_screenshot to see the current page before deciding the next step (capture waits for load/paint). Pass full_page=true when you need the whole document rather than the visible area.");
-            builder.AppendLine("11. In the final report, cite that screenshot as Markdown ![说明](screenshot:文件名) using the screenshot_file name from browser_screenshot. Do not paste base64.");
+            builder.AppendLine("11. In the final report, decide whether a screenshot is needed. Include one only when it helps the reader verify the outcome. When you do, cite it as Markdown ![说明](screenshot:文件名) using the screenshot_file name from browser_screenshot. Do not paste base64. If no screenshot is needed, do not add a citation.");
             return;
         }
 

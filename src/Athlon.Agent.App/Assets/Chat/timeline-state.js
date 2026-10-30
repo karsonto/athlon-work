@@ -269,6 +269,96 @@ function createForkButton(messageId) {
   return btn;
 }
 
+const downloadIconSvg =
+  '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<path d="M8 2.5v7M5.5 7.5 8 10l2.5-2.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"></path>' +
+    '<path d="M3 12.5h10" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"></path>' +
+  '</svg>';
+
+function ensureDownloadButton(row) {
+  if (!row || !row.classList.contains('assistant-row')) return;
+  const actions = row.querySelector('.message-actions');
+  if (!actions || actions.querySelector('[data-download]')) return;
+  actions.appendChild(createDownloadButton(row.dataset.messageId || ''));
+}
+
+function createDownloadButton(messageId) {
+  const wrap = document.createElement('span');
+  wrap.className = 'message-download';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'message-action-btn';
+  btn.dataset.download = '1';
+  btn.setAttribute('aria-label', t('download') || '下载');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.innerHTML = downloadIconSvg;
+  const menu = document.createElement('div');
+  menu.className = 'message-download-menu';
+  menu.hidden = true;
+  menu.appendChild(createDownloadItem(t('downloadMarkdown') || 'Markdown', 'markdown'));
+  menu.appendChild(createDownloadItem(t('downloadWord') || 'Word', 'docx'));
+  btn.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const open = menu.hidden;
+    closeDownloadMenus();
+    if (!open) return;
+    positionDownloadMenu(btn, menu);
+    btn.setAttribute('aria-expanded', 'true');
+  });
+  menu.addEventListener('click', function (e) {
+    const item = e.target.closest('[data-format]');
+    if (!item || !messageId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    post({ type: 'downloadReport', messageId: messageId, format: item.getAttribute('data-format') });
+  });
+  wrap.appendChild(btn);
+  wrap.appendChild(menu);
+  return wrap;
+}
+
+function createDownloadItem(label, format) {
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'message-download-item';
+  item.dataset.format = format;
+  item.textContent = label;
+  return item;
+}
+
+function closeDownloadMenus() {
+  document.querySelectorAll('.message-download-menu').forEach(function (menu) {
+    menu.hidden = true;
+    const btn = menu.parentNode && menu.parentNode.querySelector('[data-download]');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function positionDownloadMenu(btn, menu) {
+  menu.style.left = '-9999px';
+  menu.style.top = '0px';
+  menu.hidden = false;
+  const rect = btn.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  let top = rect.bottom + 4;
+  if (top + menuRect.height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - menuRect.height - 4);
+  }
+  let left = rect.left;
+  if (left + menuRect.width > window.innerWidth - 8) {
+    left = Math.max(8, window.innerWidth - menuRect.width - 8);
+  }
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+}
+
+document.addEventListener('click', closeDownloadMenus);
+const chatScroll = document.getElementById('chat-scroll');
+if (chatScroll) chatScroll.addEventListener('scroll', closeDownloadMenus, { passive: true });
+
 function createCopyButton(onCopy) {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -980,6 +1070,7 @@ function applyAssistantHtml(messageId, html, createIfMissing, streaming, respons
   if (streaming !== true) {
     // The files-changed card take its own seq slot, so no reordering is needed here.
     setMessageMeta(row, formatResponseDuration(responseDurationMs));
+    ensureDownloadButton(row);
   }
   updateEmptyStateVisibility();
   scrollToBottom();

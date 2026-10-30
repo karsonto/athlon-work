@@ -76,6 +76,7 @@ public partial class WebChatView : UserControl
     public event EventHandler<string>? ScriptExecutionFailed;
     public event EventHandler? OlderMessagesRequested;
     public event EventHandler<string>? ForkChatRequested;
+    public event EventHandler<ReportDownloadRequest>? ReportDownloadRequested;
     public event EventHandler<string>? ExternalLinkRequested;
     public event EventHandler<ToolApprovalDecisionEventArgs>? ToolApprovalDecisionReceived;
     public event EventHandler<ToolDetailRequestEventArgs>? ToolDetailRequested;
@@ -320,3 +321,5 @@ public sealed record ToolDetailRequestEventArgs(
     string? RequestId);
 
 public sealed record ReviewFilesRequestedEventArgs(string EntryId, string? Path);
+
+public sealed record ReportDownloadRequest(string MessageId, string Format);

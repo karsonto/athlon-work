@@ -157,6 +157,33 @@
   <data name="Chat_Copy" xml:space="preserve">
     <value>复制</value>
   </data>
+  <data name="Chat_Download" xml:space="preserve">
+    <value>下载</value>
+  </data>
+  <data name="Chat_DownloadMarkdown" xml:space="preserve">
+    <value>Markdown</value>
+  </data>
+  <data name="Chat_DownloadWord" xml:space="preserve">
+    <value>Word</value>
+  </data>
+  <data name="Chat_DownloadDialogTitle" xml:space="preserve">
+    <value>保存报告</value>
+  </data>
+  <data name="Chat_DownloadDefaultName" xml:space="preserve">
+    <value>报告</value>
+  </data>
+  <data name="Chat_DownloadMarkdownFilter" xml:space="preserve">
+    <value>Markdown (*.md)|*.md</value>
+  </data>
+  <data name="Chat_DownloadWordFilter" xml:space="preserve">
+    <value>Word (*.docx)|*.docx</value>
+  </data>
+  <data name="Chat_DownloadFailed" xml:space="preserve">
+    <value>无法保存报告：{0}</value>
+  </data>
+  <data name="Chat_DownloadEmpty" xml:space="preserve">
+    <value>这条消息没有可保存的报告</value>
+  </data>
   <data name="Chat_Fork" xml:space="preserve">
     <value>分叉</value>
   </data>

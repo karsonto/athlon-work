@@ -177,6 +177,22 @@ public partial class WebChatView
                         }
 
                         break;
+                    case "downloadReport":
+                        var downloadMessageId = root.TryGetProperty("messageId", out var downloadMessageIdElement)
+                            ? downloadMessageIdElement.GetString()
+                            : null;
+                        var downloadFormat = root.TryGetProperty("format", out var downloadFormatElement)
+                            ? downloadFormatElement.GetString()
+                            : null;
+                        if (!string.IsNullOrEmpty(downloadMessageId)
+                            && downloadFormat is "markdown" or "docx")
+                        {
+                            ReportDownloadRequested?.Invoke(
+                                this,
+                                new ReportDownloadRequest(downloadMessageId, downloadFormat));
+                        }
+
+                        break;
                     case "copy":
                         var text = root.TryGetProperty("text", out var textElement)
                             ? textElement.GetString()
