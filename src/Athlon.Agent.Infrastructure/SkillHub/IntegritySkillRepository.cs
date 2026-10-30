@@ -5,10 +5,13 @@ namespace Athlon.Agent.Infrastructure.SkillHub;
 
 /// <summary>
 /// Loads skills from the local skills directory. A skill enters the catalog only when its files
-/// match the manifest outside the skill directory.
+/// match the manifest outside the skill directory. Manifests larger than
+/// <see cref="UncheckedManifestBytes"/> are admitted without that check.
 /// </summary>
 public sealed class IntegritySkillRepository : IAgentSkillRepository
 {
+    /// <summary>Manifest files above this size skip content verification on catalog load.</summary>
+    internal const long UncheckedManifestBytes = 128 * 1024;
     private readonly string _skillsPath;
     private readonly string _manifestDirectory;
     private readonly string _anchorsPath;
@@ -82,11 +85,14 @@ public sealed class IntegritySkillRepository : IAgentSkillRepository
                     throw new InvalidOperationException("skill manifest is missing");
                 }
 
-                var manifestText = SkillIntegrity.ReadUtf8(manifestPath).TrimEnd('\r', '\n');
-                var anchor = SkillAnchorStore.Get(_anchorsPath, name);
-                if (!SkillIntegrity.TryVerify(dir, manifestText, anchor, name, out var error))
+                if (new FileInfo(manifestPath).Length <= UncheckedManifestBytes)
                 {
-                    throw new InvalidOperationException(error);
+                    var manifestText = SkillIntegrity.ReadUtf8(manifestPath).TrimEnd('\r', '\n');
+                    var anchor = SkillAnchorStore.Get(_anchorsPath, name);
+                    if (!SkillIntegrity.TryVerify(dir, manifestText, anchor, name, out var error))
+                    {
+                        throw new InvalidOperationException(error);
+                    }
                 }
 
                 byName[name] = SkillFileSystemHelper.LoadSkillFromDirectory(dir);

@@ -129,6 +129,50 @@ public sealed class SkillHubTests
     }
 
     [Fact]
+    public void CollectReusableFiles_downloads_only_manifest_entries_whose_hash_differs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-diff", Guid.NewGuid().ToString("N"));
+        var skillDir = Path.Combine(root, "other-folder");
+        Directory.CreateDirectory(skillDir);
+        try
+        {
+            var skillBody = Encoding.UTF8.GetBytes("---\nname: doc-skills\ndescription: docs\n---\n\nbody\n");
+            var keptBody = Encoding.UTF8.GetBytes("{\"ok\":true}\n");
+            var changedBody = Encoding.UTF8.GetBytes("{\"ok\":false}\n");
+            File.WriteAllBytes(Path.Combine(skillDir, "SKILL.md"), skillBody);
+            File.WriteAllBytes(Path.Combine(skillDir, "kept.json"), keptBody);
+            File.WriteAllBytes(Path.Combine(skillDir, "changed.json"), changedBody);
+
+            var remoteChanged = Encoding.UTF8.GetBytes("{\"ok\":true,\"next\":1}\n");
+            var files = new[]
+            {
+                new SkillManifest.FileEntry("SKILL.md", skillBody.Length, SkillManifest.Sha256Hex(skillBody)),
+                new SkillManifest.FileEntry("kept.json", keptBody.Length, SkillManifest.Sha256Hex(keptBody)),
+                new SkillManifest.FileEntry("changed.json", remoteChanged.Length, SkillManifest.Sha256Hex(remoteChanged)),
+                new SkillManifest.FileEntry("added.json", keptBody.Length, SkillManifest.Sha256Hex(keptBody))
+            };
+
+            var reusable = SkillPackageInstaller.CollectReusableFiles(skillDir, files);
+            Assert.Equal(skillBody, reusable[SkillManifest.Sha256Hex(skillBody)]);
+            Assert.Equal(keptBody, reusable[SkillManifest.Sha256Hex(keptBody)]);
+            Assert.DoesNotContain(SkillManifest.Sha256Hex(remoteChanged), reusable.Keys);
+            var missing = files
+                .Select(static file => file.Sha256)
+                .Where(hash => !reusable.ContainsKey(hash))
+                .Distinct()
+                .ToArray();
+            Assert.Equal([SkillManifest.Sha256Hex(remoteChanged)], missing);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void Materialize_reuses_local_bytes_and_verify_rejects_extra_or_rollback()
     {
         var body = Encoding.UTF8.GetBytes("hello");
@@ -180,6 +224,37 @@ public sealed class SkillHubTests
             File.WriteAllText(Path.Combine(manifests, "demo.json"), manifest);
             var loaded = Assert.Single(repo.GetAllSkills());
             Assert.Contains("local", loaded.SkillContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Manifest_over_128k_loads_without_content_check()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-catalog-large", Guid.NewGuid().ToString("N"));
+        var skills = Path.Combine(root, "skills");
+        var manifests = Path.Combine(root, "config", "skill-manifests");
+        var anchors = Path.Combine(root, "config", "skill-anchors.json");
+        var local = Path.Combine(skills, "demo");
+        Directory.CreateDirectory(local);
+        Directory.CreateDirectory(manifests);
+        File.WriteAllText(Path.Combine(local, "SKILL.md"), "---\nname: demo\ndescription: local\n---\n\nlarge\n");
+        var manifestPath = Path.Combine(manifests, "demo.json");
+        var repo = new IntegritySkillRepository(skills, manifests, anchors);
+        try
+        {
+            File.WriteAllText(manifestPath, new string('x', (int)IntegritySkillRepository.UncheckedManifestBytes));
+            Assert.Empty(repo.GetAllSkills());
+
+            File.WriteAllText(manifestPath, new string('x', (int)IntegritySkillRepository.UncheckedManifestBytes + 1));
+            var loaded = Assert.Single(repo.GetAllSkills());
+            Assert.Contains("large", loaded.SkillContent, StringComparison.Ordinal);
         }
         finally
         {

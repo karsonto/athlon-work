@@ -55,17 +55,19 @@ public sealed class SkillPackageInstaller(
             string.IsNullOrWhiteSpace(skill.EnglishName) ? manifest.SkillId : skill.EnglishName);
         paths.EnsureCreated();
         var targetDir = Path.Combine(paths.SkillsPath, folderName);
-        var localName = Directory.Exists(targetDir) ? SkillFileSystemHelper.TryReadSkillName(targetDir) : null;
+        var sourceDir = SkillInstallClassifier.FindInstalledDirectory(paths.SkillsPath, skill);
+        var localName = sourceDir is null ? null : SkillFileSystemHelper.TryReadSkillName(sourceDir);
         if (!fullDownload
+            && sourceDir is not null
             && !string.IsNullOrWhiteSpace(localName)
-            && SkillIntegrity.TryVerify(targetDir, manifestText, anchorCommitSeq: 0, localName, out _))
+            && SkillIntegrity.TryVerify(sourceDir, manifestText, anchorCommitSeq: 0, localName, out _))
         {
             return false;
         }
 
-        var localHashes = fullDownload
+        var localHashes = fullDownload || sourceDir is null
             ? new Dictionary<string, byte[]>(StringComparer.Ordinal)
-            : IndexDirectory(targetDir);
+            : CollectReusableFiles(sourceDir, manifest.Files);
         var missing = manifest.Files
             .Select(static file => file.Sha256)
             .Where(hash => !localHashes.ContainsKey(hash))
@@ -147,6 +149,50 @@ public sealed class SkillPackageInstaller(
         }
 
         return map;
+    }
+
+    /// <summary>
+    /// Keeps bytes for manifest entries whose local file already has the listed size and hash.
+    /// Every other hash must be downloaded.
+    /// </summary>
+    internal static Dictionary<string, byte[]> CollectReusableFiles(
+        string skillDirectory,
+        IReadOnlyList<SkillManifest.FileEntry> files)
+    {
+        var reusable = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var file in files)
+        {
+            if (reusable.ContainsKey(file.Sha256) || !TryReadMatchingFile(skillDirectory, file, out var content))
+            {
+                continue;
+            }
+
+            reusable[file.Sha256] = content;
+        }
+
+        return reusable;
+    }
+
+    private static bool TryReadMatchingFile(string skillDirectory, SkillManifest.FileEntry file, out byte[] content)
+    {
+        content = [];
+        SkillManifest.ValidateRelativePath(file.Path);
+        var root = Path.GetFullPath(skillDirectory);
+        var full = Path.GetFullPath(Path.Combine(root, file.Path.Replace('/', Path.DirectorySeparatorChar)));
+        EnsureUnderRoot(root, full);
+        if (!File.Exists(full))
+        {
+            return false;
+        }
+
+        var info = new FileInfo(full);
+        if (info.Length != file.Size)
+        {
+            return false;
+        }
+
+        content = File.ReadAllBytes(full);
+        return string.Equals(SkillManifest.Sha256Hex(content), file.Sha256, StringComparison.Ordinal);
     }
 
     internal static Dictionary<string, byte[]> IndexDirectory(string directory)
