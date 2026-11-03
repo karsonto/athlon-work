@@ -1,0 +1,27 @@
+{
+  "sessionsRoot": "~/.athlon-agent/sessions",
+  "includeSubAgents": true,
+  "minRequestChars": 8,
+  "maxToolResultChars": 8000,
+  "excludeSessionTitleContains": ["smoke", "test", "pytest"],
+  "limitSessions": null,
+  "rules": true,
+  "semantics": true,
+  "judge": {
+    "endpoint": null,
+    "model": null,
+    "settingsPath": "~/.athlon-agent/config/settings.json",
+    "apiKeyEnv": "ATHLON_EVAL_API_KEY",
+    "timeoutSeconds": 60,
+    "maxRetries": 2,
+    "maxStateChars": 60000,
+    "reasonMaxChars": 200,
+    "temperature": 0
+  },
+  "gate": [
+    { "metric": "tool_args_valid", "maxDropRate": 0.02, "minDenominator": 20 },
+    { "metric": "tool_call_paired", "maxDropRate": 0.02, "minDenominator": 20 },
+    { "metric": "grounded", "maxDropRate": 0.05, "minDenominator": 20 },
+    { "metric": "tool_choice", "maxDropRate": 0.05, "minDenominator": 20 }
+  ]
+}

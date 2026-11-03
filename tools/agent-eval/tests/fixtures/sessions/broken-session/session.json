@@ -1,0 +1,91 @@
+{
+  "createdAt": "2026-10-02T09:00:00+08:00",
+  "id": "SESSION-BROKEN",
+  "title": "重构存储层",
+  "updatedAt": "2026-10-02T09:05:00+08:00",
+  "messages": [
+    {
+      "id": "b1",
+      "role": "User",
+      "content": "把存储层里的仓储接口拆出来，并跑一遍测试",
+      "createdAt": "2026-10-02T09:00:00+08:00"
+    },
+    {
+      "id": "b2",
+      "role": "Assistant",
+      "content": "",
+      "createdAt": "2026-10-02T09:00:01+08:00",
+      "toolCallsJson": "[{\"id\":\"call_a\",\"name\":\"read_file\",\"arguments\":{\"path\":\"src/Storage/Repositories/UserRepository.cs\"}}]"
+    },
+    {
+      "id": "b3",
+      "role": "Tool",
+      "content": "ToolCallId: call_a\nTool `read_file` succeeded.\n\nArguments: {\"path\":\"src/Storage/Repositories/UserRepository.cs\"}\nSummary: 420 lines\n\n[Tool result evicted - 51234 chars]\nArchived at: /tmp/evicted/call_a.txt\nPreview:\nusing System;\nnamespace Athlon.Storage;",
+      "createdAt": "2026-10-02T09:00:02+08:00"
+    },
+    {
+      "id": "b4",
+      "role": "Assistant",
+      "content": "",
+      "createdAt": "2026-10-02T09:00:03+08:00",
+      "toolCallsJson": "[{\"id\":\"call_a2\",\"name\":\"read_file\",\"arguments\":{\"path\":\"src/Storage/Repositories/UserRepository.cs\"}}]"
+    },
+    {
+      "id": "b5",
+      "role": "Tool",
+      "content": "ToolCallId: call_a2\nTool `read_file` succeeded.\n\nArguments: {\"path\":\"src/Storage/Repositories/UserRepository.cs\"}\nSummary: 420 lines\n\nusing System;\nnamespace Athlon.Storage;",
+      "createdAt": "2026-10-02T09:00:04+08:00"
+    },
+    {
+      "id": "b6",
+      "role": "Summary",
+      "content": "之前读取了 UserRepository.cs，长度 420 行。",
+      "createdAt": "2026-10-02T09:00:05+08:00"
+    },
+    {
+      "id": "b7",
+      "role": "Assistant",
+      "content": "",
+      "createdAt": "2026-10-02T09:00:06+08:00",
+      "toolCallsJson": "[{\"id\":\"call_lost\",\"name\":\"grep_files\",\"arguments\":{\"pattern\":\"IUserRepository\",\"path\":\"src\"}}]"
+    },
+    {
+      "id": "b8",
+      "role": "Assistant",
+      "content": "",
+      "createdAt": "2026-10-02T09:00:07+08:00",
+      "toolCallsJson": "[{\"id\":\"\",\"name\":\"list_dir\",\"arguments\":{\"path\":\"src\"}}]"
+    },
+    {
+      "id": "b9",
+      "role": "Tool",
+      "content": "ToolCallId: ghost_call\nTool `list_dir` succeeded.\n\nArguments: {\"path\":\"src\"}\nSummary: 12 entries\n\nControllers\nServices",
+      "createdAt": "2026-10-02T09:00:08+08:00"
+    },
+    {
+      "id": "b10",
+      "role": "Assistant",
+      "content": "已拆分完成 {\"tool_calls\":[{\"name\":\"read_file\"}]}",
+      "createdAt": "2026-10-02T09:00:09+08:00"
+    },
+    {
+      "id": "b11",
+      "role": "User",
+      "content": "那测试结果呢？顺便告诉我改了哪些文件",
+      "createdAt": "2026-10-02T09:01:00+08:00"
+    },
+    {
+      "id": "b12",
+      "role": "Assistant",
+      "content": "",
+      "createdAt": "2026-10-02T09:01:01+08:00",
+      "toolCallsJson": "[{\"id\":\"call_b\",\"name\":\"list_dir\",\"arguments\":{\"path\":\"src/Storage\"}}]"
+    },
+    {
+      "id": "b13",
+      "role": "Tool",
+      "content": "ToolCallId: call_b\nTool `list_dir` succeeded.\n\nArguments: {\"path\":\"src/Storage\"}\nSummary: 4 entries\n\nRepositories\nMigrations",
+      "createdAt": "2026-10-02T09:01:02+08:00"
+    }
+  ]
+}

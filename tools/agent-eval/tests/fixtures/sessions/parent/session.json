@@ -1,0 +1,33 @@
+{
+  "createdAt": "2026-10-03T11:00:00+08:00",
+  "id": "SESSION-PARENT",
+  "title": "子 Agent 排查构建失败",
+  "updatedAt": "2026-10-03T11:00:09+08:00",
+  "messages": [
+    {
+      "id": "p1",
+      "role": "User",
+      "content": "构建失败了，帮我定位原因并修复",
+      "createdAt": "2026-10-03T11:00:00+08:00"
+    },
+    {
+      "id": "p2",
+      "role": "Assistant",
+      "content": "",
+      "createdAt": "2026-10-03T11:00:01+08:00",
+      "toolCallsJson": "[{\"id\":\"call_build\",\"name\":\"run_command\",\"arguments\":{\"command\":\"dotnet build\"}}]"
+    },
+    {
+      "id": "p3",
+      "role": "Tool",
+      "content": "ToolCallId: call_build\nTool `run_command` failed.\n\nArguments: {\"command\":\"dotnet build\"}\nSummary: exit code 1\n\nCS0246: The type or namespace name 'IMessageBus' could not be found",
+      "createdAt": "2026-10-03T11:00:09+08:00"
+    },
+    {
+      "id": "p4",
+      "role": "Assistant",
+      "content": "构建失败是因为缺少 `IMessageBus` 类型，我先确认它是否被删除。",
+      "createdAt": "2026-10-03T11:00:10+08:00"
+    }
+  ]
+}

@@ -66,3 +66,7 @@ athlon-agent-analysis.html
 # License signing private key (never commit)
 tools/license/keys/private.pem
 tools/license/.venv/
+
+# Local agent-eval artifacts (reports and resolved config are machine-local)
+tools/agent-eval/config.json
+reports/

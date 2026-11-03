@@ -1,0 +1,65 @@
+{
+  "createdAt": "2026-10-01T10:00:00+08:00",
+  "id": "SESSION-FULL",
+  "title": "读取配置里的模型名",
+  "updatedAt": "2026-10-01T10:00:08+08:00",
+  "messages": [
+    {
+      "id": "m1",
+      "role": "System",
+      "content": "You are Athlon, a terminal agent.",
+      "createdAt": "2026-10-01T10:00:00+08:00"
+    },
+    {
+      "id": "m2",
+      "role": "User",
+      "content": "帮我看看 config/settings.json 里配置的模型名是什么",
+      "createdAt": "2026-10-01T10:00:01+08:00"
+    },
+    {
+      "id": "m3",
+      "role": "Assistant",
+      "content": "",
+      "createdAt": "2026-10-01T10:00:02+08:00",
+      "reasoningContent": "先读文件",
+      "toolCallsJson": "[{\"id\":\"call_1\",\"name\":\"read_file\",\"arguments\":{\"path\":\"config/settings.json\"}}]"
+    },
+    {
+      "id": "m4",
+      "role": "Tool",
+      "content": "ToolCallId: call_1\nTool `read_file` succeeded.\n\nArguments: {\"path\":\"config/settings.json\"}\nSummary: 3 lines\n\n{\"model\":{\"endpoint\":\"https://api.example.com/v1\",\"modelName\":\"athlon-pro\"}}",
+      "createdAt": "2026-10-01T10:00:03+08:00"
+    },
+    {
+      "id": "m5",
+      "role": "Assistant",
+      "content": "配置里的模型名是 `athlon-pro`。",
+      "createdAt": "2026-10-01T10:00:04+08:00"
+    },
+    {
+      "id": "m6",
+      "role": "User",
+      "content": "那端点地址呢？顺便说一下这个文件有多少行",
+      "createdAt": "2026-10-01T10:00:05+08:00"
+    },
+    {
+      "id": "m7",
+      "role": "Assistant",
+      "content": "",
+      "createdAt": "2026-10-01T10:00:06+08:00",
+      "toolCallsJson": "[{\"id\":\"call_2\",\"name\":\"read_file\",\"arguments\":{\"path\":\"config/settings.json\"}}]"
+    },
+    {
+      "id": "m8",
+      "role": "Tool",
+      "content": "ToolCallId: call_2\nTool `read_file` failed.\n\nArguments: {\"path\":\"config/settings.json\"}\nSummary: permission denied\n\nPermission denied: config/settings.json",
+      "createdAt": "2026-10-01T10:00:07+08:00"
+    },
+    {
+      "id": "m9",
+      "role": "Assistant",
+      "content": "读取被拒绝了，我拿不到端点地址和行数。",
+      "createdAt": "2026-10-01T10:00:08+08:00"
+    }
+  ]
+}
