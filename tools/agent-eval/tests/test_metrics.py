@@ -89,6 +89,30 @@ def test_compaction_is_a_signal_not_a_verdict(traces):
     assert compacted.passed is None and compacted.counted is False
 
 
+def test_repeats_caught_by_storm_breaker_are_a_signal_not_a_failure():
+    """A duplicate the guard suppressed is the guard working, not the agent looping."""
+    trace = _repeat_trace(suppressed=[True, True])
+
+    result = evaluate_rules(trace)["no_repeat_tool_call"]
+
+    assert result.passed is None
+    assert result.counted is False
+    assert result.label == "SUPPRESSED_REPEATS"
+    assert result.evidence["suppressedCount"] == 2
+    assert result.evidence["unsuppressedCount"] == 0
+
+
+def test_unsuppressed_repeat_fails_even_if_another_was_suppressed():
+    trace = _repeat_trace(suppressed=[True, False])
+
+    result = evaluate_rules(trace)["no_repeat_tool_call"]
+
+    assert result.passed is False
+    assert result.reason == "REPEATED_CALLS"
+    assert result.evidence["suppressedCount"] == 1
+    assert result.evidence["unsuppressedCount"] == 1
+
+
 def test_rules_skip_when_no_tool_call():
     results = evaluate_rules(_bare_trace())
     assert results["tool_args_valid"].status is Status.SKIPPED
@@ -200,6 +224,36 @@ def test_limit_applies_before_evaluation(traces):
 
 def _trace() -> Trace:
     return Trace(id="unit", fields={"request": "r", "final_answer": "a"})
+
+
+def _repeat_trace(suppressed: list[bool]) -> Trace:
+    """One first call plus N duplicates; ``suppressed[i]`` says if the guard caught it."""
+
+    def call(index: int, was_suppressed: bool | None) -> dict[str, Any]:
+        record: dict[str, Any] = {
+            "id": f"c{index}",
+            "name": "read_file",
+            "arguments": {"path": "src/a.cs"},
+            "result_state": "failure" if was_suppressed else "success",
+            "result_summary": "Duplicate tool call suppressed" if was_suppressed else "10 lines",
+            "result": "duplicate" if was_suppressed else "file body",
+        }
+        return record
+
+    calls = [call(0, None)] + [call(i + 1, flag) for i, flag in enumerate(suppressed)]
+    return Trace(
+        id="unit:repeat",
+        fields={
+            "request": "读一下 src/a.cs",
+            "final_answer": "读完了。",
+            "messages": [
+                {"role": "User", "text": "读一下 src/a.cs"},
+                {"role": "Assistant", "text": "读完了。"},
+            ],
+            "tool_calls": calls,
+            "tool_results": [],
+        },
+    )
 
 
 def _bare_trace() -> Trace:

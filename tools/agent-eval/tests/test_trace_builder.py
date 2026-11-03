@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from conftest import FIXTURES
-from trace_builder import CollectConfig, collect_traces, read_traces, write_traces
+from trace_builder import CollectConfig, build_trace, collect_traces, read_traces, write_traces
 from trace_model import FLAG_COMPACTED, FLAG_TRUNCATED_TOOL_OUTPUT, Issue
 
 
@@ -104,6 +104,54 @@ def test_min_request_chars_filters_short_turns(collected):
 def test_sub_agent_sessions_can_be_excluded():
     traces, _ = collect_traces(config(include_sub_agents=False))
     assert all(trace.fields["session_id"] != "SESSION-CHILD" for trace in traces)
+
+
+def test_is_subagent_marks_only_nested_sessions(collected):
+    traces, _ = collected
+    flags = {trace.fields["session_id"]: trace.fields["is_subagent"] for trace in traces}
+
+    assert flags["SESSION-CHILD"] is True
+    assert flags["SESSION-PARENT"] is False
+    assert flags["SESSION-FULL"] is False
+
+
+def test_clipping_a_tool_result_sets_truncation_flag():
+    """A judge that only sees a fragment must be able to tell it was clipped."""
+    long_body = "x" * 500
+    messages = [
+        {"role": "User", "content": "读一下这个大文件"},
+        {
+            "role": "Assistant",
+            "content": "",
+            "toolCallsJson": '[{"id":"c1","name":"read_file","arguments":{"path":"big.txt"}}]',
+        },
+        {
+            "role": "Tool",
+            "content": f"ToolCallId: c1\nTool `read_file` succeeded.\n\nSummary: 1 line\n\n{long_body}",
+        },
+        {"role": "Assistant", "content": "读完了。"},
+    ]
+
+    trace = build_trace(
+        session_id="SESSION-LONG",
+        title="",
+        turn_index=0,
+        request="读一下这个大文件",
+        messages=messages,
+        config=CollectConfig(sessions_root=Path("/tmp/fake-sessions"), max_tool_result_chars=100),
+    )
+
+    assert trace is not None
+    assert FLAG_TRUNCATED_TOOL_OUTPUT in trace.flags
+    record = trace.list("tool_calls")[0]
+    assert record["result_truncated"] is True
+    assert "clipped" in record["result"]
+
+
+def test_small_tool_result_is_not_flagged_as_truncated(collected):
+    traces, _ = collected
+    trace = next(item for item in traces if item.id == "SESSION-CHILD:0")
+    assert FLAG_TRUNCATED_TOOL_OUTPUT not in trace.flags
 
 
 def test_title_exclusion():

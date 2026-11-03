@@ -170,7 +170,57 @@ def summary_markdown(results: Results) -> str:
             lines.append(f"| {key} | {count} | {meanings.get(key, '')} |")
         lines.append("")
 
+    split = _main_vs_subagent(results.entries)
+    if split is not None:
+        lines.append("## 主会话 / 子代理拆分\n")
+        lines.append("| 范围 | 轨迹数 | PASS | FAIL | 通过率 | 不确定 | 错误 | 跳过 | 信号 |")
+        lines.append("|---|---|---|---|---|---|---|---|---|")
+        for label, traces, stats in split:
+            signals = (
+                ", ".join(f"{key}={value}" for key, value in sorted(stats.signal_labels.items()))
+                or "-"
+            )
+            lines.append(
+                f"| {label} | {traces} | {stats.pass_count} | {stats.fail_count} |"
+                f" {_fmt_rate(stats.pass_rate)} | {stats.unsure_count} |"
+                f" {stats.error_count} | {stats.skipped_count} | {signals} |"
+            )
+        lines.append(
+            "\n> `no_empty_final_answer` 在主会话与子代理上口径不同：子代理的空回答会让父代理收到占位串，"
+            "属真实缺陷。阅读总表前先看这张拆分表。\n"
+        )
+
     return "\n".join(lines) + "\n"
+
+
+def _main_vs_subagent(
+    entries: Sequence[Entry],
+) -> list[tuple[str, int, MetricStats]] | None:
+    """Per-scope aggregate over all metrics.
+
+    Sub-agent turns are real turns, but their expected output shape differs from a
+    user-facing answer, so a single blended number hides which scope regressed.
+    """
+    if not entries:
+        return None
+    has_subagent = any(bool(entry.trace.fields.get("is_subagent")) for entry in entries)
+    if not has_subagent:
+        return None
+
+    scopes: dict[str, tuple[int, MetricStats]] = {
+        "main": (0, MetricStats(id="all")),
+        "subagent": (0, MetricStats(id="all")),
+    }
+    for entry in entries:
+        key = "subagent" if entry.trace.fields.get("is_subagent") else "main"
+        trace_count, stats = scopes[key]
+        scopes[key] = (trace_count + 1, stats)
+        for result in entry.results.values():
+            stats.observe(result)
+    return [
+        ("主会话", *scopes["main"]),
+        ("子代理", *scopes["subagent"]),
+    ]
 
 
 def failures_markdown(results: Results, limit: int = 200) -> str:

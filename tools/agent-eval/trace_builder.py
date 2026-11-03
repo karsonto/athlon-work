@@ -165,7 +165,14 @@ def collect_traces(
             continue
 
         report.sessions_parsed += 1
-        session_traces = build_session_traces(session_id, title, messages, config, report)
+        session_traces = build_session_traces(
+            session_id,
+            title,
+            messages,
+            config,
+            report,
+            is_subagent=_is_subagent_path(path, config.sessions_root),
+        )
         traces.extend(session_traces)
 
     report.traces = len(traces)
@@ -178,6 +185,7 @@ def build_session_traces(
     messages: Sequence[Any],
     config: CollectConfig,
     report: CollectReport | None = None,
+    is_subagent: bool = False,
 ) -> list[Trace]:
     report = report or CollectReport()
     traces: list[Trace] = []
@@ -189,6 +197,7 @@ def build_session_traces(
             request=request,
             messages=turn_messages,
             config=config,
+            is_subagent=is_subagent,
         )
         if trace is None:
             report.traces_skipped += 1
@@ -210,6 +219,7 @@ def build_trace(
     request: str,
     messages: Sequence[Any],
     config: CollectConfig,
+    is_subagent: bool = False,
 ) -> Trace | None:
     request_text = _clean_text(request)
     if len(request_text) < config.min_request_chars:
@@ -236,7 +246,11 @@ def build_trace(
             continue
 
         text = _clean_text(_as_text(message.get("content")))
-        turns.append({"role": role, "text": _clip(text, config.max_tool_result_chars)})
+        clipped_text, clipped = _clip(text, config.max_tool_result_chars)
+        if clipped and role == "Tool":
+            # A tool result the judge cannot fully see may look ungrounded; say so explicitly.
+            flags.append(FLAG_TRUNCATED_TOOL_OUTPUT)
+        turns.append({"role": role, "text": clipped_text})
 
         tool_calls = _parse_tool_calls(message.get("toolCallsJson"))
         if role == "Assistant":
@@ -287,6 +301,7 @@ def build_trace(
         "session_id": session_id,
         "session_title": title,
         "turn_index": turn_index,
+        "is_subagent": is_subagent,
         "request": request_text,
         "final_answer": final_answer,
         "messages": turns,
@@ -355,8 +370,9 @@ def _attach_tool_result(
         _append_issue(issues, Issue.UNPAIRED_TOOL_RESULT)
         return
 
-    truncated = any(marker in body for marker in _EVICTED_MARKERS)
-    if truncated:
+    evicted = any(marker in body for marker in _EVICTED_MARKERS)
+    clipped_body, clipped = _clip(body, clip_chars)
+    if evicted or clipped:
         flags.append(FLAG_TRUNCATED_TOOL_OUTPUT)
 
     calls[call_id] = CallRecord(
@@ -364,10 +380,10 @@ def _attach_tool_result(
         result=ToolResult(
             call_id=call_id,
             name=name or record.call.name,
-            text=_clip(body, clip_chars),
+            text=clipped_body,
             state=status,
             summary=summary,
-            truncated=truncated,
+            truncated=evicted or clipped,
         ),
         result_message_index=message_index,
     )
@@ -499,10 +515,15 @@ def _as_text(value: Any) -> str:
     return ""
 
 
-def _clip(text: str, limit: int) -> str:
+def _clip(text: str, limit: int) -> tuple[str, bool]:
+    """Clip to ``limit`` chars and report whether anything was dropped.
+
+    The flag matters for evaluation: a judge that only sees a fragment may call a
+    grounded answer ungrounded, so clipping has to be visible in the trace.
+    """
     if limit <= 0 or len(text) <= limit:
-        return text
-    return text[:limit] + f"\n...[clipped {len(text) - limit} chars]"
+        return text, False
+    return text[:limit] + f"\n...[clipped {len(text) - limit} chars]", True
 
 
 def _clean_text(text: str) -> str:
@@ -526,6 +547,15 @@ def _relative_session(path: Path, root: Path) -> str:
         return str(path.parent.relative_to(root))
     except ValueError:
         return str(path.parent)
+
+
+def _is_subagent_path(path: Path, root: Path) -> bool:
+    """Sub-agent sessions live under ``<parent>/subagents/<type>/<sub>/session.json``."""
+    try:
+        parts = path.parent.relative_to(root).parts
+    except ValueError:
+        return False
+    return SUBAGENT_FOLDER in parts
 
 
 # --------------------------------------------------------------------------- #

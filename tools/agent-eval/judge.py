@@ -346,12 +346,15 @@ class LlmJudge:
     ) -> JudgeOutcome:
         expected = set(questions)
         actual = set(payload)
-        if actual != expected:
-            missing = sorted(expected - actual)
-            extra = sorted(actual - expected)
+
+        # A missing answer is fatal: the metric would have to guess. An extra answer is
+        # not - the model may have answered every metric it knows about, and ignoring a
+        # question nobody asked is not the same as inventing an answer.
+        missing = sorted(expected - actual)
+        if missing:
             raise JudgeError(
                 "INVALID_RESPONSE",
-                detail=f"answer keys mismatch (missing={missing[:5]}, extra={extra[:5]})",
+                detail=f"answer keys mismatch (missing={missing[:5]})",
                 usage=usage,
             )
 

@@ -60,6 +60,25 @@ def test_failures_only_lists_fail_and_unsure(results):
     assert "tools/agent-eval" not in markdown
 
 
+def test_summary_splits_main_sessions_from_subagents(results):
+    """A blended rate hides which scope regressed; both scopes must be shown."""
+    markdown = summary_markdown(results)
+
+    assert "主会话 / 子代理拆分" in markdown
+    main_line = next(line for line in markdown.splitlines() if line.startswith("| 主会话 |"))
+    subagent_line = next(line for line in markdown.splitlines() if line.startswith("| 子代理 |"))
+
+    main_traces = int(main_line.split("|")[2])
+    subagent_traces = int(subagent_line.split("|")[2])
+    assert subagent_traces >= 1
+    assert main_traces + subagent_traces == results.trace_count
+
+
+def test_summary_omits_split_when_there_are_no_subagents():
+    results = make_results("grounded", [Verdict.PASS, Verdict.FAIL])
+    assert "主会话 / 子代理拆分" not in summary_markdown(results)
+
+
 def test_reports_are_written(tmp_path: Path, results):
     write_reports(tmp_path, results)
 

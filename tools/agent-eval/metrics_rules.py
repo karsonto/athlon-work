@@ -100,6 +100,10 @@ class NoRepeatToolCall(_Rule):
     id = "no_repeat_tool_call"
     question = "No identical tool call is repeated inside the turn."
 
+    # ToolStormBreaker writes this summary when it suppresses a duplicate call.
+    # Such a repeat is the guard working, not the agent looping on its own.
+    _SUPPRESSED_MARKER = "duplicate tool call suppressed"
+
     def precheck(self, trace: Trace) -> MetricResult | None:
         if len(_records(trace)) < 2:
             # One call cannot loop; skipping keeps the pass rate honest.
@@ -107,8 +111,9 @@ class NoRepeatToolCall(_Rule):
         return None
 
     def reduce(self, answers: Mapping[str, Any], trace: Trace) -> MetricResult:
-        seen: dict[str, str] = {}
-        repeats = 0
+        seen: set[str] = set()
+        suppressed = 0
+        unsuppressed = 0
         for record in _records(trace):
             signature = json.dumps(
                 {"name": record.get("name"), "arguments": record.get("arguments")},
@@ -117,14 +122,36 @@ class NoRepeatToolCall(_Rule):
                 default=str,
             )
             if signature in seen:
-                repeats += 1
+                if _was_suppressed(record, self._SUPPRESSED_MARKER):
+                    suppressed += 1
+                else:
+                    unsuppressed += 1
             else:
-                seen[signature] = str(record.get("name"))
-        return _decide(
-            repeats == 0,
-            "NO_REPEAT" if repeats == 0 else "REPEATED_CALLS",
-            {"repeatCount": repeats, "totalCalls": len(_records(trace))},
-        )
+                seen.add(signature)
+
+        evidence = {
+            "repeatCount": suppressed + unsuppressed,
+            "suppressedCount": suppressed,
+            "unsuppressedCount": unsuppressed,
+            "totalCalls": len(_records(trace)),
+        }
+        if unsuppressed:
+            return _decide(False, "REPEATED_CALLS", evidence)
+        if suppressed:
+            # The guard caught every repeat: report it as a signal, not a failure,
+            # otherwise a working storm breaker looks identical to a broken one.
+            return MetricResult.signal("SUPPRESSED_REPEATS", "REPEATS_SUPPRESSED", evidence)
+        return _decide(True, "NO_REPEAT", evidence)
+
+
+def _was_suppressed(record: Mapping[str, Any], marker: str) -> bool:
+    summary = str(record.get("result_summary") or "").casefold()
+    if marker in summary:
+        return True
+    result = record.get("result")
+    if isinstance(result, str) and marker in result.casefold():
+        return True
+    return False
 
 
 class FirstToolSuccess(_Rule):

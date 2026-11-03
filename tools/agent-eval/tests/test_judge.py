@@ -46,15 +46,7 @@ def test_parse_accepts_strict_payload():
 @pytest.mark.parametrize(
     "payload, needle",
     [
-        ({"grounded": {"verdict": "yes", "reason": "x"}}, "keys mismatch"),
-        (
-            {
-                "grounded": {"verdict": "yes", "reason": "x"},
-                "tool_choice": {"verdict": "yes", "reason": "x"},
-                "extra": {"verdict": "yes", "reason": "x"},
-            },
-            "keys mismatch",
-        ),
+        ({"grounded": {"verdict": "yes", "reason": "x"}}, "missing"),
         (
             {
                 "grounded": {"verdict": "probably", "reason": "x"},
@@ -81,6 +73,22 @@ def test_parse_rejects_nonconforming_replies(payload, needle):
 
     assert error.value.reason == "INVALID_RESPONSE"
     assert needle in error.value.detail
+
+
+def test_parse_ignores_extra_answers():
+    """A model that answers every metric it knows about must not fail the trace."""
+    outcome = make_judge()._parse(
+        {
+            "grounded": {"verdict": "yes", "reason": "quoted"},
+            "tool_choice": {"verdict": "no", "reason": "wrong tool"},
+            "not_asked": {"verdict": "unsure", "reason": "irrelevant"},
+        },
+        QUESTIONS,
+        None,
+    )
+
+    assert outcome.verdicts == {"grounded": Verdict.PASS, "tool_choice": Verdict.FAIL}
+    assert "not_asked" not in outcome.reasons
 
 
 def test_reason_is_truncated_not_rejected():
