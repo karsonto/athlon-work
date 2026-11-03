@@ -12,7 +12,8 @@ public static class ModelMessagesForApiBuilder
         ContextCompactionSettings compaction,
         string? runtimeContext = null,
         RuntimeContextInjectionState? runtimeContextState = null,
-        string? tokenBudgetNotice = null)
+        string? tokenBudgetNotice = null,
+        string? completionNudge = null)
     {
         var stripUiTrees = compaction.RequestHistoryHygiene.PruneHistoricalUiTree;
         List<AgentModelMessage> messages;
@@ -77,13 +78,22 @@ public static class ModelMessagesForApiBuilder
             compaction.RequestHistoryHygiene.HistoryUiTreeRetention);
         result = new RequestHistoryHygiene.ApplyResult(withMedia, result.EstimatedSavingsTokens);
 
-        if (string.IsNullOrWhiteSpace(tokenBudgetNotice))
+        if (string.IsNullOrWhiteSpace(tokenBudgetNotice) && string.IsNullOrWhiteSpace(completionNudge))
         {
             return result;
         }
 
         var withNotice = result.Messages.ToList();
-        withNotice.Add(new AgentModelMessage("user", tokenBudgetNotice));
+        if (!string.IsNullOrWhiteSpace(tokenBudgetNotice))
+        {
+            withNotice.Add(new AgentModelMessage("user", tokenBudgetNotice));
+        }
+
+        if (!string.IsNullOrWhiteSpace(completionNudge))
+        {
+            withNotice.Add(new AgentModelMessage("user", completionNudge));
+        }
+
         return new RequestHistoryHygiene.ApplyResult(withNotice, result.EstimatedSavingsTokens);
     }
 }

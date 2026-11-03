@@ -32,6 +32,22 @@ public sealed partial class AgentRuntime(
     private readonly AgentTurnCoordinator _turnCoordinator = turnCoordinator;
     private TrainingData.ITrainingDataCollector? _trainingDataCollector;
 
+    /// <summary>
+    /// Transient instruction appended to the next model request after a round ended with no
+    /// text and no tool calls. Never persisted to the session.
+    /// </summary>
+    private const string EmptyResponseNudge =
+        "Your previous reply was empty. Either answer the user in prose now, or call a tool. "
+        + "Do not return an empty message.";
+
+    /// <summary>
+    /// Persisted when a retry also comes back empty, so the turn never ends silently.
+    /// The leading marker is intentional: it keeps this placeholder distinguishable from a
+    /// real answer when sessions are evaluated offline.
+    /// </summary>
+    private const string EmptyResponseFallback =
+        "（本轮未产生可显示的回复。可以再发一次，或补充说明希望我继续做什么。）";
+
     private TrainingData.ITrainingDataCollector? ResolveTrainingDataCollector()
     {
         if (_trainingDataCollector is not null)
@@ -168,6 +184,11 @@ public sealed partial class AgentRuntime(
             var environmentPrompt = frozenPrompt.Text;
             var modelToolRound = 0;
             var maxModelToolRounds = runContext.LoopOptions?.MaxModelToolRounds;
+            // A final round that returns no text leaves the user with nothing. Retry once
+            // with a transient nudge; after that, persist a visible degradation instead of
+            // an empty assistant message.
+            var emptyResponseRetried = false;
+            string? completionNudge = null;
             var modelMessageCache = new ModelMessageCache();
             var runtimeContextState = new RuntimeContextInjectionState();
             var streamAdapter = new AgentStreamAdapter(session.Id, runContext.RunId);
@@ -215,7 +236,11 @@ public sealed partial class AgentRuntime(
                     settings.ContextCompaction,
                     turnInvocation.RuntimeContext,
                     runtimeContextState,
-                    turnInvocation.TokenBudgetNotice);
+                    turnInvocation.TokenBudgetNotice,
+                    completionNudge);
+                // The nudge is a one-shot: applying it to every later request would keep
+                // insisting on a summary long after the answer was produced.
+                completionNudge = null;
                 var runtimeContextForRequest = runtimeContextState.LastSelectedContext;
 
                 var assistantMessageId = IdGen.NewId();
@@ -236,12 +261,28 @@ public sealed partial class AgentRuntime(
 
                 if (response.ToolCalls.Count == 0)
                 {
+                    if (string.IsNullOrWhiteSpace(response.Content) && !emptyResponseRetried)
+                    {
+                        // The model ended the turn without a word: no tool calls and no text.
+                        // Ask once more, then degrade visibly below instead of returning silence.
+                        _logger.Warning(
+                            "Empty final response for session {SessionId}; retrying once with a completion nudge",
+                            session.Id);
+                        emptyResponseRetried = true;
+                        completionNudge = EmptyResponseNudge;
+                        continue;
+                    }
+
+                    var assistantContent = string.IsNullOrWhiteSpace(response.Content)
+                        ? EmptyResponseFallback
+                        : response.Content;
+
                     if (!streamAdapter.State.HasStartedTextMessage(assistantMessageId)
-                        && !string.IsNullOrEmpty(response.Content))
+                        && !string.IsNullOrEmpty(assistantContent))
                     {
                         await PublishStreamEventsAsync(
                             callbacks,
-                            streamAdapter.OnTextDelta(assistantMessageId, response.Content)).ConfigureAwait(false);
+                            streamAdapter.OnTextDelta(assistantMessageId, assistantContent)).ConfigureAwait(false);
                     }
 
                     if (!streamAdapter.State.HasStartedReasoningMessage(assistantMessageId)
@@ -255,7 +296,7 @@ public sealed partial class AgentRuntime(
                     var assistant = ChatMessage.CreateWithId(
                         assistantMessageId,
                         MessageRole.Assistant,
-                        response.Content,
+                        assistantContent,
                         parentMessageId,
                         reasoningContent: response.ReasoningContent);
                     session = session.WithMessage(assistant);
