@@ -327,11 +327,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPreCompletionPipeline, PreCompletionPipeline>();
         // Long-term memory services
         services.AddSingleton<ILongTermMemory, FileLongTermMemory>();
+        // Account-level habit profile. Registered through a factory so a future remote backend only
+        // changes ProfileMemoryFactory; today every value resolves to the local file implementation.
+        services.AddSingleton<IProfileMemory>(ProfileMemoryFactory.Create);
+        services.AddSingleton<ProfileRefreshPolicy>();
         services.AddSingleton<MemoryFlushService>();
         services.AddSingleton<MemoryConsolidationService>();
         services.AddSingleton<IPostTurnMemoryProcessor, PostTurnMemoryProcessor>();
         services.AddSingleton<IAgentTool, MemorySearchTool>();
         services.AddSingleton<IAgentTool, MemoryGetTool>();
+        services.AddSingleton<IAgentTool, ProfileGetTool>();
         services.AddSingleton<IAgentTool, HistoryListTranscriptsTool>();
         services.AddSingleton<IAgentTool, HistoryReadTranscriptTool>();
         services.AddSingleton<IAgentTool, HistorySearchTranscriptsTool>();

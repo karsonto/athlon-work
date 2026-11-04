@@ -130,10 +130,13 @@ public sealed class HarnessTests
     }
 
     [Fact]
-    public async Task PostTurnMemoryMiddleware_Skips_WhenNoWorkspace()
+    public async Task PostTurnMemoryMiddleware_Skips_WhenNoWorkspace_AndProfileDisabled()
     {
         var processor = new RecordingPostTurnMemoryProcessor();
-        var middleware = new PostTurnMemoryMiddleware(processor, new HarnessNoOpAppLogger());
+        var middleware = new PostTurnMemoryMiddleware(
+            processor,
+            new AppSettings { Profile = { Enabled = false } },
+            new HarnessNoOpAppLogger());
         var invocation = CreateTurnInvocation(hasWorkspace: false);
 
         await middleware.OnTurnCompletedAsync(invocation, CancellationToken.None);
@@ -143,10 +146,27 @@ public sealed class HarnessTests
     }
 
     [Fact]
+    public async Task PostTurnMemoryMiddleware_Flushes_ChatOnlySession_WhenProfileEnabled()
+    {
+        var processor = new RecordingPostTurnMemoryProcessor();
+        var middleware = new PostTurnMemoryMiddleware(
+            processor,
+            new AppSettings(),
+            new HarnessNoOpAppLogger());
+        var invocation = CreateTurnInvocation(hasWorkspace: false);
+
+        await middleware.OnTurnCompletedAsync(invocation, CancellationToken.None);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await processor.WaitForCallAsync(cts.Token);
+
+        Assert.Equal(1, processor.CallCount);
+    }
+
+    [Fact]
     public async Task PostTurnMemoryMiddleware_Flushes_WhenWorkspaceBound()
     {
         var processor = new RecordingPostTurnMemoryProcessor();
-        var middleware = new PostTurnMemoryMiddleware(processor, new HarnessNoOpAppLogger());
+        var middleware = new PostTurnMemoryMiddleware(processor, new AppSettings(), new HarnessNoOpAppLogger());
         var invocation = CreateTurnInvocation(hasWorkspace: true);
 
         await middleware.OnTurnCompletedAsync(invocation, CancellationToken.None);

@@ -79,6 +79,7 @@ public sealed class AppSettings
     public SubAgentSettings SubAgent { get; set; } = new();
     public ParallelToolExecutionSettings ParallelToolExecution { get; set; } = new();
     public MemorySettings Memory { get; set; } = new();
+    public ProfileSettings Profile { get; set; } = new();
     public ScheduleSettings Schedule { get; set; } = new();
     public UpdateSettings Update { get; set; } = new();
     public TrainingDataSettings TrainingData { get; set; } = new();

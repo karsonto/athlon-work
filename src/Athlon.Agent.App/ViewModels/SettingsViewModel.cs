@@ -6,6 +6,7 @@ using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Audio;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
 using Athlon.Agent.Skills;
@@ -24,6 +25,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly ApiKeySecretMigrationService _apiKeySecretMigration;
     private readonly ILocalizationService _loc;
     private readonly ITtsClient _ttsClient;
+    private readonly IProfileMemory _profileMemory;
+    private readonly IUserNotifier _userNotifier;
     private bool _disposed;
 
     public SettingsViewModel(
@@ -35,7 +38,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         IFileStorageService storage,
         ApiKeySecretMigrationService apiKeySecretMigration,
         ILocalizationService localization,
-        ITtsClient ttsClient)
+        ITtsClient ttsClient,
+        IProfileMemory profileMemory,
+        IUserNotifier userNotifier)
     {
         Settings = settings;
         _mcpRegistry = mcpRegistry;
@@ -46,6 +51,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         _apiKeySecretMigration = apiKeySecretMigration;
         _loc = localization;
         _ttsClient = ttsClient;
+        _profileMemory = profileMemory;
+        _userNotifier = userNotifier;
         Language = Settings.Ui.Language;
         TerminalShell = WorkspaceTerminalBootstrap.NormalizeShellPreference(Settings.Ui.TerminalShell);
         SettingsStatus = _loc["Settings_DefaultStatus"];

@@ -6,6 +6,7 @@ using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Audio;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
 using Athlon.Agent.Skills;
@@ -86,6 +87,71 @@ public sealed partial class SettingsViewModel
     {
         get => Math.Max(1, (int)Settings.Memory.ConsolidationMinGap.TotalMinutes).ToString();
         set => Settings.Memory.ConsolidationMinGap = TimeSpan.FromMinutes(ParsePositiveInt(value, 30));
+    }
+
+    // ---- Account-level habit profile --------------------------------------
+
+    /// <summary>Absolute directory holding USER.md / LESSONS.md, derived from the app data root.</summary>
+    public string ProfileDirectoryPath => Path.Combine(_paths.RootPath, Settings.Profile.DirName);
+
+    public bool ProfileEnabled
+    {
+        get => Settings.Profile.Enabled;
+        set
+        {
+            if (Settings.Profile.Enabled == value)
+            {
+                return;
+            }
+
+            Settings.Profile.Enabled = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanClearProfile));
+        }
+    }
+
+    public string ProfileUserMaxCharsText
+    {
+        get => Settings.Profile.UserMaxChars.ToString();
+        set => Settings.Profile.UserMaxChars = ParsePositiveInt(value, Settings.Profile.UserMaxChars);
+    }
+
+    public string ProfileLessonsMaxCharsText
+    {
+        get => Settings.Profile.LessonsMaxChars.ToString();
+        set => Settings.Profile.LessonsMaxChars = ParsePositiveInt(value, Settings.Profile.LessonsMaxChars);
+    }
+
+    public IReadOnlyList<ProfileBackendOption> ProfileBackendOptions =>
+    [
+        new(ProfileBackendKind.Local, _loc["Settings_ProfileBackendLocal"], IsSelectable: true),
+        new(ProfileBackendKind.Remote, _loc["Settings_ProfileBackendRemote"], IsSelectable: false)
+    ];
+
+    [ObservableProperty]
+    private string profileStatus = string.Empty;
+
+    /// <summary>Clear buttons follow the backend's capability bits, ready for read-only remote stores.</summary>
+    public bool CanClearProfile => Settings.Profile.Enabled && _profileMemory.Capabilities.CanDelete;
+
+    [RelayCommand]
+    private Task ClearProfileUserAsync() => ClearProfileAsync(ProfileKind.User, "Settings_ProfileClearUserConfirm");
+
+    [RelayCommand]
+    private Task ClearProfileLessonsAsync() => ClearProfileAsync(ProfileKind.Lessons, "Settings_ProfileClearLessonsConfirm");
+
+    private async Task ClearProfileAsync(ProfileKind kind, string confirmKey)
+    {
+        if (!_userNotifier.Confirm("Settings_ProfileClearTitle", confirmKey))
+        {
+            return;
+        }
+
+        var deleted = await _profileMemory.DeleteAsync(kind, CancellationToken.None).ConfigureAwait(true);
+        ProfileStatus = deleted
+            ? Strings.Format("Settings_ProfileCleared", ProfileKinds.FileName(kind))
+            : Strings.Format("Settings_ProfileAlreadyEmpty", ProfileKinds.FileName(kind));
+        OnPropertyChanged(nameof(CanClearProfile));
     }
 
     public string ContextWindowTokensText
@@ -285,3 +351,10 @@ public sealed partial class SettingsViewModel
         return Math.Clamp(percent, 1, 99) / 100.0;
     }
 }
+
+/// <summary>Storage backend entry for the habit-profile dropdown.</summary>
+public sealed record ProfileBackendOption(
+    ProfileBackendKind Value,
+    string DisplayName,
+    bool IsSelectable);
+

@@ -5,15 +5,18 @@ namespace Athlon.Agent.Core.Middleware;
 
 public sealed class PostTurnMemoryMiddleware(
     IPostTurnMemoryProcessor memoryProcessor,
+    AppSettings settings,
     IAppLogger logger) : AgentTurnMiddlewareBase
 {
     private readonly IAppLogger _logger = logger.ForContext("PostTurnMemoryMiddleware");
 
     public override ValueTask OnTurnCompletedAsync(AgentTurnInvocation invocation, CancellationToken cancellationToken)
     {
-        // Memory is scoped per project session; flush in Agent/Coding/Ask whenever a workspace is bound.
-        if (string.IsNullOrWhiteSpace(invocation.Session.ActiveWorkspace)
-            && string.IsNullOrWhiteSpace(invocation.Session.ActiveWorkspaceId))
+        // Session memory needs a workspace, but the account-level habit profile does not: a chat-only
+        // session still teaches the agent how this person wants to be talked to.
+        var workspaceBound = !string.IsNullOrWhiteSpace(invocation.Session.ActiveWorkspace)
+            || !string.IsNullOrWhiteSpace(invocation.Session.ActiveWorkspaceId);
+        if (!workspaceBound && !settings.Profile.Enabled)
         {
             return ValueTask.CompletedTask;
         }

@@ -479,6 +479,132 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
+                            <TextBlock Text="{loc:Localize Key=Settings_MemorySectionTitle}"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,8" />
+                            <TextBlock Text="{loc:Localize Key=Settings_MemorySectionHint}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,0,0,12" />
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Localize Key=Settings_MemoryMaxTokens}" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding MemoryMaxTokensText, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Localize Key=Settings_MemoryDailyRetentionDays}" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding MemoryDailyRetentionDaysText, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Localize Key=Settings_MemoryConsolidationGap}" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding MemoryConsolidationGapMinutesText, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Localize Key=Settings_ProfileTitle}"
+                                               FontSize="16"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Text="{loc:Localize Key=Settings_ProfileHint}"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               TextWrapping="Wrap"
+                                               FontSize="12"
+                                               Margin="0,6,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          IsChecked="{Binding ProfileEnabled, UpdateSourceTrigger=PropertyChanged}"
+                                          ToolTip="{loc:Localize Key=Settings_ProfileEnabled}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
+                            </Grid>
+                            <TextBlock Text="{loc:Localize Key=Settings_ProfileBackend}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       Margin="0,0,0,6" />
+                            <ComboBox ItemsSource="{Binding ProfileBackendOptions}"
+                                      SelectedValue="{Binding Settings.Profile.Backend, UpdateSourceTrigger=PropertyChanged}"
+                                      SelectedValuePath="Value"
+                                      DisplayMemberPath="DisplayName"
+                                      MinWidth="240"
+                                      HorizontalAlignment="Left">
+                                <ComboBox.ItemContainerStyle>
+                                    <Style TargetType="ComboBoxItem">
+                                        <Setter Property="IsEnabled" Value="True" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelectable}" Value="False">
+                                                <Setter Property="IsEnabled" Value="False" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ComboBox.ItemContainerStyle>
+                            </ComboBox>
+                            <Grid Margin="0,14,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ProfileUserMaxChars}"
+                                               Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ProfileUserMaxCharsText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ProfileLessonsMaxChars}"
+                                               Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ProfileLessonsMaxCharsText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="{loc:Localize Key=Settings_ProfilePath}"
+                                       Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding ProfileDirectoryPath, Mode=OneWay}"
+                                     IsReadOnly="True"
+                                     Margin="0,6,0,12" />
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="{loc:Localize Key=Settings_ProfileClearUser}"
+                                        Command="{Binding ClearProfileUserCommand}"
+                                        IsEnabled="{Binding CanClearProfile}"
+                                        Margin="0,0,8,0" />
+                                <Button Content="{loc:Localize Key=Settings_ProfileClearLessons}"
+                                        Command="{Binding ClearProfileLessonsCommand}"
+                                        IsEnabled="{Binding CanClearProfile}" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding ProfileStatus}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,8,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
                             <TextBlock Text="{loc:Localize Key=Settings_ContextCompactionTitle}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>

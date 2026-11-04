@@ -210,6 +210,7 @@ internal static class AgentRuntimeTestFactory
             compaction,
             new PostTurnMemoryMiddleware(
                 memoryProcessor ?? new NoOpPostTurnMemoryProcessor(),
+                settings,
                 logger)
         ];
         return (new AgentTurnMiddlewarePipeline(middlewares), compaction);

@@ -4,6 +4,7 @@ using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Audio;
+using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -24,7 +25,7 @@ public sealed class SettingsViewModelTests
             new NoOpStorage(),
             new ApiKeySecretMigrationService(new RecordingCredentialStore()),
             new LocalizationService(),
-            new StubTtsClient());
+            new StubTtsClient(), new TestProfileMemory(), new TestUserNotifier());
 
         viewModel.Language = "zh-CN";
 
@@ -81,7 +82,7 @@ public sealed class SettingsViewModelTests
             storage,
             new ApiKeySecretMigrationService(credentials),
             new LocalizationService(),
-            new StubTtsClient())
+            new StubTtsClient(), new TestProfileMemory(), new TestUserNotifier())
         {
             TtsApiKey = "tts-secret-key"
         };
@@ -118,7 +119,9 @@ public sealed class SettingsViewModelTests
             new NoOpStorage(),
             new ApiKeySecretMigrationService(new RecordingCredentialStore()),
             new LocalizationService(),
-            ttsClient);
+            ttsClient,
+            new TestProfileMemory(),
+            new TestUserNotifier());
 
         await viewModel.TestTtsConnectionCommand.ExecuteAsync(null);
 
@@ -139,7 +142,9 @@ public sealed class SettingsViewModelTests
             new NoOpStorage(),
             new ApiKeySecretMigrationService(new RecordingCredentialStore()),
             new LocalizationService(),
-            new StubTtsClient { ProbeError = new TtsClientException("connection refused") });
+            new StubTtsClient { ProbeError = new TtsClientException("connection refused") },
+            new TestProfileMemory(),
+            new TestUserNotifier());
 
         await viewModel.TestTtsConnectionCommand.ExecuteAsync(null);
 
@@ -168,7 +173,7 @@ public sealed class SettingsViewModelTests
             storage,
             new ApiKeySecretMigrationService(credentials),
             new LocalizationService(),
-            new StubTtsClient())
+            new StubTtsClient(), new TestProfileMemory(), new TestUserNotifier())
         {
             ApiKey = "sk-or-v1-test-key"
         };
@@ -203,7 +208,7 @@ public sealed class SettingsViewModelTests
             storage,
             new ApiKeySecretMigrationService(new RecordingCredentialStore()),
             new LocalizationService(),
-            new StubTtsClient())
+            new StubTtsClient(), new TestProfileMemory(), new TestUserNotifier())
         {
             Language = "zh-CN"
         };
@@ -237,7 +242,7 @@ public sealed class SettingsViewModelTests
             storage,
             new ApiKeySecretMigrationService(credentials),
             new LocalizationService(),
-            new StubTtsClient());
+            new StubTtsClient(), new TestProfileMemory(), new TestUserNotifier());
         viewModel.SyncPendingSecrets = () => viewModel.ApiKey = "sk-or-v1-from-password-box";
 
         await viewModel.SaveSettingsCommand.ExecuteAsync(null);
@@ -324,6 +329,60 @@ public sealed class SettingsViewModelTests
         public void EnsureCreated() => Directory.CreateDirectory(RootPath);
 
         public string ResolveSkillPath(string path) => path;
+    }
+
+    private sealed class TestProfileMemory : IProfileMemory
+    {
+        private readonly Dictionary<ProfileKind, string> _documents = new();
+
+        public ProfileCapabilities Capabilities { get; } =
+            new(ProfileBackendKind.Local, CanWrite: true, CanDelete: true, IsRemote: false);
+
+        public Task<ProfileDocument?> ReadAsync(ProfileKind kind, CancellationToken cancellationToken = default) =>
+            Task.FromResult<ProfileDocument?>(
+                _documents.TryGetValue(kind, out var content)
+                    ? new ProfileDocument(kind, content, DateTimeOffset.UtcNow, ProfileBackendKind.Local)
+                    : null);
+
+        public Task WriteAsync(ProfileKind kind, string content, CancellationToken cancellationToken = default)
+        {
+            _documents[kind] = content;
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> DeleteAsync(ProfileKind kind, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_documents.Remove(kind));
+    }
+
+    private sealed class TestUserNotifier : IUserNotifier
+    {
+        public bool ConfirmResult { get; set; } = true;
+
+        public void Info(string titleKey, string messageKey, params object[] messageArgs)
+        {
+        }
+
+        public void Warning(string titleKey, string messageKey, params object[] messageArgs)
+        {
+        }
+
+        public void InfoText(string titleKey, string messageText)
+        {
+        }
+
+        public void WarningText(string titleKey, string messageText)
+        {
+        }
+
+        public bool Confirm(string titleKey, string messageKey, params object[] messageArgs) => ConfirmResult;
+
+        public bool ConfirmYesNo(string titleKey, string messageKey, params object[] messageArgs) => ConfirmResult;
+
+        public System.Windows.MessageBoxResult AskYesNoCancel(
+            string titleKey,
+            string messageKey,
+            params object[] messageArgs) =>
+            System.Windows.MessageBoxResult.Yes;
     }
 
     private sealed class NoOpLogger : IAppLogger

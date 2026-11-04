@@ -1762,6 +1762,69 @@
   <data name="Settings_TrainingDataTooltip" xml:space="preserve">
     <value>启用训练数据采集</value>
   </data>
+  <data name="Settings_ProfileTitle" xml:space="preserve">
+    <value>习惯画像</value>
+  </data>
+  <data name="Settings_ProfileHint" xml:space="preserve">
+    <value>账户级长期记忆，跨工作区与会话共享：记录用户习惯（称呼、语言、语气、输出格式）与纠正教训。回合结束后由系统自动维护，模型通过 profile_get 按需读取。</value>
+  </data>
+  <data name="Settings_ProfileEnabled" xml:space="preserve">
+    <value>启用习惯画像</value>
+  </data>
+  <data name="Settings_ProfileBackend" xml:space="preserve">
+    <value>存储后端</value>
+  </data>
+  <data name="Settings_ProfileBackendLocal" xml:space="preserve">
+    <value>本地文件</value>
+  </data>
+  <data name="Settings_ProfileBackendRemote" xml:space="preserve">
+    <value>远程服务（暂未实现）</value>
+  </data>
+  <data name="Settings_ProfileUserMaxChars" xml:space="preserve">
+    <value>USER.md 字符上限</value>
+  </data>
+  <data name="Settings_ProfileLessonsMaxChars" xml:space="preserve">
+    <value>LESSONS.md 字符上限</value>
+  </data>
+  <data name="Settings_ProfilePath" xml:space="preserve">
+    <value>画像目录</value>
+  </data>
+  <data name="Settings_ProfileClearUser" xml:space="preserve">
+    <value>清除 USER.md</value>
+  </data>
+  <data name="Settings_ProfileClearLessons" xml:space="preserve">
+    <value>清除 LESSONS.md</value>
+  </data>
+  <data name="Settings_ProfileClearTitle" xml:space="preserve">
+    <value>清除习惯画像</value>
+  </data>
+  <data name="Settings_ProfileClearUserConfirm" xml:space="preserve">
+    <value>确定清除 USER.md 吗？此后系统会重新学习你的习惯。此操作不可撤销。</value>
+  </data>
+  <data name="Settings_ProfileClearLessonsConfirm" xml:space="preserve">
+    <value>确定清除 LESSONS.md 吗？已积累的纠正教训会被丢弃。此操作不可撤销。</value>
+  </data>
+  <data name="Settings_ProfileCleared" xml:space="preserve">
+    <value>已清除 {0}。</value>
+  </data>
+  <data name="Settings_ProfileAlreadyEmpty" xml:space="preserve">
+    <value>{0} 不存在或已为空。</value>
+  </data>
+  <data name="Settings_MemorySectionTitle" xml:space="preserve">
+    <value>会话记忆</value>
+  </data>
+  <data name="Settings_MemorySectionHint" xml:space="preserve">
+    <value>当前工作区与会话范围内的长期记忆。画像字段为合并后的 MEMORY.md 预算，每日流水超过保留天数后会归档。</value>
+  </data>
+  <data name="Settings_MemoryMaxTokens" xml:space="preserve">
+    <value>MEMORY.md Token 上限</value>
+  </data>
+  <data name="Settings_MemoryDailyRetentionDays" xml:space="preserve">
+    <value>每日流水保留天数</value>
+  </data>
+  <data name="Settings_MemoryConsolidationGap" xml:space="preserve">
+    <value>合并最小间隔（分钟）</value>
+  </data>
   <data name="Settings_UiMemoryHint" xml:space="preserve">
     <value>长期记忆与任务列表请在聊天输入区通过 Coding 开关按会话启用；任务进度显示在左侧栏。</value>
   </data>

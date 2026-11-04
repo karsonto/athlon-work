@@ -149,22 +149,187 @@ public sealed class MemoryFlushTests
         ],
         "You are Athlon.");
 
+    [Fact]
+    public async Task Flush_requests_user_section_when_profile_has_never_been_written()
+    {
+        var profile = new TestingProfileMemory();
+        const string llmContent = """
+## MEMORY
+- prefers tabs
+
+## USER
+# USER
+
+## Preferences
+- wants replies in Chinese
+""";
+        var (service, client, memory) = CreateSut(
+            llmContent,
+            profile: profile,
+            settings: new AppSettings());
+
+        var result = await service.FlushAsync(CreateExtractableContext());
+
+        Assert.True(result.Flushed);
+        Assert.Contains("## USER", client.LastPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("## LESSONS", client.LastPrompt, StringComparison.Ordinal);
+        Assert.Equal(2048, client.LastRequest!.MaxTokens);
+
+        Assert.Contains("- prefers tabs", Assert.Single(memory.Appended));
+        var write = Assert.Single(profile.Writes);
+        Assert.Equal(ProfileKind.User, write.Kind);
+        Assert.Contains("wants replies in Chinese", write.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Flush_does_not_write_a_profile_document_when_the_model_says_unchanged()
+    {
+        var profile = new TestingProfileMemory()
+            .Seed(ProfileKind.User, "# USER\n- prefers Chinese", DateTimeOffset.UtcNow.AddHours(-5));
+        const string llmContent = """
+## MEMORY
+- prefers tabs
+
+## USER
+UNCHANGED
+""";
+        var (service, _, memory) = CreateSut(llmContent, profile: profile, settings: new AppSettings());
+
+        await service.FlushAsync(CreateExtractableContext());
+
+        Assert.Empty(profile.Writes);
+        Assert.Single(memory.Appended);
+    }
+
+    [Fact]
+    public async Task Flush_skips_the_profile_entirely_when_disabled()
+    {
+        var profile = new TestingProfileMemory();
+        var settings = new AppSettings { Profile = { Enabled = false } };
+        var (service, client, _) = CreateSut(profile: profile, settings: settings);
+
+        await service.FlushAsync(CreateExtractableContext());
+
+        Assert.DoesNotContain("## USER", client.LastPrompt, StringComparison.Ordinal);
+        Assert.Empty(profile.Writes);
+    }
+
+    [Fact]
+    public async Task Flush_requests_lessons_when_a_correction_is_newer_than_the_document()
+    {
+        var profile = new TestingProfileMemory()
+            .Seed(ProfileKind.Lessons, "# LESSONS\n- old rule", DateTimeOffset.UtcNow.AddHours(-2));
+        var settings = new AppSettings { Profile = { UserRefreshCooldown = TimeSpan.FromHours(6) } };
+        profile.Seed(
+            ProfileKind.User,
+            "# USER\n- prefers Chinese",
+            DateTimeOffset.UtcNow);
+        const string llmContent = """
+## MEMORY
+NO_REPLY
+
+## LESSONS
+# LESSONS
+- tool file_read failed on a binary file -> check the file type first
+""";
+        var (service, client, memory) = CreateSut(llmContent, profile: profile, settings: settings);
+
+        var result = await service.FlushAsync(CreateCorrectionContext());
+
+        Assert.Contains("## LESSONS", client.LastPrompt, StringComparison.Ordinal);
+        Assert.Contains("New corrections:", client.LastPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("## USER", client.LastPrompt, StringComparison.Ordinal);
+
+        var write = Assert.Single(profile.Writes);
+        Assert.Equal(ProfileKind.Lessons, write.Kind);
+        Assert.Empty(memory.Appended);
+        Assert.True(result.Flushed);
+    }
+
+    [Fact]
+    public async Task Flush_does_not_ask_for_lessons_without_a_correction()
+    {
+        var profile = new TestingProfileMemory()
+            .Seed(ProfileKind.Lessons, "# LESSONS\n- old rule", DateTimeOffset.UtcNow.AddDays(-1))
+            .Seed(ProfileKind.User, "# USER\n- prefers Chinese", DateTimeOffset.UtcNow);
+        var settings = new AppSettings { Profile = { UserRefreshCooldown = TimeSpan.FromHours(6) } };
+        var (service, client, _) = CreateSut(profile: profile, settings: settings);
+
+        await service.FlushAsync(CreateExtractableContext());
+
+        Assert.DoesNotContain("## LESSONS", client.LastPrompt, StringComparison.Ordinal);
+        Assert.Empty(profile.Writes);
+    }
+
+    private static MemoryTurnContext CreateCorrectionContext()
+    {
+        var failedCall = new AgentToolCall("call_1", "file_read", ToolCallArguments.Empty);
+        var successCall = new AgentToolCall("call_2", "file_read", ToolCallArguments.Empty);
+        return new MemoryTurnContext(
+        [
+            ChatMessage.Create(MessageRole.User, "read the config file"),
+            ChatMessage.Create(MessageRole.Assistant, "Let me read it.", toolCalls: [failedCall]),
+            ChatMessage.Create(MessageRole.Tool, "ToolCallId: call_1\nTool `file_read` failed.\nbinary file"),
+            ChatMessage.Create(MessageRole.User, "它是二进制文件，先判断类型再读"),
+            ChatMessage.Create(MessageRole.Assistant, "Understood.", toolCalls: [successCall]),
+            ChatMessage.Create(MessageRole.Tool, "ToolCallId: call_2\nfile type detected")
+        ],
+        "You are Athlon.");
+    }
+
     private static (MemoryFlushService Service, CapturingModelClient Client, RecordingLongTermMemory Memory) CreateSut(
         string llmContent = "- user prefers tabs",
         string curated = "User likes dark theme.",
-        string daily = "")
+        string daily = "",
+        TestingProfileMemory? profile = null,
+        AppSettings? settings = null,
+        ProfileRefreshPolicy? policy = null)
     {
         var client = new CapturingModelClient(llmContent);
         var memory = new RecordingLongTermMemory(curated, daily);
+        var effectiveSettings = settings ?? new AppSettings { Profile = { Enabled = false } };
+        var effectiveProfile = profile ?? new TestingProfileMemory();
         var service = new MemoryFlushService(
             memory,
             client,
             new SessionUsageAccumulator(),
             new NoOpStorage(),
             new NoOpActiveAgentSessionContext(),
-            new AppSettings(),
+            effectiveSettings,
+            effectiveProfile,
+            policy ?? new ProfileRefreshPolicy(effectiveSettings),
             new NoOpLogger());
         return (service, client, memory);
+    }
+
+    /// <summary>Recording IProfileMemory used by the profile-extraction assertions.</summary>
+    private sealed class TestingProfileMemory : IProfileMemory
+    {
+        private readonly Dictionary<ProfileKind, ProfileDocument> _documents = new();
+
+        public ProfileCapabilities Capabilities { get; } =
+            new(ProfileBackendKind.Local, CanWrite: true, CanDelete: true, IsRemote: false);
+
+        public List<(ProfileKind Kind, string Content)> Writes { get; } = [];
+
+        public TestingProfileMemory Seed(ProfileKind kind, string content, DateTimeOffset updatedAt)
+        {
+            _documents[kind] = new ProfileDocument(kind, content, updatedAt, ProfileBackendKind.Local);
+            return this;
+        }
+
+        public Task<ProfileDocument?> ReadAsync(ProfileKind kind, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_documents.TryGetValue(kind, out var document) ? document : null);
+
+        public Task WriteAsync(ProfileKind kind, string content, CancellationToken cancellationToken = default)
+        {
+            Writes.Add((kind, content));
+            _documents[kind] = new ProfileDocument(kind, content, DateTimeOffset.UtcNow, ProfileBackendKind.Local);
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> DeleteAsync(ProfileKind kind, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_documents.Remove(kind));
     }
 
     private sealed class CapturingModelClient(string content) : IAgentModelClient
