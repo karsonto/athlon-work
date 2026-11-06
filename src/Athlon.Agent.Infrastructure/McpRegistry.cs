@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Core.RuntimeDiagnostics;
 using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Infrastructure.Sso;
@@ -67,7 +68,9 @@ public sealed partial class McpRegistry(
         get
         {
             // Fast path: unscoped access returns the cached full-catalog count.
-            if (ScheduleTurnScope.Current?.McpServerNames is null && _catalogCache is not null)
+            if (ScheduleTurnScope.Current?.McpServerNames is null
+                && AgentProfileTurnScope.Current?.Options.McpServerNames is null
+                && _catalogCache is not null)
             {
                 return _catalogSchemaChars;
             }
@@ -85,7 +88,7 @@ public sealed partial class McpRegistry(
         var definitions = new List<ToolDefinition>();
         foreach (var (serverName, tools) in _tools)
         {
-            if (!ScheduleTurnScope.IsMcpServerAllowed(serverName))
+            if (!AgentProfileTurnScope.IsMcpServerAllowed(serverName))
             {
                 continue;
             }
@@ -109,13 +112,14 @@ public sealed partial class McpRegistry(
     public IReadOnlyList<McpCatalogEntry> ListCatalogEntries()
     {
         var entries = _catalogCache ??= BuildCatalogEntries();
-        if (ScheduleTurnScope.Current?.McpServerNames is null)
+        if (ScheduleTurnScope.Current?.McpServerNames is null
+            && AgentProfileTurnScope.Current?.Options.McpServerNames is null)
         {
             return entries;
         }
 
         return entries
-            .Where(entry => ScheduleTurnScope.IsMcpServerAllowed(entry.ServerName))
+            .Where(entry => AgentProfileTurnScope.IsMcpServerAllowed(entry.ServerName))
             .ToArray();
     }
 

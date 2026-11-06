@@ -28,6 +28,7 @@ public sealed class PageViewFactory
             AppPage.Knowledge => new KnowledgePageView(),
             AppPage.Schedule => new SchedulePageView(),
             AppPage.SkillHub => new SkillHubPageView(),
+            AppPage.Teams => new TeamsPageView(),
             _ => new ChatPageView()
         };
 }

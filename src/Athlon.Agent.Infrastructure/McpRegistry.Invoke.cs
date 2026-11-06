@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Core.RuntimeDiagnostics;
 using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Infrastructure.Sso;
@@ -15,7 +16,7 @@ public sealed partial class McpRegistry
 {
     public async Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments args, CancellationToken cancellationToken = default)
     {
-        if (!ScheduleTurnScope.IsMcpServerAllowed(serverName))
+        if (!AgentProfileTurnScope.IsMcpServerAllowed(serverName))
         {
             return ToolResult.Failure(
                 "Tool not available",

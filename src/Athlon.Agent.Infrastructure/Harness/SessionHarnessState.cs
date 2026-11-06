@@ -76,12 +76,12 @@ public sealed class SessionHarnessState(
         IsActiveRunMode(accessor, IsDebugMode);
 
     public bool IsEnabledForActiveRun(IAgentRunContextAccessor accessor) =>
-        accessor.Current is { Kind: not AgentRunKind.SubAgent };
+        accessor.Current is not { Kind: AgentRunKind.SubAgent or AgentRunKind.TeamMember };
 
     private bool IsActiveRunMode(IAgentRunContextAccessor accessor, Func<string?, bool> predicate)
     {
         var run = accessor.Current;
-        if (run is null || run.Kind == AgentRunKind.SubAgent)
+        if (run is null || run.Kind is AgentRunKind.SubAgent or AgentRunKind.TeamMember)
         {
             return false;
         }

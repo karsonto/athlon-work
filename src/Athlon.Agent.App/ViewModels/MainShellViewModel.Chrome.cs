@@ -49,6 +49,13 @@ public partial class MainShellViewModel
 
     void INavigationService.Navigate(AppPage page) => CurrentPage = page;
 
+    /// <summary>Chat / shell entry: open Trace popup for the latest Team task of the active session.</summary>
+    [RelayCommand]
+    private async Task OpenLatestTeamTraceAsync()
+    {
+        await TeamsPageVm.OpenLatestTraceAsync().ConfigureAwait(true);
+    }
+
     [RelayCommand]
     private void SsoLogout()
     {

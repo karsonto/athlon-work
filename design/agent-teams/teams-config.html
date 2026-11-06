@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Athlon · Agent Teams 配置 · 设计稿</title>
+  <style>
+    :root, [data-theme="light"] {
+      --bg: #F8FAFC;
+      --shell: #FFFFFF;
+      --panel: #FFFFFF;
+      --fg: #0F172A;
+      --muted: #64748B;
+      --border: #E2E8F0;
+      --border-strong: #CBD5E1;
+      --accent: #6366F1;
+      --accent-hover: #4F46E5;
+      --accent-soft: rgba(99, 102, 241, 0.12);
+      --accent-ring: rgba(99, 102, 241, 0.35);
+      --success: #059669;
+      --success-soft: rgba(5, 150, 105, 0.12);
+      --warn: #D97706;
+      --warn-soft: rgba(217, 119, 6, 0.12);
+      --danger: #DC2626;
+      --leader: #7C3AED;
+      --leader-soft: rgba(124, 58, 237, 0.12);
+      --worker: #0891B2;
+      --worker-soft: rgba(8, 145, 178, 0.12);
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+      --radius: 10px;
+      --font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+      --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+    }
+    [data-theme="dark"] {
+      --bg: #0B1220;
+      --shell: #111827;
+      --panel: #1F2937;
+      --fg: #F1F5F9;
+      --muted: #94A3B8;
+      --border: #334155;
+      --border-strong: #475569;
+      --accent: #818CF8;
+      --accent-hover: #A5B4FC;
+      --accent-soft: rgba(129, 140, 248, 0.16);
+      --accent-ring: rgba(129, 140, 248, 0.4);
+      --success: #34D399;
+      --success-soft: rgba(52, 211, 153, 0.14);
+      --warn: #FBBF24;
+      --warn-soft: rgba(251, 191, 36, 0.14);
+      --danger: #F87171;
+      --leader: #A78BFA;
+      --leader-soft: rgba(167, 139, 250, 0.16);
+      --worker: #22D3EE;
+      --worker-soft: rgba(34, 211, 238, 0.14);
+      --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 12px 32px rgba(0,0,0,0.35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: var(--font);
+      font-size: 13.5px;
+      color: var(--fg);
+      background: var(--bg);
+      line-height: 1.45;
+    }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* App chrome mock */
+    .app {
+      display: grid;
+      grid-template-columns: 56px 240px 1fr;
+      height: 100vh;
+      min-width: 1100px;
+    }
+    .nav {
+      background: var(--shell);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px 0;
+      gap: 8px;
+    }
+    .nav-logo {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), #4338CA);
+      color: #fff; display: grid; place-items: center;
+      font-weight: 700; font-size: 12px; margin-bottom: 8px;
+    }
+    .nav-btn {
+      width: 36px; height: 36px; border: 0; border-radius: 8px;
+      background: transparent; color: var(--muted);
+      display: grid; place-items: center;
+    }
+    .nav-btn.active { background: var(--accent-soft); color: var(--accent); }
+    .nav-btn:hover { background: var(--accent-soft); }
+    .nav-spacer { flex: 1; }
+
+    .sidebar {
+      background: var(--shell);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .sidebar-head {
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .sidebar-head h1 { margin: 0; font-size: 14px; font-weight: 650; }
+    .icon-btn {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 5px 8px;
+      color: var(--fg);
+    }
+    .icon-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .icon-btn.primary:hover { background: var(--accent-hover); }
+    .team-list { overflow: auto; padding: 8px; flex: 1; }
+    .team-item {
+      border: 1px solid transparent;
+      border-radius: 10px;
+      padding: 10px 10px;
+      margin-bottom: 4px;
+      cursor: pointer;
+    }
+    .team-item:hover { background: var(--bg); }
+    .team-item.active {
+      background: var(--accent-soft);
+      border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+    .team-item .name { font-weight: 600; font-size: 13px; }
+    .team-item .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 600;
+      padding: 2px 7px; border-radius: 999px;
+    }
+    .badge.leader { background: var(--leader-soft); color: var(--leader); }
+    .badge.worker { background: var(--worker-soft); color: var(--worker); }
+    .badge.ok { background: var(--success-soft); color: var(--success); }
+    .badge.warn { background: var(--warn-soft); color: var(--warn); }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+    .topbar {
+      height: 52px;
+      background: var(--shell);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 18px; gap: 12px;
+    }
+    .crumb { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+    .crumb strong { color: var(--fg); }
+    .top-actions { display: flex; gap: 8px; align-items: center; }
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-weight: 550;
+    }
+    .btn:hover { border-color: var(--border-strong); }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn.primary:hover { background: var(--accent-hover); }
+    .btn.ghost { background: transparent; }
+
+    .content {
+      flex: 1;
+      overflow: auto;
+      padding: 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .card-h {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .card-h h2 { margin: 0; font-size: 13px; font-weight: 650; }
+    .card-b { padding: 14px; }
+
+    .field { margin-bottom: 12px; }
+    .field label {
+      display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; font-weight: 550;
+    }
+    .field input[type="text"], .field input[type="number"], .field select, .field textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 8px 10px;
+      outline: none;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-ring);
+    }
+    .field textarea { min-height: 88px; resize: vertical; font-family: var(--font); }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .members {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .member {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      background: var(--bg);
+      cursor: pointer;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .member:hover { border-color: var(--border-strong); }
+    .member.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-ring);
+      background: color-mix(in srgb, var(--accent-soft) 55%, var(--bg));
+    }
+    .member-top {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+    }
+    .member-title { display: flex; align-items: center; gap: 8px; font-weight: 650; }
+    .avatar {
+      width: 28px; height: 28px; border-radius: 8px;
+      display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff;
+    }
+    .avatar.leader { background: linear-gradient(135deg, #7C3AED, #4F46E5); }
+    .avatar.worker { background: linear-gradient(135deg, #0891B2, #2563EB); }
+    .caps {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+    }
+    .chip {
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 6px;
+      background: var(--shell);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+    .chip.on { color: var(--fg); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: var(--accent-soft); }
+
+    .hint {
+      font-size: 12px; color: var(--muted); margin: 0 0 12px;
+      padding: 10px 12px; border-radius: 8px;
+      background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    }
+
+    .tabs {
+      display: flex; gap: 2px; padding: 4px;
+      background: var(--bg); border-radius: 8px; border: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .tab {
+      flex: 1; border: 0; background: transparent; border-radius: 6px;
+      padding: 7px 8px; color: var(--muted); font-weight: 550;
+    }
+    .tab.active { background: var(--panel); color: var(--fg); box-shadow: var(--shadow); }
+
+    .check-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+      max-height: 220px; overflow: auto;
+      padding: 4px;
+    }
+    .check {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 8px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg); font-size: 12px;
+    }
+    .check input { accent-color: var(--accent); }
+    .check.disabled { opacity: 0.45; }
+
+    .preview {
+      border: 1px dashed var(--border-strong);
+      border-radius: 10px;
+      padding: 12px;
+      background:
+        radial-gradient(circle at 20% 20%, var(--accent-soft), transparent 45%),
+        radial-gradient(circle at 80% 0%, var(--worker-soft), transparent 40%),
+        var(--bg);
+    }
+    .flow {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      padding: 8px 0;
+    }
+    .node {
+      min-width: 180px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 10px;
+      padding: 10px 12px;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+    .node.leader-node { border-color: color-mix(in srgb, var(--leader) 50%, var(--border)); }
+    .node.worker-node { border-color: color-mix(in srgb, var(--worker) 45%, var(--border)); }
+    .edge {
+      width: 2px; height: 18px;
+      background: var(--border-strong);
+      position: relative;
+    }
+    .edge::after {
+      content: "";
+      position: absolute; bottom: -2px; left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: var(--border-strong);
+    }
+    .workers-row {
+      display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    }
+
+    .footer-note {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-size: 12px;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 4px 2px 8px;
+    }
+    .theme-toggle { font-size: 12px; }
+
+    @media (max-width: 1280px) {
+      .content { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="nav" aria-label="主导航">
+      <div class="nav-logo">A</div>
+      <button class="nav-btn" title="Chat">💬</button>
+      <button class="nav-btn" title="Knowledge">📚</button>
+      <button class="nav-btn" title="Schedule">🗓️</button>
+      <button class="nav-btn active" title="Teams">👥</button>
+      <div class="nav-spacer"></div>
+      <button class="nav-btn" title="Settings">⚙️</button>
+    </aside>
+
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <h1>Agent Teams</h1>
+        <button class="icon-btn primary" title="新建 Team">＋</button>
+      </div>
+      <div class="team-list">
+        <div class="team-item active">
+          <div class="name">Release Prep Squad</div>
+          <div class="meta">1 Leader · 3 Workers · 并行 2</div>
+        </div>
+        <div class="team-item">
+          <div class="name">Bug Triage Cell</div>
+          <div class="meta">1 Leader · 2 Workers · 并行 2</div>
+        </div>
+        <div class="team-item">
+          <div class="name">Docs Rewrite</div>
+          <div class="meta">1 Leader · 1 Worker · 并行 1</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="crumb">
+          <span>Teams</span>
+          <span>/</span>
+          <strong>Release Prep Squad</strong>
+          <span class="badge ok">已启用</span>
+        </div>
+        <div class="top-actions">
+          <button class="btn ghost theme-toggle" id="themeBtn" type="button">切换深色</button>
+          <button class="btn" type="button">另存为模板</button>
+          <button class="btn primary" type="button">保存</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="card">
+          <div class="card-h">
+            <h2>Team 基本信息</h2>
+            <span class="badge warn">设计稿 · 非最终实现</span>
+          </div>
+          <div class="card-b">
+            <p class="hint">
+              一期采用 <strong>Leader + Workers</strong>：这里配置成员职责与能力边界；
+              运行时由 Leader 拆任务分派。右侧可预览组织结构。Trace 执行图见
+              <a href="./team-trace.html">team-trace.html</a>。
+            </p>
+            <div class="row2">
+              <div class="field">
+                <label>Team 名称</label>
+                <input type="text" value="Release Prep Squad" />
+              </div>
+              <div class="field">
+                <label>最大并行 Worker</label>
+                <input type="number" value="2" min="1" max="8" />
+              </div>
+            </div>
+            <div class="field">
+              <label>描述</label>
+              <textarea>负责发版前的变更说明、测试结论整理与发布材料汇总。Leader 统筹；Workers 分领域执行。</textarea>
+            </div>
+
+            <div class="card-h" style="padding-left:0;padding-right:0;border:0;border-top:1px solid var(--border);margin-top:4px;">
+              <h2>成员</h2>
+              <button class="btn" type="button">＋ 添加 Worker</button>
+            </div>
+            <div class="members" id="members">
+              <article class="member selected" data-id="leader" onclick="selectMember(this)">
+                <div class="member-top">
+                  <div class="member-title">
+                    <div class="avatar leader">TL</div>
+                    <div>
+                      Release Leader
+                      <div style="font-weight:500;color:var(--muted);font-size:12px;margin-top:2px;">统筹拆解 · 分派 · 汇总验收</div>
+                    </div>
+                  </div>
+                  <span class="badge leader">Leader</span>
+                </div>
+                <div class="caps">
+                  <span class="chip on">team_*</span>
+                  <span class="chip on">file_*</span>
+                  <span class="chip on">grep/glob</span>
+                  <span class="chip">skills×2</span>
+                  <span class="chip">mcp×1</span>
+                  <span class="chip">kb×1</span>
+                </div>
+              </article>
+
+              <article class="member" data-id="eng" onclick="selectMember(this)">
+                <div class="member-top">
+                  <div class="member-title">
+                    <div class="avatar worker">EN</div>
+                    <div>
+                      Engineering Notes
+                      <div style="font-weight:500;color:var(--muted);font-size:12px;margin-top:2px;">整理变更说明与风险点</div>
+                    </div>
+                  </div>
+                  <span class="badge worker">Worker</span>
+                </div>
+                <div class="caps">
+                  <span class="chip on">file_read</span>
+                  <span class="chip on">grep/glob</span>
+                  <span class="chip on">skills×1</span>
+                  <span class="chip">mcp×0</span>
+                  <span class="chip on">kb×2</span>
+                </div>
+              </article>
+
+              <article class="member" data-id="qa" onclick="selectMember(this)">
+                <div class="member-top">
+                  <div class="member-title">
+                    <div class="avatar worker">QA</div>
+                    <div>
+                      QA Summary
+                      <div style="font-weight:500;color:var(--muted);font-size:12px;margin-top:2px;">汇总测试结论与阻断项</div>
+                    </div>
+                  </div>
+                  <span class="badge worker">Worker</span>
+                </div>
+                <div class="caps">
+                  <span class="chip on">file_*</span>
+                  <span class="chip on">execute_command</span>
+                  <span class="chip">skills×1</span>
+                  <span class="chip on">mcp×1</span>
+                  <span class="chip on">kb×1</span>
+                </div>
+              </article>
+
+              <article class="member" data-id="docs" onclick="selectMember(this)">
+                <div class="member-top">
+                  <div class="member-title">
+                    <div class="avatar worker">DO</div>
+                    <div>
+                      Docs Writer
+                      <div style="font-weight:500;color:var(--muted);font-size:12px;margin-top:2px;">撰写用户可见发布说明</div>
+                    </div>
+                  </div>
+                  <span class="badge worker">Worker</span>
+                </div>
+                <div class="caps">
+                  <span class="chip on">file_*</span>
+                  <span class="chip on">skills×2</span>
+                  <span class="chip">mcp×0</span>
+                  <span class="chip on">kb×1</span>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <aside class="card" id="profilePanel">
+          <div class="card-h">
+            <h2>成员能力 · <span id="profileName">Release Leader</span></h2>
+            <span class="badge leader" id="profileRole">Leader</span>
+          </div>
+          <div class="card-b">
+            <div class="field">
+              <label>显示名称</label>
+              <input id="nameInput" type="text" value="Release Leader" />
+            </div>
+            <div class="field">
+              <label>职责（写入 AGENT.md）</label>
+              <textarea id="roleInput">你是发版准备团队的 Leader。理解整体目标，拆分给 Engineering / QA / Docs Workers，汇总可验收的发布材料。不要自己做长篇撰写，优先分派。</textarea>
+            </div>
+            <div class="field">
+              <label>模型覆盖</label>
+              <select>
+                <option>跟随会话模型</option>
+                <option>gpt-4.1</option>
+                <option>deepseek-chat</option>
+                <option>qwen-max</option>
+              </select>
+            </div>
+
+            <div class="row2" id="loopPolicyRow">
+              <div class="field">
+                <label>允许被循环重派</label>
+                <select id="loopEnabled">
+                  <option value="yes">是 · Leader 可多次 dispatch</option>
+                  <option value="no">否 · 最多执行 1 次</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>MaxIterations（防死循环）</label>
+                <input id="loopMax" type="number" value="3" min="1" max="10" />
+              </div>
+            </div>
+            <p class="hint" style="margin-top:-4px;">
+              循环由 <strong>Leader</strong> 发起（非 Worker 自循环）。达到上限后必须汇总或 ask_user。
+              Trace 用橙色 loop 边展示 · <a href="./team-trace.html">查看设计稿</a>
+            </p>
+
+            <div class="tabs" role="tablist">
+              <button class="tab active" type="button" data-tab="tools">工具</button>
+              <button class="tab" type="button" data-tab="skills">Skills</button>
+              <button class="tab" type="button" data-tab="mcp">MCP</button>
+              <button class="tab" type="button" data-tab="kb">知识库</button>
+            </div>
+
+            <div class="tab-pane" data-pane="tools">
+              <div class="check-grid">
+                <label class="check"><input type="checkbox" checked /> file_list</label>
+                <label class="check"><input type="checkbox" checked /> file_read</label>
+                <label class="check"><input type="checkbox" checked /> file_write</label>
+                <label class="check"><input type="checkbox" checked /> grep_files</label>
+                <label class="check"><input type="checkbox" checked /> glob_files</label>
+                <label class="check"><input type="checkbox" /> execute_command</label>
+                <label class="check"><input type="checkbox" checked /> team_*（Leader）</label>
+                <label class="check disabled"><input type="checkbox" disabled /> sessions_*（禁用）</label>
+              </div>
+            </div>
+            <div class="tab-pane" data-pane="skills" hidden>
+              <div class="check-grid">
+                <label class="check"><input type="checkbox" checked /> release-notes</label>
+                <label class="check"><input type="checkbox" checked /> risk-checklist</label>
+                <label class="check"><input type="checkbox" /> code-review</label>
+                <label class="check"><input type="checkbox" /> git-summary</label>
+              </div>
+            </div>
+            <div class="tab-pane" data-pane="mcp" hidden>
+              <div class="check-grid">
+                <label class="check"><input type="checkbox" checked /> github</label>
+                <label class="check"><input type="checkbox" /> jira</label>
+                <label class="check"><input type="checkbox" /> slack</label>
+                <label class="check"><input type="checkbox" /> browserbase</label>
+              </div>
+            </div>
+            <div class="tab-pane" data-pane="kb" hidden>
+              <div class="check-grid">
+                <label class="check"><input type="checkbox" checked /> product-handbook</label>
+                <label class="check"><input type="checkbox" /> eng-runbooks</label>
+                <label class="check"><input type="checkbox" /> qa-playbooks</label>
+                <label class="check"><input type="checkbox" /> release-archive</label>
+              </div>
+            </div>
+
+            <div style="margin-top:14px;">
+              <div class="card-h" style="padding:0 0 8px;border:0;">
+                <h2>组织预览</h2>
+              </div>
+              <div class="preview">
+                <div class="flow">
+                  <div class="node leader-node">
+                    <div class="badge leader">Leader</div>
+                    <div style="margin-top:6px;font-weight:650;">Release Leader</div>
+                  </div>
+                  <div class="edge"></div>
+                  <div class="workers-row">
+                    <div class="node worker-node"><div class="badge worker">W</div><div style="margin-top:6px;">Engineering</div></div>
+                    <div class="node worker-node"><div class="badge worker">W</div><div style="margin-top:6px;">QA</div></div>
+                    <div class="node worker-node"><div class="badge worker">W</div><div style="margin-top:6px;">Docs</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <div class="footer-note">
+          <span>打开方式：用浏览器打开本文件。相关：<a href="./index.html">设计稿索引</a> · <a href="./team-trace.html">Trace UI</a></span>
+          <span>Accent = Athlon Indigo #6366F1</span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const profiles = {
+      leader: {
+        name: "Release Leader",
+        roleBadge: "Leader",
+        roleClass: "leader",
+        text: "你是发版准备团队的 Leader。理解整体目标，拆分给 Engineering / QA / Docs Workers，汇总可验收的发布材料。可对同一 Worker 循环重派（带 reason），达到 MaxIterations 必须收束。",
+        loopEnabled: "no",
+        loopMax: 1,
+        hideLoop: true
+      },
+      eng: {
+        name: "Engineering Notes",
+        roleBadge: "Worker",
+        roleClass: "worker",
+        text: "你只负责从代码与 PR 中整理变更说明、兼容性风险。输出结构化要点，不要改写最终用户文案。",
+        loopEnabled: "no",
+        loopMax: 1
+      },
+      qa: {
+        name: "QA Summary",
+        roleBadge: "Worker",
+        roleClass: "worker",
+        text: "你只汇总测试结论、阻断项与回归范围。引用用例与结果，不要编写产品宣传文案。可被 Leader 循环重派以补测。",
+        loopEnabled: "yes",
+        loopMax: 3
+      },
+      docs: {
+        name: "Docs Writer",
+        roleBadge: "Worker",
+        roleClass: "worker",
+        text: "你根据 Engineering/QA 产物撰写用户可见发布说明，语气清晰克制，不发明未确认事实。",
+        loopEnabled: "yes",
+        loopMax: 2
+      }
+    };
+
+    function selectMember(el) {
+      document.querySelectorAll(".member").forEach(m => m.classList.remove("selected"));
+      el.classList.add("selected");
+      const p = profiles[el.dataset.id];
+      document.getElementById("profileName").textContent = p.name;
+      document.getElementById("nameInput").value = p.name;
+      document.getElementById("roleInput").value = p.text;
+      const badge = document.getElementById("profileRole");
+      badge.textContent = p.roleBadge;
+      badge.className = "badge " + p.roleClass;
+      document.getElementById("loopEnabled").value = p.loopEnabled;
+      document.getElementById("loopMax").value = p.loopMax;
+      document.getElementById("loopPolicyRow").style.opacity = p.hideLoop ? "0.45" : "1";
+      document.getElementById("loopPolicyRow").querySelectorAll("select,input").forEach(i => {
+        i.disabled = !!p.hideLoop;
+      });
+    }
+
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const id = tab.dataset.tab;
+        document.querySelectorAll(".tab-pane").forEach(p => {
+          p.hidden = p.dataset.pane !== id;
+        });
+      });
+    });
+
+    document.getElementById("themeBtn").addEventListener("click", () => {
+      const root = document.documentElement;
+      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      document.getElementById("themeBtn").textContent = next === "dark" ? "切换浅色" : "切换深色";
+    });
+  </script>
+</body>
+</html>

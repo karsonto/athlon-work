@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Athlon · Agent Teams UI 设计稿</title>
+  <style>
+    :root {
+      --bg: #F8FAFC;
+      --fg: #0F172A;
+      --muted: #64748B;
+      --border: #E2E8F0;
+      --panel: #fff;
+      --accent: #6366F1;
+      --font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: var(--font);
+      background:
+        radial-gradient(900px 420px at 10% -10%, rgba(99,102,241,.16), transparent 60%),
+        radial-gradient(700px 380px at 100% 0%, rgba(8,145,178,.10), transparent 55%),
+        var(--bg);
+      color: var(--fg);
+      padding: 48px 24px 64px;
+    }
+    .wrap { max-width: 880px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.02em; }
+    .lead { color: var(--muted); margin: 0 0 28px; line-height: 1.6; max-width: 62ch; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+    a.card {
+      display: block;
+      text-decoration: none; color: inherit;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 18px 16px;
+      box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 10px 28px rgba(15,23,42,.06);
+      transition: border-color .15s, transform .15s;
+    }
+    a.card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); transform: translateY(-1px); }
+    .eyebrow {
+      font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 8px;
+    }
+    .card h2 { margin: 0 0 8px; font-size: 18px; }
+    .card p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+    .meta {
+      margin-top: 28px; padding: 14px 16px;
+      border: 1px dashed var(--border); border-radius: 12px;
+      color: var(--muted); font-size: 13px; line-height: 1.55;
+    }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Agent Teams · UI 设计稿</h1>
+    <p class="lead">
+      供方案确认用的可交互 HTML 线框。视觉对齐 Athlon Indigo（#6366F1），
+      一期假设：Leader + Workers；Trace 为 <strong>WPF 弹窗</strong>（非独立页）；
+      <strong>节点可拖拽排版</strong>；支持 Leader <strong>循环重派某个 Worker</strong>（带 MaxIterations）。
+    </p>
+    <div class="grid">
+      <a class="card" href="./teams-config.html">
+        <div class="eyebrow">Config UI</div>
+        <h2>Teams 配置页</h2>
+        <p>Team 列表、成员卡片、能力面板；Worker 可配置「允许循环重派 + MaxIterations」。</p>
+      </a>
+      <a class="card" href="./team-trace.html">
+        <div class="eyebrow">Trace UI · 弹窗</div>
+        <h2>执行 Trace 弹窗</h2>
+        <p>叠在 Chat 上的模态窗；可拖拽节点、橙色 loop 边、详情抽屉。</p>
+      </a>
+    </div>
+    <div class="meta">
+      路径：<code>design/agent-teams/</code><br />
+      本地预览：<code>open design/agent-teams/index.html</code><br />
+      已确认：拖拽排版 · Worker 循环重派 · <strong>Trace = 弹窗</strong>（非独立页）。方案可进入实现。
+    </div>
+  </div>
+</body>
+</html>

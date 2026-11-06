@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Athlon · Team Trace · 可拖拽 + 循环 · 设计稿</title>
+  <style>
+    :root, [data-theme="light"] {
+      --bg: #F1F5F9;
+      --canvas: #EEF2FF;
+      --shell: #FFFFFF;
+      --panel: #FFFFFF;
+      --fg: #0F172A;
+      --muted: #64748B;
+      --border: #E2E8F0;
+      --border-strong: #CBD5E1;
+      --accent: #6366F1;
+      --accent-hover: #4F46E5;
+      --accent-soft: rgba(99, 102, 241, 0.14);
+      --accent-ring: rgba(99, 102, 241, 0.35);
+      --success: #059669;
+      --success-soft: #ECFDF5;
+      --success-border: #6EE7B7;
+      --running: #2563EB;
+      --running-soft: #EFF6FF;
+      --running-border: #93C5FD;
+      --waiting: #94A3B8;
+      --waiting-soft: #F8FAFC;
+      --error: #DC2626;
+      --error-soft: #FEF2F2;
+      --error-border: #FCA5A5;
+      --loop: #D97706;
+      --loop-soft: #FFFBEB;
+      --loop-border: #FCD34D;
+      --leader: #7C3AED;
+      --dot: rgba(99, 102, 241, 0.18);
+      --shadow: 0 1px 2px rgba(15,23,42,.05), 0 10px 28px rgba(15,23,42,.08);
+      --font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+      --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+    }
+    [data-theme="dark"] {
+      --bg: #0B1220;
+      --canvas: #111827;
+      --shell: #0F172A;
+      --panel: #1E293B;
+      --fg: #F1F5F9;
+      --muted: #94A3B8;
+      --border: #334155;
+      --border-strong: #475569;
+      --accent: #818CF8;
+      --accent-hover: #A5B4FC;
+      --accent-soft: rgba(129,140,248,.16);
+      --accent-ring: rgba(129,140,248,.4);
+      --success: #34D399;
+      --success-soft: rgba(52,211,153,.12);
+      --success-border: rgba(52,211,153,.45);
+      --running: #60A5FA;
+      --running-soft: rgba(96,165,250,.12);
+      --running-border: rgba(96,165,250,.45);
+      --waiting: #64748B;
+      --waiting-soft: rgba(100,116,139,.12);
+      --error: #F87171;
+      --error-soft: rgba(248,113,113,.12);
+      --error-border: rgba(248,113,113,.45);
+      --loop: #FBBF24;
+      --loop-soft: rgba(251,191,36,.12);
+      --loop-border: rgba(251,191,36,.45);
+      --leader: #A78BFA;
+      --dot: rgba(129,140,248,.12);
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 14px 36px rgba(0,0,0,.35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: var(--font);
+      font-size: 13px;
+      color: var(--fg);
+      background: var(--bg);
+      line-height: 1.45;
+      overflow: hidden;
+    }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Chat backdrop (dimmed) — Trace 以弹窗叠在 Chat 之上 */
+    .backdrop {
+      position: absolute; inset: 0;
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      filter: blur(0.2px);
+      opacity: 0.55;
+      pointer-events: none;
+      background: var(--bg);
+    }
+    .backdrop .rail {
+      border-right: 1px solid var(--border);
+      background: var(--shell);
+    }
+    .backdrop .chat-fake {
+      padding: 28px 48px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .bubble {
+      max-width: 520px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12.5px;
+    }
+    .bubble.user { align-self: flex-end; background: var(--accent-soft); border-color: transparent; color: var(--fg); }
+    .task-card-fake {
+      align-self: stretch;
+      max-width: 560px;
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 12px 14px;
+      box-shadow: var(--shadow);
+    }
+    .task-card-fake strong { display: block; margin-bottom: 4px; color: var(--fg); }
+    .task-card-fake .row { display: flex; gap: 8px; margin-top: 10px; }
+
+    .scrim {
+      position: absolute; inset: 0;
+      background: rgba(15, 23, 42, 0.42);
+      z-index: 10;
+    }
+    [data-theme="dark"] .scrim { background: rgba(0, 0, 0, 0.55); }
+
+    .app {
+      position: absolute;
+      z-index: 20;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(1280px, calc(100vw - 48px));
+      height: min(820px, calc(100vh - 48px));
+      display: grid;
+      grid-template-rows: 48px 36px 1fr;
+      min-width: 900px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
+      background: var(--shell);
+    }
+    .topbar {
+      background: var(--shell);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 12px 0 14px; gap: 12px;
+    }
+    .title-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .win-controls { display: flex; gap: 4px; }
+    .win-btn {
+      width: 28px; height: 28px; border-radius: 7px;
+      border: 1px solid var(--border); background: var(--panel);
+      display: grid; place-items: center; color: var(--muted);
+    }
+    .win-btn.close:hover { background: var(--error-soft); color: var(--error); border-color: var(--error-border); }
+    .title { font-weight: 700; font-size: 13.5px; }
+    .subtitle { color: var(--muted); font-size: 11.5px; max-width: 520px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .actions { display: flex; gap: 8px; align-items: center; }
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-weight: 550;
+    }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { background: var(--accent-hover); }
+
+    .statusbar {
+      background: var(--shell);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 14px;
+      padding: 0 16px;
+      color: var(--muted);
+      font-size: 12px;
+      font-family: var(--mono);
+    }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 8px; border-radius: 999px;
+      font-family: var(--font); font-weight: 650; font-size: 11px;
+    }
+    .pill.success { background: var(--success-soft); color: var(--success); }
+    .pill.running { background: var(--running-soft); color: var(--running); }
+    .pill.waiting { background: var(--waiting-soft); color: var(--waiting); }
+    .pill.error { background: var(--error-soft); color: var(--error); }
+    .pill.loop { background: var(--loop-soft); color: var(--loop); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .pill.running .dot { animation: pulse 1.1s ease-in-out infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; } 50% { opacity: .4; }
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      min-height: 0;
+    }
+    .workspace.drawer-closed { grid-template-columns: 1fr 0fr; }
+    .workspace.drawer-closed .drawer { display: none; }
+
+    .canvas-wrap {
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0) 0 0 / 22px 22px,
+        linear-gradient(180deg, color-mix(in srgb, var(--canvas) 70%, transparent), var(--bg));
+    }
+    .canvas-toolbar {
+      position: absolute; top: 12px; left: 12px; z-index: 5;
+      display: flex; gap: 6px; flex-wrap: wrap;
+      background: var(--shell);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px;
+      box-shadow: var(--shadow);
+      max-width: calc(100% - 180px);
+    }
+    .canvas-toolbar .btn { padding: 5px 9px; }
+    .hint-chip {
+      align-self: center;
+      font-size: 11px;
+      color: var(--muted);
+      padding: 0 6px;
+    }
+
+    .legend {
+      position: absolute; right: 12px; top: 12px; z-index: 5;
+      background: var(--shell);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: var(--shadow);
+      font-size: 11px;
+      color: var(--muted);
+      display: grid; gap: 6px;
+    }
+    .legend span { display: flex; align-items: center; gap: 8px; }
+    .swatch { width: 12px; height: 12px; border-radius: 3px; border: 2px solid; }
+    .swatch.success { border-color: var(--success); background: var(--success-soft); }
+    .swatch.running { border-color: var(--running); background: var(--running-soft); }
+    .swatch.waiting { border-color: var(--waiting); background: var(--waiting-soft); }
+    .swatch.error { border-color: var(--error); background: var(--error-soft); }
+    .swatch.loop { border-color: var(--loop); background: var(--loop-soft); }
+
+    .viewport {
+      position: absolute; inset: 0;
+      overflow: auto;
+      cursor: grab;
+    }
+    .viewport.panning { cursor: grabbing; }
+    .world {
+      position: relative;
+      width: 1600px;
+      height: 1100px;
+      transform-origin: 0 0;
+    }
+    svg.wires {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      overflow: visible;
+      pointer-events: none;
+    }
+    .wire {
+      fill: none;
+      stroke: var(--border-strong);
+      stroke-width: 2;
+      marker-end: url(#arrow);
+    }
+    .wire.done { stroke: var(--success); marker-end: url(#arrowDone); }
+    .wire.active {
+      stroke: var(--accent);
+      stroke-dasharray: 6 6;
+      animation: dash .8s linear infinite;
+      marker-end: url(#arrowActive);
+    }
+    .wire.loop {
+      stroke: var(--loop);
+      stroke-width: 2.5;
+      stroke-dasharray: 2 6;
+      marker-end: url(#arrowLoop);
+    }
+    .wire.loop.active {
+      animation: dash .7s linear infinite;
+    }
+    @keyframes dash { to { stroke-dashoffset: -12; } }
+
+    .edge-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--shell);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 2;
+    }
+    .edge-label.loop {
+      color: var(--loop);
+      border-color: var(--loop-border);
+      background: var(--loop-soft);
+    }
+
+    .node {
+      position: absolute;
+      width: 220px;
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      cursor: grab;
+      user-select: none;
+      z-index: 3;
+      touch-action: none;
+    }
+    .node.dragging { cursor: grabbing; z-index: 10; opacity: .96; }
+    .node.selected {
+      box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow);
+      border-color: var(--accent);
+    }
+    .node.success { border-color: var(--success-border); background: color-mix(in srgb, var(--success-soft) 70%, var(--panel)); }
+    .node.running { border-color: var(--running-border); background: color-mix(in srgb, var(--running-soft) 70%, var(--panel)); }
+    .node.waiting { border-color: var(--border); }
+    .node.error { border-color: var(--error-border); background: color-mix(in srgb, var(--error-soft) 70%, var(--panel)); }
+    .node.looping { border-color: var(--loop-border); background: color-mix(in srgb, var(--loop-soft) 65%, var(--panel)); }
+    .node-h {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px 6px; gap: 8px;
+    }
+    .node-kind {
+      font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
+    }
+    .node-kind.leader { color: var(--leader); }
+    .node-b { padding: 0 12px 12px; }
+    .node-name { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+    .node-meta { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+    .node-foot {
+      margin-top: 8px;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; color: var(--muted);
+    }
+    .progress {
+      height: 3px; border-radius: 999px; background: var(--border);
+      margin-top: 8px; overflow: hidden;
+    }
+    .progress > i { display: block; height: 100%; width: 0; background: var(--running); }
+    .node.running .progress > i,
+    .node.looping .progress > i { width: 62%; animation: grow 2s ease-in-out infinite alternate; }
+    .node.looping .progress > i { background: var(--loop); }
+    .node.success .progress > i { width: 100%; background: var(--success); animation: none; }
+    @keyframes grow { from { width: 35%; } to { width: 78%; } }
+
+    .note {
+      position: absolute; left: 12px; bottom: 12px; z-index: 5;
+      background: var(--shell);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: var(--shadow);
+      max-width: 460px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .drawer {
+      background: var(--shell);
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; min-width: 0; min-height: 0;
+    }
+    .drawer-h {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+    }
+    .drawer-h h2 { margin: 0; font-size: 14px; }
+    .drawer-h .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .drawer-tabs {
+      display: flex; gap: 2px; padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .drawer-tab {
+      border: 0; background: transparent; border-radius: 7px;
+      padding: 7px 10px; color: var(--muted); font-weight: 600;
+    }
+    .drawer-tab.active { background: var(--panel); color: var(--fg); box-shadow: var(--shadow); }
+    .drawer-b { flex: 1; overflow: auto; padding: 12px 14px; }
+    .kv {
+      display: grid; grid-template-columns: 96px 1fr; gap: 8px 10px;
+      margin-bottom: 14px; font-size: 12px;
+    }
+    .kv dt { color: var(--muted); }
+    .kv dd { margin: 0; font-family: var(--mono); word-break: break-word; }
+    .block {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      overflow: hidden;
+      background: var(--panel);
+    }
+    .block summary {
+      list-style: none; cursor: pointer;
+      padding: 9px 11px;
+      display: flex; justify-content: space-between; align-items: center;
+      font-weight: 650; font-size: 12px; background: var(--bg);
+    }
+    .block summary::-webkit-details-marker { display: none; }
+    .block pre {
+      margin: 0; padding: 10px 12px;
+      font-family: var(--mono); font-size: 11.5px;
+      white-space: pre-wrap; word-break: break-word;
+      max-height: 220px; overflow: auto;
+      border-top: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg) 70%, var(--panel));
+    }
+    .timeline { display: flex; flex-direction: column; }
+    .step {
+      display: grid; grid-template-columns: 16px 1fr; gap: 10px;
+      padding: 8px 0; position: relative;
+    }
+    .step::before {
+      content: "";
+      position: absolute; left: 7px; top: 22px; bottom: -2px;
+      width: 2px; background: var(--border);
+    }
+    .step:last-child::before { display: none; }
+    .step-dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid var(--accent); background: var(--panel); margin-top: 2px;
+    }
+    .step.ok .step-dot { border-color: var(--success); background: var(--success); }
+    .step.run .step-dot { border-color: var(--running); background: var(--running); }
+    .step.loop .step-dot { border-color: var(--loop); background: var(--loop); }
+    .step-body .when { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+    .step-body .what { font-weight: 650; margin-top: 2px; }
+    .step-body .detail { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <!-- 背后是 Chat；Trace 为单例弹窗 -->
+  <div class="backdrop" aria-hidden="true">
+    <div class="rail"></div>
+    <div class="chat-fake">
+      <div class="bubble user">帮我用 Release Prep Squad 整理 v2.4.0 发版材料</div>
+      <div class="task-card-fake">
+        <strong>Team Task · Release Prep Squad</strong>
+        <div style="color:var(--muted);font-size:12px;">Running · QA loop 2/3 · elapsed 02:14</div>
+        <div class="row">
+          <button class="btn primary" type="button" style="pointer-events:auto">打开 Trace</button>
+          <button class="btn" type="button">取消任务</button>
+        </div>
+      </div>
+      <div class="bubble">正在由 Leader 统筹 Engineering / QA / Docs…（摘要流式更新）</div>
+    </div>
+  </div>
+  <div class="scrim" title="点击外部关闭（实现时可绑）"></div>
+
+  <div class="app" role="dialog" aria-modal="true" aria-label="Team Trace">
+    <header class="topbar">
+      <div class="title-wrap">
+        <div>
+          <div class="title">Team Trace · Release Prep Squad</div>
+          <div class="subtitle">Goal: 整理 v2.4.0 发版材料 · 弹窗单例 · 可拖拽 · Worker 循环</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="themeBtn" type="button">切换深色</button>
+        <button class="btn" id="resetLayout" type="button">重置布局</button>
+        <button class="btn" id="toggleDrawer" type="button">收起详情</button>
+        <a class="btn" href="./teams-config.html">配置</a>
+        <div class="win-controls">
+          <button class="win-btn" type="button" title="最小化">—</button>
+          <button class="win-btn close" type="button" title="关闭" onclick="history.back()">✕</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="statusbar">
+      <span class="pill running"><i class="dot"></i> Running</span>
+      <span class="pill loop"><i class="dot"></i> QA loop 2/3</span>
+      <span>task_id · tm_8f2a91</span>
+      <span>elapsed · 02:14</span>
+      <span>tokens · 24.7k</span>
+      <span>拖拽节点排版 · 布局写入 localStorage</span>
+    </div>
+
+    <div class="workspace" id="workspace">
+      <section class="canvas-wrap">
+        <div class="canvas-toolbar">
+          <button class="btn" id="zoomOut" type="button">−</button>
+          <button class="btn" id="zoomLabel" type="button">100%</button>
+          <button class="btn" id="zoomIn" type="button">＋</button>
+          <button class="btn" id="fitView" type="button">适应</button>
+          <span class="hint-chip">拖节点改布局 · 橙虚线 = 循环重派</span>
+        </div>
+        <div class="legend">
+          <span><i class="swatch success"></i> Success</span>
+          <span><i class="swatch running"></i> Running</span>
+          <span><i class="swatch loop"></i> Loop / re-dispatch</span>
+          <span><i class="swatch waiting"></i> Waiting</span>
+          <span><i class="swatch error"></i> Error</span>
+        </div>
+
+        <div class="viewport" id="viewport">
+          <div class="world" id="world">
+            <svg class="wires" id="wires" aria-hidden="true">
+              <defs>
+                <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L6,3 L0,6 Z" fill="#94A3B8" />
+                </marker>
+                <marker id="arrowDone" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L6,3 L0,6 Z" fill="#059669" />
+                </marker>
+                <marker id="arrowActive" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L6,3 L0,6 Z" fill="#6366F1" />
+                </marker>
+                <marker id="arrowLoop" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L6,3 L0,6 Z" fill="#D97706" />
+                </marker>
+              </defs>
+            </svg>
+            <div id="edgeLabels"></div>
+            <div id="nodes"></div>
+          </div>
+        </div>
+
+        <div class="note">
+          <strong>形态</strong>：WPF <code>TeamTraceWindow</code> 弹窗（非 AppPage），由 Chat 摘要卡「打开 Trace」唤起。
+          <strong>循环</strong>：橙色 loop 边 = Leader 重派 Worker。<strong>拖拽</strong>只改布局。
+          · <a href="./index.html">索引</a> · <a href="./teams-config.html">配置</a>
+        </div>
+      </section>
+
+      <aside class="drawer" id="drawer">
+        <div class="drawer-h">
+          <div>
+            <h2 id="dTitle">QA Summary</h2>
+            <div class="meta" id="dMeta">member · qa · loop iter 2/3</div>
+          </div>
+          <span class="pill loop" id="dStatus"><i class="dot"></i> Looping</span>
+        </div>
+        <div class="drawer-tabs">
+          <button class="drawer-tab active" data-tab="io" type="button">I/O</button>
+          <button class="drawer-tab" data-tab="tools" type="button">Tools</button>
+          <button class="drawer-tab" data-tab="timeline" type="button">Timeline</button>
+          <button class="drawer-tab" data-tab="loop" type="button">Loop</button>
+        </div>
+        <div class="drawer-b">
+          <div class="pane" data-pane="io">
+            <dl class="kv">
+              <dt>profile</dt><dd id="dProfile">qa-summary</dd>
+              <dt>iteration</dt><dd id="dIter">2 / 3（max）</dd>
+              <dt>reason</dt><dd id="dReason">Leader：覆盖率不足，补充回归清单</dd>
+              <dt>skills</dt><dd>qa-checklist</dd>
+              <dt>knowledge</dt><dd>qa-playbooks</dd>
+            </dl>
+            <details class="block" open>
+              <summary><span>Input · Handoff（本轮）</span></summary>
+              <pre id="dInput">目标
+- 补充桌面端回归结论
+
+已知事实
+- iter1 已覆盖 API / 核心路径
+- Leader 判定：缺 Windows 11 暗色主题冒烟
+
+待办
+- 补跑 dark-theme smoke
+- 更新 qa-summary.md
+
+引用
+- artifact:qa-summary.md#iter1
+- kb:qa-playbooks/desktop</pre>
+            </details>
+            <details class="block" open>
+              <summary><span>Output · Result（进行中）</span></summary>
+              <pre id="dOutput">（iter 2 执行中）
+正在读取测试报告目录…
+预计产出：artifact:qa-summary.md#iter2</pre>
+            </details>
+          </div>
+          <div class="pane" data-pane="tools" hidden>
+            <details class="block" open>
+              <summary><span>team_redispatch</span><span class="pill loop">loop</span></summary>
+              <pre>{
+  "assignee": "qa",
+  "iteration": 2,
+  "max_iterations": 3,
+  "reason": "coverage_gap"
+}</pre>
+            </details>
+            <details class="block" open>
+              <summary><span>grep_files</span><span class="pill running">run</span></summary>
+              <pre>pattern: dark-theme
+path: tests/</pre>
+            </details>
+          </div>
+          <div class="pane" data-pane="timeline" hidden>
+            <div class="timeline">
+              <div class="step ok">
+                <div class="step-dot"></div>
+                <div class="step-body">
+                  <div class="when">09:12:16</div>
+                  <div class="what">qa.iter1.started</div>
+                  <div class="detail">首次分派</div>
+                </div>
+              </div>
+              <div class="step ok">
+                <div class="step-dot"></div>
+                <div class="step-body">
+                  <div class="when">09:12:54</div>
+                  <div class="what">qa.iter1.completed</div>
+                  <div class="detail">artifact:qa-summary.md#iter1</div>
+                </div>
+              </div>
+              <div class="step loop">
+                <div class="step-dot"></div>
+                <div class="step-body">
+                  <div class="when">09:13:08</div>
+                  <div class="what">leader.redispatch → qa</div>
+                  <div class="detail">reason: coverage_gap · iter 2/3</div>
+                </div>
+              </div>
+              <div class="step run">
+                <div class="step-dot"></div>
+                <div class="step-body">
+                  <div class="when">09:13:09</div>
+                  <div class="what">qa.iter2.running</div>
+                  <div class="detail">独立上下文，注入上轮 Result 摘要</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pane" data-pane="loop" hidden>
+            <dl class="kv">
+              <dt>policy</dt><dd>leader_controlled</dd>
+              <dt>max</dt><dd>3</dd>
+              <dt>current</dt><dd>2</dd>
+              <dt>break_on</dt><dd>leader.accept | max_reached | worker.error</dd>
+              <dt>context</dt><dd>每轮新 Turn；注入 prev_result_summary，不合并全文 transcript</dd>
+            </dl>
+            <details class="block" open>
+              <summary>循环安全约束（规格）</summary>
+              <pre>1. 同一 Worker 并发实例 ≤ 1（除非显式允许）
+2. 达到 MaxIterations 后禁止再 dispatch，Leader 必须汇总或 ask_user
+3. 每轮 handoff 必须带 iteration + reason
+4. Trace 必须画出 loop 边，便于审计</pre>
+            </details>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "athlon.teamTrace.layout.v2";
+    const NODE_W = 220;
+    const NODE_H = 118;
+
+    const defaultLayout = {
+      leader: { x: 560, y: 80 },
+      eng: { x: 180, y: 320 },
+      qa: { x: 560, y: 320 },
+      docs: { x: 940, y: 320 },
+      agg: { x: 560, y: 620 },
+      submit: { x: 560, y: 860 }
+    };
+
+    const nodesMeta = {
+      leader: { name: "Release Leader", kind: "Leader", kindClass: "leader", status: "success", statusText: "Success", meta: "plan + dispatch", foot: ["3 workers", "18.2s"] },
+      eng: { name: "Engineering Notes", kind: "Worker", kindClass: "", status: "success", statusText: "Success", meta: "sub_01 · done", foot: ["7 tools", "38.4s"] },
+      qa: { name: "QA Summary", kind: "Worker", kindClass: "", status: "looping", statusText: "Loop 2/3", meta: "sub_02 · re-dispatch", foot: ["iter 2", "41.0s"] },
+      docs: { name: "Docs Writer", kind: "Worker", kindClass: "", status: "waiting", statusText: "Waiting", meta: "depends eng+qa", foot: ["queued", "—"] },
+      agg: { name: "Aggregate Results", kind: "Leader", kindClass: "leader", status: "waiting", statusText: "Waiting", meta: "collect + review", foot: ["1/3 ready", "—"] },
+      submit: { name: "Submit Final", kind: "Leader", kindClass: "leader", status: "waiting", statusText: "Waiting", meta: "team_submit_result", foot: ["artifact", "—"] }
+    };
+
+    // edges: from -> to, type normal|loop
+    const edges = [
+      { id: "e1", from: "leader", to: "eng", type: "done", label: "dispatch" },
+      { id: "e2", from: "leader", to: "qa", type: "done", label: "dispatch #1" },
+      { id: "e3", from: "leader", to: "docs", type: "active", label: "queued" },
+      { id: "e4", from: "eng", to: "agg", type: "done", label: "result" },
+      { id: "e5", from: "qa", to: "agg", type: "active", label: "partial" },
+      { id: "e6", from: "docs", to: "agg", type: "", label: "—" },
+      { id: "e7", from: "agg", to: "submit", type: "", label: "final" },
+      // 循环：Leader 再次调用同一个 QA Worker
+      { id: "eloop", from: "leader", to: "qa", type: "loop active", label: "loop iter 2/3", loop: true }
+    ];
+
+    const detail = {
+      leader: {
+        title: "Release Leader", meta: "member · leader · turn 2 (redispatch)",
+        status: "success", statusText: "Success", profile: "release-leader",
+        iter: "—", reason: "发起 QA 第 2 轮",
+        input: "整体发版目标…", output: "已 redispatch QA · iter 2/3"
+      },
+      eng: {
+        title: "Engineering Notes", meta: "member · eng · sub_01",
+        status: "success", statusText: "Success", profile: "engineering-notes",
+        iter: "1 / 1", reason: "—",
+        input: "整理变更说明…", output: "## Result\nartifact:eng-notes.md"
+      },
+      qa: {
+        title: "QA Summary", meta: "member · qa · loop iter 2/3",
+        status: "loop", statusText: "Looping", profile: "qa-summary",
+        iter: "2 / 3（max）", reason: "Leader：覆盖率不足，补充回归清单",
+        input: document.getElementById ? null : "",
+        output: "（iter 2 执行中）"
+      },
+      docs: {
+        title: "Docs Writer", meta: "member · docs · waiting",
+        status: "waiting", statusText: "Waiting", profile: "docs-writer",
+        iter: "0 / 1", reason: "依赖 eng+qa",
+        input: "等待依赖…", output: "（排队）"
+      },
+      agg: {
+        title: "Aggregate Results", meta: "leader · collect",
+        status: "waiting", statusText: "Waiting", profile: "release-leader",
+        iter: "—", reason: "—",
+        input: "收集子任务", output: "尚未开始"
+      },
+      submit: {
+        title: "Submit Final", meta: "leader · submit",
+        status: "waiting", statusText: "Waiting", profile: "release-leader",
+        iter: "—", reason: "—",
+        input: "提交最终包", output: "尚未开始"
+      }
+    };
+
+    let layout = loadLayout();
+    let scale = 1;
+    let selectedId = "qa";
+
+    const nodesEl = document.getElementById("nodes");
+    const wiresEl = document.getElementById("wires");
+    const labelsEl = document.getElementById("edgeLabels");
+    const worldEl = document.getElementById("world");
+    const viewport = document.getElementById("viewport");
+
+    function loadLayout() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return { ...defaultLayout };
+        return { ...defaultLayout, ...JSON.parse(raw) };
+      } catch {
+        return { ...defaultLayout };
+      }
+    }
+    function saveLayout() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
+    }
+
+    function renderNodes() {
+      nodesEl.innerHTML = "";
+      for (const [id, meta] of Object.entries(nodesMeta)) {
+        const pos = layout[id];
+        const el = document.createElement("article");
+        el.className = `node ${meta.status}` + (id === selectedId ? " selected" : "");
+        el.dataset.id = id;
+        el.style.left = pos.x + "px";
+        el.style.top = pos.y + "px";
+        el.innerHTML = `
+          <div class="node-h">
+            <span class="node-kind ${meta.kindClass}">${meta.kind}</span>
+            <span class="pill ${meta.status === "looping" ? "loop" : meta.status}"><i class="dot"></i> ${meta.statusText}</span>
+          </div>
+          <div class="node-b">
+            <div class="node-name">${meta.name}</div>
+            <div class="node-meta">${meta.meta}</div>
+            <div class="progress"><i></i></div>
+            <div class="node-foot"><span>${meta.foot[0]}</span><span>${meta.foot[1]}</span></div>
+          </div>`;
+        enableDrag(el);
+        el.addEventListener("click", (e) => {
+          if (el.dataset.didDrag === "1") { el.dataset.didDrag = "0"; return; }
+          selectNode(id);
+        });
+        nodesEl.appendChild(el);
+      }
+      redrawWires();
+    }
+
+    function port(id, side) {
+      const p = layout[id];
+      const cx = p.x + NODE_W / 2;
+      const cy = p.y + NODE_H / 2;
+      if (side === "bottom") return { x: cx, y: p.y + NODE_H };
+      if (side === "top") return { x: cx, y: p.y };
+      if (side === "left") return { x: p.x, y: cy };
+      if (side === "right") return { x: p.x + NODE_W, y: cy };
+      return { x: cx, y: cy };
+    }
+
+    function curve(a, b, loop) {
+      if (loop) {
+        // 侧向弧线，避免与主 dispatch 直线重叠
+        const midX = Math.max(a.x, b.x) + 120;
+        const midY = (a.y + b.y) / 2;
+        return `M ${a.x} ${a.y} C ${midX} ${a.y}, ${midX} ${b.y}, ${b.x} ${b.y}`;
+      }
+      const dy = Math.max(40, Math.abs(b.y - a.y) * 0.45);
+      return `M ${a.x} ${a.y} C ${a.x} ${a.y + dy}, ${b.x} ${b.y - dy}, ${b.x} ${b.y}`;
+    }
+
+    function redrawWires() {
+      // keep defs
+      const defs = wiresEl.querySelector("defs");
+      wiresEl.innerHTML = "";
+      if (defs) wiresEl.appendChild(defs);
+      labelsEl.innerHTML = "";
+
+      for (const e of edges) {
+        const fromSide = e.loop ? "right" : "bottom";
+        const toSide = e.loop ? "right" : "top";
+        const a = port(e.from, fromSide);
+        const b = port(e.to, toSide);
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", curve(a, b, e.loop));
+        path.setAttribute("class", `wire ${e.type || ""}`.trim());
+        wiresEl.appendChild(path);
+
+        if (e.label) {
+          const label = document.createElement("div");
+          label.className = "edge-label" + (e.loop ? " loop" : "");
+          // approximate label position
+          if (e.loop) {
+            label.style.left = (Math.max(a.x, b.x) + 120) + "px";
+            label.style.top = ((a.y + b.y) / 2) + "px";
+          } else {
+            label.style.left = ((a.x + b.x) / 2) + "px";
+            label.style.top = ((a.y + b.y) / 2) + "px";
+          }
+          label.textContent = e.label;
+          labelsEl.appendChild(label);
+        }
+      }
+    }
+
+    function enableDrag(el) {
+      let startX = 0, startY = 0, origX = 0, origY = 0, dragging = false;
+
+      el.addEventListener("pointerdown", (ev) => {
+        if (ev.button !== 0) return;
+        dragging = true;
+        el.dataset.didDrag = "0";
+        el.classList.add("dragging");
+        el.setPointerCapture(ev.pointerId);
+        startX = ev.clientX;
+        startY = ev.clientY;
+        const id = el.dataset.id;
+        origX = layout[id].x;
+        origY = layout[id].y;
+        ev.stopPropagation();
+      });
+
+      el.addEventListener("pointermove", (ev) => {
+        if (!dragging) return;
+        const dx = (ev.clientX - startX) / scale;
+        const dy = (ev.clientY - startY) / scale;
+        if (Math.abs(dx) + Math.abs(dy) > 3) el.dataset.didDrag = "1";
+        const id = el.dataset.id;
+        layout[id] = {
+          x: Math.max(16, origX + dx),
+          y: Math.max(16, origY + dy)
+        };
+        el.style.left = layout[id].x + "px";
+        el.style.top = layout[id].y + "px";
+        redrawWires();
+      });
+
+      el.addEventListener("pointerup", () => {
+        if (!dragging) return;
+        dragging = false;
+        el.classList.remove("dragging");
+        saveLayout();
+      });
+    }
+
+    function selectNode(id) {
+      selectedId = id;
+      document.querySelectorAll(".node").forEach(n => {
+        n.classList.toggle("selected", n.dataset.id === id);
+      });
+      const d = detail[id];
+      document.getElementById("dTitle").textContent = d.title;
+      document.getElementById("dMeta").textContent = d.meta;
+      document.getElementById("dProfile").textContent = d.profile;
+      document.getElementById("dIter").textContent = d.iter;
+      document.getElementById("dReason").textContent = d.reason;
+      if (id === "qa") {
+        // keep rich default text already in HTML for qa first paint; refresh briefly
+        document.getElementById("dInput").textContent =
+`目标
+- 补充桌面端回归结论
+
+已知事实
+- iter1 已覆盖 API / 核心路径
+- Leader 判定：缺 Windows 11 暗色主题冒烟
+
+待办
+- 补跑 dark-theme smoke
+- 更新 qa-summary.md
+
+引用
+- artifact:qa-summary.md#iter1
+- kb:qa-playbooks/desktop`;
+        document.getElementById("dOutput").textContent =
+`（iter 2 执行中）
+正在读取测试报告目录…
+预计产出：artifact:qa-summary.md#iter2`;
+      } else {
+        document.getElementById("dInput").textContent = d.input;
+        document.getElementById("dOutput").textContent = d.output;
+      }
+      const st = document.getElementById("dStatus");
+      st.className = "pill " + d.status;
+      st.innerHTML = `<i class="dot"></i> ${d.statusText}`;
+      document.getElementById("workspace").classList.remove("drawer-closed");
+      document.getElementById("toggleDrawer").textContent = "收起详情";
+    }
+
+    function applyZoom() {
+      worldEl.style.transform = `scale(${scale})`;
+      document.getElementById("zoomLabel").textContent = Math.round(scale * 100) + "%";
+    }
+
+    document.getElementById("zoomIn").onclick = () => { scale = Math.min(1.6, scale + 0.1); applyZoom(); };
+    document.getElementById("zoomOut").onclick = () => { scale = Math.max(0.6, scale - 0.1); applyZoom(); };
+    document.getElementById("zoomLabel").onclick = () => { scale = 1; applyZoom(); };
+    document.getElementById("fitView").onclick = () => {
+      scale = 0.85;
+      applyZoom();
+      viewport.scrollTo({ left: 80, top: 0, behavior: "smooth" });
+    };
+    document.getElementById("resetLayout").onclick = () => {
+      layout = { ...defaultLayout };
+      saveLayout();
+      renderNodes();
+      selectNode(selectedId);
+    };
+
+    document.getElementById("toggleDrawer").onclick = () => {
+      const ws = document.getElementById("workspace");
+      const closed = ws.classList.toggle("drawer-closed");
+      document.getElementById("toggleDrawer").textContent = closed ? "展开详情" : "收起详情";
+    };
+
+    document.getElementById("themeBtn").onclick = () => {
+      const root = document.documentElement;
+      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      document.getElementById("themeBtn").textContent = next === "dark" ? "切换浅色" : "切换深色";
+    };
+
+    document.querySelectorAll(".drawer-tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".drawer-tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const id = tab.dataset.tab;
+        document.querySelectorAll(".pane").forEach(p => {
+          p.hidden = p.dataset.pane !== id;
+        });
+      });
+    });
+
+    renderNodes();
+    selectNode("qa");
+    applyZoom();
+  </script>
+</body>
+</html>

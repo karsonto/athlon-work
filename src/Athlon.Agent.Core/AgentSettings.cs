@@ -8,6 +8,7 @@ using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Core.TrainingData;
 
 namespace Athlon.Agent.Core;
@@ -77,6 +78,7 @@ public sealed class AppSettings
     public FileReadSettings FileRead { get; set; } = new();
     public GrepSettings Grep { get; set; } = new();
     public SubAgentSettings SubAgent { get; set; } = new();
+    public TeamsSettings Teams { get; set; } = new();
     public ParallelToolExecutionSettings ParallelToolExecution { get; set; } = new();
     public MemorySettings Memory { get; set; } = new();
     public ProfileSettings Profile { get; set; } = new();

@@ -48,6 +48,8 @@ public sealed class AppPathProvider : IAppPathProvider
         Directory.CreateDirectory(SkillsPath);
         Directory.CreateDirectory(SkillManifestDirectory);
         Directory.CreateDirectory(BehaviorPath);
+        Directory.CreateDirectory(Path.Combine(ConfigPath, "teams"));
+        Directory.CreateDirectory(Path.Combine(ConfigPath, "agent-profiles"));
         Directory.CreateDirectory(Path.Combine(RootPath, "debug", "logs"));
         Directory.CreateDirectory(Path.Combine(RootPath, "debug", "runs"));
     }

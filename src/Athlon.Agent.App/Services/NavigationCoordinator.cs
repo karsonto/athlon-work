@@ -46,7 +46,8 @@ public sealed class NavigationCoordinator
         SettingsViewModel settings,
         ScheduleViewModel schedule,
         KnowledgeViewModel knowledge,
-        SkillHubViewModel skillHub)
+        SkillHubViewModel skillHub,
+        TeamsPageViewModel? teams = null)
     {
         if (string.Equals(page, "Settings", StringComparison.Ordinal))
         {
@@ -63,6 +64,10 @@ public sealed class NavigationCoordinator
         else if (string.Equals(page, "SkillHub", StringComparison.Ordinal))
         {
             _ = skillHub.RefreshAsync();
+        }
+        else if (string.Equals(page, "Teams", StringComparison.Ordinal) && teams is not null)
+        {
+            _ = teams.RefreshAsync();
         }
     }
 

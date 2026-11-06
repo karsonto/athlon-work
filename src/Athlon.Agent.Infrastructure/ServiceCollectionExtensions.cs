@@ -16,6 +16,7 @@ using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Licensing;
 using Athlon.Agent.Core.Middleware;
 using Athlon.Agent.Core.SubAgents;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Core.Knowledge;
@@ -316,6 +317,24 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IAgentTool, SubAgentTaskOutputTool>();
             services.AddSingleton<IRuntimeContextContributor, SubAgentCompletionPromptContributor>();
         }
+
+        // Agent Teams — stores always registered; tools only when Teams.Enabled
+        services.AddSingleton<IAgentProfileStore, Athlon.Agent.Infrastructure.Teams.FileAgentProfileStore>();
+        services.AddSingleton<ITeamDefinitionStore, Athlon.Agent.Infrastructure.Teams.FileTeamDefinitionStore>();
+        services.AddSingleton<ITeamTaskStore, Athlon.Agent.Infrastructure.Teams.FileTeamTaskStore>();
+        services.AddSingleton<ITeamTraceStore, Athlon.Agent.Infrastructure.Teams.FileTeamTraceStore>();
+        services.AddSingleton<Athlon.Agent.Infrastructure.Teams.TeamMemberSystemPromptOrchestrator>();
+        services.AddSingleton<ITeamMemberRunExecutor, Athlon.Agent.Infrastructure.Teams.TeamMemberRunExecutor>();
+        services.AddSingleton<ITeamTaskOrchestrator, Athlon.Agent.Infrastructure.Teams.TeamTaskOrchestrator>();
+        // Always register; each tool no-ops when Teams.Enabled is false (avoids restart after toggle).
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamListMembersTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamCreateSubtaskTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamDispatchTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamRedispatchTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamAwaitTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamCollectTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamSubmitResultTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamAskUserTool>();
 
         services.AddSingleton<ITokenEstimatorCalibrator, TokenEstimatorCalibrator>();
         services.AddSingleton<ISessionUsageAccumulator, SessionUsageAccumulator>();

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Teams;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -107,7 +108,7 @@ internal static class McpSearchGatewayTools
                         return ToolResult.Failure("Invalid tool id", $"unknown MCP tool: {toolId}");
                     }
 
-                    if (!ScheduleTurnScope.IsMcpServerAllowed(serverName))
+                    if (!AgentProfileTurnScope.IsMcpServerAllowed(serverName))
                     {
                         return ToolResult.Failure(
                             "Tool not available",

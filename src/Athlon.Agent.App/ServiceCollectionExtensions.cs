@@ -214,6 +214,8 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ScheduleViewModel>();
 
+        services.AddSingleton<TeamsPageViewModel>();
+
         services.AddSingleton<SkillHubViewModel>();
 
         services.AddSingleton<PageViewFactory>();

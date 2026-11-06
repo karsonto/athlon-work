@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.RuntimeDiagnostics;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Core.Tools;
 
 namespace Athlon.Agent.Infrastructure.Tools;
@@ -35,7 +36,7 @@ public sealed class McpCatalogToolSource(
             return ToolResult.Failure("Not an MCP tool", $"Tool '{invocation.ToolName}' is not an MCP catalog tool.");
         }
 
-        if (!ScheduleTurnScope.IsMcpServerAllowed(serverName))
+        if (!AgentProfileTurnScope.IsMcpServerAllowed(serverName))
         {
             return ToolResult.Failure(
                 "Tool not available",

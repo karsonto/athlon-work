@@ -26,7 +26,7 @@ public sealed class SessionIndexCoordinator
 
     public void ScheduleUpdate(AgentSession session)
     {
-        if (_runContextAccessor.Current?.Kind == AgentRunKind.SubAgent)
+        if (_runContextAccessor.Current?.Kind is AgentRunKind.SubAgent or AgentRunKind.TeamMember)
         {
             return;
         }

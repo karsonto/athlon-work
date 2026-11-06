@@ -19,7 +19,7 @@ public sealed class SubAgentCompletionPromptContributor(
             return;
         }
 
-        if (runContextAccessor.Current?.Kind == AgentRunKind.SubAgent)
+        if (runContextAccessor.Current?.Kind is AgentRunKind.SubAgent or AgentRunKind.TeamMember)
         {
             return;
         }

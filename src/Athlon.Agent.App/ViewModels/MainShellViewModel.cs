@@ -132,6 +132,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         PageViewFactory pageViewFactory,
         ChatPageViewModel chatPage,
         ScheduleViewModel schedulePageVm,
+        TeamsPageViewModel teamsPageVm,
         SkillHubViewModel skillHubVm,
         ILocalizationService localization,
         IUserNotifier notifier,
@@ -181,6 +182,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionTurns.QueuedTurnPresenter.QueueChanged += OnQueuedTurnsChanged;
         Settings = settingsViewModel;
         SchedulePageVm = schedulePageVm;
+        TeamsPageVm = teamsPageVm;
         SkillHubVm = skillHubVm;
         SkillHubVm.Configure(
             onSkillsInstalled: OnSkillConfigurationChanged,
@@ -749,6 +751,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         !string.IsNullOrWhiteSpace(_session.ActiveWorkspace);
 
     public ScheduleViewModel SchedulePageVm { get; }
+    public TeamsPageViewModel TeamsPageVm { get; }
     public KnowledgeViewModel KnowledgePageVm { get; }
     public SkillHubViewModel SkillHubVm { get; }
 
@@ -1062,7 +1065,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             Settings,
             SchedulePageVm,
             KnowledgePageVm,
-            SkillHubVm);
+            SkillHubVm,
+            TeamsPageVm);
     }
 
     private async Task RunGuardedAsync(Func<Task> action, string operation)

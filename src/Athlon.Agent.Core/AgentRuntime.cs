@@ -74,7 +74,7 @@ public sealed partial class AgentRuntime(
     {
         var existing = runContextAccessor.Current;
         AgentRunContext runContext;
-        if (existing is { Kind: AgentRunKind.SubAgent }
+        if (existing is { Kind: AgentRunKind.SubAgent or AgentRunKind.TeamMember }
             && string.Equals(existing.SessionId, session.Id, StringComparison.Ordinal))
         {
             runContext = existing;

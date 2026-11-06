@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Core.Tools;
 
 namespace Athlon.Agent.Infrastructure.Tools;
@@ -39,7 +40,8 @@ public sealed class LocalToolSource(
 
     private ToolRouter GetOrCreateRouter()
     {
-        var stamp = availabilityFactory.ComputeLocalStamp();
+        var leader = AgentProfileTurnScope.Current?.Options.IsLeader == true;
+        var stamp = availabilityFactory.ComputeLocalStamp() + "|teamLeader=" + leader;
         lock (_gate)
         {
             if (_cachedRouter is not null
@@ -51,6 +53,7 @@ public sealed class LocalToolSource(
             var ctx = availabilityFactory.Create();
             var enabled = allLocalTools
                 .Where(tool => ToolAvailabilityPolicy.IsEnabled(tool, ctx, _rules))
+                .Where(tool => tool is not ITeamLeaderTool || leader)
                 .ToArray();
             var router = new ToolRouter(enabled);
             _cachedRouter = router;

@@ -640,12 +640,22 @@
                         <Button Command="{Binding NavigateCommand}"
                                 CommandParameter="Schedule"
                                 Style="{StaticResource NavBottomButtonStyle}"
-                                ToolTip="{loc:Localize Key=Nav_Schedule}">
+                                ToolTip="{loc:Localize Key=Nav_Schedule}"
+                                Margin="0,0,0,8">
                             <StackPanel Orientation="Horizontal">
                                 <ContentControl Style="{StaticResource ScheduleNavIconStyle}"
                                                 Margin="0,0,10,0"
                                                 VerticalAlignment="Center" />
                                 <TextBlock Text="{loc:Localize Key=Nav_Schedule}" Style="{StaticResource AppTextNav}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding NavigateCommand}"
+                                CommandParameter="Teams"
+                                Style="{StaticResource NavBottomButtonStyle}"
+                                ToolTip="Agent Teams">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="👥" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                <TextBlock Text="Teams" Style="{StaticResource AppTextNav}" />
                             </StackPanel>
                         </Button>
                     </StackPanel>

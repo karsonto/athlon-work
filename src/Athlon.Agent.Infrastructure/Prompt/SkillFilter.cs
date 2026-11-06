@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Skills;
 
 namespace Athlon.Agent.Infrastructure.Prompt;
@@ -20,8 +21,13 @@ public static class SkillFilter
             return false;
         }
 
-        var allowed = ScheduleTurnScope.Current?.SkillNames;
+        var allowed = AgentProfileTurnScope.SkillNames ?? ScheduleTurnScope.Current?.SkillNames;
         if (allowed is null)
+        {
+            return true;
+        }
+
+        if (allowed.Count == 0)
         {
             return true;
         }

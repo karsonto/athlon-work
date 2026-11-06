@@ -71,7 +71,7 @@ internal static class SessionDirectoryLayout
         string resolvedDirectory,
         AgentRunKind runKind)
     {
-        if (runKind == AgentRunKind.SubAgent)
+        if (runKind is AgentRunKind.SubAgent or AgentRunKind.TeamMember)
         {
             return resolvedDirectory;
         }

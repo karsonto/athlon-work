@@ -39,6 +39,12 @@ public sealed record AgentRunContext
 
     public bool ComputerUseActive { get; init; }
 
+    /// <summary>Set for <see cref="AgentRunKind.TeamMember"/> runs.</summary>
+    public string? TeamTaskId { get; init; }
+
+    /// <summary>Set for <see cref="AgentRunKind.TeamMember"/> runs.</summary>
+    public string? TeamProfileId { get; init; }
+
     public static AgentRunContext CreateRoot(
         AgentSession session,
         string runId,
@@ -94,8 +100,49 @@ public sealed record AgentRunContext
             ComputerUseActive = ComputerUseActive
         };
 
+    public AgentRunContext CreateTeamMember(
+        string memberSessionId,
+        string teamTaskId,
+        string profileId,
+        IToolRouter memberRouter,
+        ISystemPromptOrchestrator memberPrompt,
+        string role,
+        AgentLoopOptions? loopOptions,
+        string? workspaceRoot,
+        IReadOnlyList<string> ignorePatterns,
+        string? completeSystemPrompt = null) =>
+        new()
+        {
+            SessionId = memberSessionId,
+            RunId = IdGen.NewId(),
+            ParentSessionId = (Kind is AgentRunKind.TeamMember or AgentRunKind.SubAgent) && ParentSessionId is not null
+                ? ParentSessionId
+                : SessionId,
+            WorkspaceRoot = workspaceRoot,
+            WorkspaceKind = WorkspaceKind,
+            WorkspaceIgnorePatterns = ignorePatterns,
+            ToolRouter = memberRouter,
+            PromptOrchestrator = memberPrompt,
+            SubAgentRole = role,
+            CompleteSystemPrompt = completeSystemPrompt,
+            SuppressRuntimeContext = SuppressRuntimeContext,
+            LoopOptions = loopOptions,
+            Kind = AgentRunKind.TeamMember,
+            ComputerUseActive = ComputerUseActive,
+            TeamTaskId = teamTaskId,
+            TeamProfileId = profileId
+        };
+
     public string ResolveSessionDirectory(string sessionsPath, string sessionId)
     {
+        if (Kind == AgentRunKind.TeamMember
+            && ParentSessionId is not null
+            && TeamTaskId is not null
+            && string.Equals(sessionId, SessionId, StringComparison.Ordinal))
+        {
+            return Path.Combine(sessionsPath, ParentSessionId, "teams", TeamTaskId, "members", SessionId);
+        }
+
         if (Kind == AgentRunKind.SubAgent
             && ParentSessionId is not null
             && string.Equals(sessionId, SessionId, StringComparison.Ordinal))
@@ -110,5 +157,21 @@ public sealed record AgentRunContext
     {
         var parts = sessionJsonPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return parts.Any(part => string.Equals(part, "subagents", StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static bool IsTeamMemberSessionPath(string sessionJsonPath)
+    {
+        var parts = sessionJsonPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        for (var i = 0; i < parts.Length - 1; i++)
+        {
+            if (string.Equals(parts[i], "teams", StringComparison.OrdinalIgnoreCase)
+                && i + 2 < parts.Length
+                && string.Equals(parts[i + 2], "members", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
