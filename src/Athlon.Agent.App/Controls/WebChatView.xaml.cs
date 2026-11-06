@@ -78,6 +78,8 @@ public partial class WebChatView : UserControl
     public event EventHandler<string>? ForkChatRequested;
     public event EventHandler<ReportDownloadRequest>? ReportDownloadRequested;
     public event EventHandler<string>? ExternalLinkRequested;
+    /// <summary>Deep link from chat markdown, e.g. <c>athlon://team-trace?taskId=…</c>.</summary>
+    public event EventHandler<string>? TeamTraceLinkRequested;
     public event EventHandler<ToolApprovalDecisionEventArgs>? ToolApprovalDecisionReceived;
     public event EventHandler<ToolDetailRequestEventArgs>? ToolDetailRequested;
     public event EventHandler? PlanBuildRequested;

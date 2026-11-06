@@ -46,6 +46,9 @@ public sealed class ScheduledTask
     public string LastMessage { get; set; } = "";
     public string LastThreadId { get; set; } = "";
 
+    /// <summary>Team id when <see cref="Mode"/> is <c>teams</c>.</summary>
+    public string? TeamId { get; set; }
+
     /// <summary>Empty = inherit all globally enabled skills; non-empty = intersection.</summary>
     public List<string> SkillNames { get; set; } = new();
 

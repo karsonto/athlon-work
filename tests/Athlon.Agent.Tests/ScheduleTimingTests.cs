@@ -87,6 +87,24 @@ public sealed class ScheduleTimingTests
     }
 
     [Fact]
+    public void IsTeamsMode_RecognizesTeamsCaseInsensitive()
+    {
+        Assert.True(ScheduleTiming.IsTeamsMode("teams"));
+        Assert.True(ScheduleTiming.IsTeamsMode("Teams"));
+        Assert.False(ScheduleTiming.IsTeamsMode("agent"));
+        Assert.False(ScheduleTiming.IsTeamsMode(null));
+    }
+
+    [Fact]
+    public void ResolveMode_UsesTaskTeamsMode()
+    {
+        var task = new ScheduledTask { Mode = "teams", TeamId = "team_1" };
+        var schedule = new ScheduleSettings { Mode = "agent" };
+
+        Assert.Equal("teams", ScheduleTiming.ResolveMode(task, schedule));
+    }
+
+    [Fact]
     public void ResolveWorkspaceRoot_UsesTaskWorkspaceOnly()
     {
         var task = new ScheduledTask { WorkspaceRoot = @"C:\work" };

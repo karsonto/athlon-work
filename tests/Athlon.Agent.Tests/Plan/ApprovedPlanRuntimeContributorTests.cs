@@ -192,11 +192,13 @@ public sealed class ApprovedPlanRuntimeContributorTests
         public bool IsAskMode(string? sessionId) => mode == SessionAgentMode.Ask;
         public bool IsPlanMode(string? sessionId) => mode == SessionAgentMode.Plan;
         public bool IsDebugMode(string? sessionId) => mode == SessionAgentMode.Debug;
+        public bool IsTeamsMode(string? sessionId) => mode == SessionAgentMode.Teams;
         public bool IsEnabled(string? sessionId) => true;
         public bool IsCodingModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => mode == SessionAgentMode.Coding;
         public bool IsAskModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => mode == SessionAgentMode.Ask;
         public bool IsPlanModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => mode == SessionAgentMode.Plan;
         public bool IsDebugModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => mode == SessionAgentMode.Debug;
+        public bool IsTeamsModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => mode == SessionAgentMode.Teams;
         public bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor) => true;
     }
 

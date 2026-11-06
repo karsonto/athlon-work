@@ -646,6 +646,36 @@ public sealed partial class SessionTurnUiController
         });
     }
 
+    /// <summary>Appends a single completed assistant bubble without starting a live turn.</summary>
+    public ChatMessage AppendLocalAssistantMessage(string assistantMarkdown)
+    {
+        ChatMessage? assistant = null;
+        RunOnUiSync(() =>
+        {
+            assistant = ChatMessage.Create(MessageRole.Assistant, assistantMarkdown);
+            Messages.Add(new ChatMessageViewModel(assistant));
+            TrimMessagesIfNeeded();
+            RequestScrollImmediate();
+        });
+
+        return assistant!;
+    }
+
+    /// <summary>Appends a single user bubble without starting a live agent turn.</summary>
+    public ChatMessage AppendLocalUserMessage(string userText)
+    {
+        ChatMessage? user = null;
+        RunOnUiSync(() =>
+        {
+            user = ChatMessage.Create(MessageRole.User, userText);
+            Messages.Add(new ChatMessageViewModel(user));
+            TrimMessagesIfNeeded();
+            RequestScrollImmediate();
+        });
+
+        return user!;
+    }
+
     public void ResetForTurn()
     {
         RunOnUiSync(() =>

@@ -90,6 +90,8 @@ public sealed partial class TeamsPageViewModel : ObservableObject
 
     public bool HasSelectedTeam => SelectedTeamItem is not null;
 
+    public bool CanDeleteSelectedWorker => SelectedMember is { IsLeader: false };
+
     public bool IsLoopPolicyEnabled => SelectedMember is { IsLeader: false };
 
     public string EnabledBadgeText => TeamsEnabled ? "已启用" : "未启用";
@@ -264,6 +266,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
 
         OnPropertyChanged(nameof(SelectedProfile));
         OnPropertyChanged(nameof(IsLoopPolicyEnabled));
+        OnPropertyChanged(nameof(CanDeleteSelectedWorker));
         NotifyMemberEditingProperties();
         SyncCapabilityOptionsFromProfile();
         RebuildOrgPreview();
@@ -445,6 +448,117 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task DeleteTeamAsync()
+    {
+        if (SelectedTeam is null || SelectedTeamItem is null)
+        {
+            StatusMessage = "请先选择要删除的 Team。";
+            return;
+        }
+
+        var team = SelectedTeam;
+        var name = string.IsNullOrWhiteSpace(team.Name) ? team.Id : team.Name;
+        var confirm = MessageBox.Show(
+            $"确定删除 Team「{name}」？\n将同时删除未被其他 Team 引用的 Leader / Worker Profile。",
+            "删除 Team",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        var profileIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(team.LeaderProfileId))
+        {
+            profileIds.Add(team.LeaderProfileId);
+        }
+
+        foreach (var workerId in team.WorkerProfileIds)
+        {
+            if (!string.IsNullOrWhiteSpace(workerId))
+            {
+                profileIds.Add(workerId);
+            }
+        }
+
+        await _teamStore.DeleteAsync(team.Id).ConfigureAwait(true);
+
+        var remainingTeams = await _teamStore.ListAsync().ConfigureAwait(true);
+        foreach (var profileId in profileIds)
+        {
+            if (!IsProfileReferenced(profileId, remainingTeams))
+            {
+                await _profileStore.DeleteAsync(profileId).ConfigureAwait(true);
+            }
+        }
+
+        await RefreshAsync().ConfigureAwait(true);
+        StatusMessage = $"已删除 Team「{name}」。";
+    }
+
+    [RelayCommand]
+    private async Task DeleteWorkerAsync(TeamMemberItemViewModel? member)
+    {
+        member ??= SelectedMember;
+        if (SelectedTeam is null || member is null)
+        {
+            StatusMessage = "请先选择要删除的 Worker。";
+            return;
+        }
+
+        if (member.IsLeader)
+        {
+            StatusMessage = "不能删除 Leader；请删除整个 Team，或先更换 Leader。";
+            return;
+        }
+
+        var profileId = member.Profile.Id;
+        var name = member.DisplayName;
+        var confirm = MessageBox.Show(
+            $"确定从当前 Team 移除 Worker「{name}」？\n若该 Profile 未被其他 Team 引用，将一并删除。",
+            "删除 Worker",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        SelectedTeam.WorkerProfileIds.RemoveAll(id =>
+            string.Equals(id, profileId, StringComparison.OrdinalIgnoreCase));
+        SelectedTeam.UpdatedAt = DateTimeOffset.UtcNow;
+        await _teamStore.SaveAsync(SelectedTeam).ConfigureAwait(true);
+
+        var teams = await _teamStore.ListAsync().ConfigureAwait(true);
+        if (!IsProfileReferenced(profileId, teams))
+        {
+            await _profileStore.DeleteAsync(profileId).ConfigureAwait(true);
+        }
+
+        await RefreshAsync().ConfigureAwait(true);
+        StatusMessage = $"已删除 Worker「{name}」。";
+    }
+
+    private static bool IsProfileReferenced(string profileId, IReadOnlyList<TeamDefinition> teams)
+    {
+        foreach (var team in teams)
+        {
+            if (string.Equals(team.LeaderProfileId, profileId, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (team.WorkerProfileIds.Any(id => string.Equals(id, profileId, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    [RelayCommand]
     private async Task CreateSampleTeamAsync()
     {
         var leader = new AgentProfile
@@ -516,22 +630,10 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     [RelayCommand]
     private async Task RunSelectedTeamAsync()
     {
-        if (!TeamsEnabled)
-        {
-            StatusMessage = "请先启用 Teams 并保存。";
-            return;
-        }
-
-        if (SelectedTeam is null)
-        {
-            StatusMessage = "请选择 Team。";
-            return;
-        }
-
         var sessionId = _activeSession.SessionId;
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            StatusMessage = "请先打开一个 Chat 会话（需要 RootSessionId）。";
+            StatusMessage = "试跑需要当前 Chat 会话；请改用 Chat 的 Teams 模式发送目标。";
             return;
         }
 
@@ -541,32 +643,68 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             return;
         }
 
+        var (ok, message, _) = await RunTeamGoalAsync(sessionId, RunGoal.Trim(), SelectedTeam?.Id)
+            .ConfigureAwait(true);
+        StatusMessage = message;
+        if (!ok)
+        {
+            return;
+        }
+    }
+
+    /// <summary>Runs a Team Task for a Chat session (Teams mode send path).</summary>
+    public async Task<(bool Ok, string Message, TeamTask? Task)> RunTeamGoalAsync(
+        string rootSessionId,
+        string goal,
+        string? teamId = null)
+    {
+        if (!_settings.Teams.Enabled)
+        {
+            return (false, "Teams disabled", null);
+        }
+
+        TeamsEnabled = true;
+
+        teamId ??= SelectedTeam?.Id ?? _settings.Teams.SelectedTeamId;
+        if (string.IsNullOrWhiteSpace(teamId))
+        {
+            return (false, "No team selected", null);
+        }
+
+        if (string.IsNullOrWhiteSpace(goal))
+        {
+            return (false, "Empty goal", null);
+        }
+
+        if (string.IsNullOrWhiteSpace(rootSessionId))
+        {
+            return (false, "Missing root session", null);
+        }
+
         IsBusy = true;
-        StatusMessage = "正在运行 Team Task…";
         try
         {
             var result = await _orchestrator.StartAsync(
                 new TeamTaskStartRequest
                 {
-                    TeamId = SelectedTeam.Id,
-                    RootSessionId = sessionId,
-                    Goal = RunGoal.Trim()
+                    TeamId = teamId,
+                    RootSessionId = rootSessionId,
+                    Goal = goal.Trim()
                 }).ConfigureAwait(true);
-
-            StatusMessage = result.Ok
-                ? $"Task {result.Task.TaskId}: {result.Task.Status}"
-                : result.Error ?? "Failed";
 
             await RefreshAsync().ConfigureAwait(true);
             if (result.Ok)
             {
                 await OpenTraceAsync(result.Task).ConfigureAwait(true);
+                return (true, $"Task {result.Task.TaskId}: {result.Task.Status}", result.Task);
             }
+
+            return (false, result.Error ?? "Failed", result.Task);
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "Team run failed");
-            StatusMessage = ex.Message;
+            return (false, ex.Message, null);
         }
         finally
         {
@@ -619,6 +757,33 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         }
 
         TeamTraceWindow.ShowOrFocus(task, events, owner, _traceStore, teamName);
+    }
+
+    public async Task OpenTraceByTaskIdAsync(string rootSessionId, string taskId)
+    {
+        if (string.IsNullOrWhiteSpace(rootSessionId) || string.IsNullOrWhiteSpace(taskId))
+        {
+            StatusMessage = "无效的 Trace 链接。";
+            return;
+        }
+
+        var task = await _taskStore.GetAsync(rootSessionId, taskId).ConfigureAwait(true);
+        if (task is null)
+        {
+            // Fall back to latest task in this session when the deep-link target is gone.
+            var latest = (await _taskStore.ListForRootSessionAsync(rootSessionId).ConfigureAwait(true))
+                .FirstOrDefault(t => string.Equals(t.TaskId, taskId, StringComparison.OrdinalIgnoreCase))
+                ?? (await _taskStore.ListForRootSessionAsync(rootSessionId).ConfigureAwait(true)).FirstOrDefault();
+            if (latest is null)
+            {
+                StatusMessage = $"找不到 Team Task：{taskId}";
+                return;
+            }
+
+            task = latest;
+        }
+
+        await OpenTraceAsync(task).ConfigureAwait(true);
     }
 
     private void RebuildMembers()

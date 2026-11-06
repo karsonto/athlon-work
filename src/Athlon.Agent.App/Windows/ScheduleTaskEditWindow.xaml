@@ -115,101 +115,116 @@
                 </Border>
 
                 <TextBlock Text="{loc:Localize Key=Schedule_Mode}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                <ComboBox x:Name="ModeCombo" Margin="0,0,0,16">
+                <ComboBox x:Name="ModeCombo" Margin="0,0,0,16" SelectionChanged="ModeCombo_OnSelectionChanged">
                     <ComboBoxItem Tag="agent" Content="{loc:Localize Key=Schedule_ModeAgent}" />
                     <ComboBoxItem Tag="ask" Content="{loc:Localize Key=Schedule_ModeAsk}" />
+                    <ComboBoxItem Tag="teams" Content="{loc:Localize Key=Schedule_ModeTeams}" />
                 </ComboBox>
 
-                <CheckBox x:Name="ComputerUseCheck"
-                          Content="{loc:Localize Key=Schedule_ComputerUse}"
-                          ToolTip="{loc:Localize Key=Schedule_ComputerUseTooltip}"
-                          Margin="0,0,0,16" />
+                <StackPanel x:Name="TeamsPanel" Visibility="Collapsed" Margin="0,0,0,16">
+                    <TextBlock Text="{loc:Localize Key=Schedule_Team}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <TextBlock Text="{loc:Localize Key=Schedule_TeamHint}"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               FontSize="11"
+                               Margin="0,0,0,6"
+                               TextWrapping="Wrap" />
+                    <ComboBox x:Name="TeamCombo"
+                              DisplayMemberPath="Name"
+                              SelectedValuePath="Id" />
+                </StackPanel>
 
-                <TextBlock Text="{loc:Localize Key=Schedule_Model}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                <TextBlock Text="{loc:Localize Key=Schedule_ModelHint}"
-                           Foreground="{DynamicResource Brush.SubtleText}"
-                           FontSize="11"
-                           Margin="0,0,0,6"
-                           TextWrapping="Wrap" />
-                <TextBox x:Name="ModelBox" Padding="10,8" Margin="0,0,0,16" />
+                <StackPanel x:Name="AgentOptionsPanel">
+                    <CheckBox x:Name="ComputerUseCheck"
+                              Content="{loc:Localize Key=Schedule_ComputerUse}"
+                              ToolTip="{loc:Localize Key=Schedule_ComputerUseTooltip}"
+                              Margin="0,0,0,16" />
 
-                <TextBlock Text="{loc:Localize Key=Schedule_Skills}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                <TextBlock Text="{loc:Localize Key=Schedule_SkillsHint}"
-                           Foreground="{DynamicResource Brush.SubtleText}"
-                           FontSize="11"
-                           Margin="0,0,0,6"
-                           TextWrapping="Wrap" />
-                <Border Background="{DynamicResource Brush.Panel}"
-                        BorderBrush="{DynamicResource Brush.Border}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="8"
-                        MaxHeight="140"
-                        Margin="0,0,0,16">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ItemsControl x:Name="SkillsList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <CheckBox Content="{Binding Display}"
-                                              IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                              Margin="4,2" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </Border>
+                    <TextBlock Text="{loc:Localize Key=Schedule_Model}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <TextBlock Text="{loc:Localize Key=Schedule_ModelHint}"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               FontSize="11"
+                               Margin="0,0,0,6"
+                               TextWrapping="Wrap" />
+                    <TextBox x:Name="ModelBox" Padding="10,8" Margin="0,0,0,16" />
 
-                <TextBlock Text="{loc:Localize Key=Schedule_McpServers}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                <TextBlock Text="{loc:Localize Key=Schedule_McpHint}"
-                           Foreground="{DynamicResource Brush.SubtleText}"
-                           FontSize="11"
-                           Margin="0,0,0,6"
-                           TextWrapping="Wrap" />
-                <Border Background="{DynamicResource Brush.Panel}"
-                        BorderBrush="{DynamicResource Brush.Border}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="8"
-                        MaxHeight="140"
-                        Margin="0,0,0,16">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ItemsControl x:Name="McpList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <CheckBox Content="{Binding Display}"
-                                              IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                              Margin="4,2" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </Border>
+                    <TextBlock Text="{loc:Localize Key=Schedule_Skills}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <TextBlock Text="{loc:Localize Key=Schedule_SkillsHint}"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               FontSize="11"
+                               Margin="0,0,0,6"
+                               TextWrapping="Wrap" />
+                    <Border Background="{DynamicResource Brush.Panel}"
+                            BorderBrush="{DynamicResource Brush.Border}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="8"
+                            MaxHeight="140"
+                            Margin="0,0,0,16">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl x:Name="SkillsList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding Display}"
+                                                  IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                  Margin="4,2" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
 
-                <TextBlock Text="{loc:Localize Key=Schedule_Knowledge}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                <TextBlock Text="{loc:Localize Key=Schedule_KnowledgeHint}"
-                           Foreground="{DynamicResource Brush.SubtleText}"
-                           FontSize="11"
-                           Margin="0,0,0,6"
-                           TextWrapping="Wrap" />
-                <Border Background="{DynamicResource Brush.Panel}"
-                        BorderBrush="{DynamicResource Brush.Border}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="8"
-                        MaxHeight="140"
-                        Margin="0,0,0,8">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ItemsControl x:Name="KnowledgeList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <CheckBox Content="{Binding Display}"
-                                              IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                              Margin="4,2" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </Border>
+                    <TextBlock Text="{loc:Localize Key=Schedule_McpServers}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <TextBlock Text="{loc:Localize Key=Schedule_McpHint}"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               FontSize="11"
+                               Margin="0,0,0,6"
+                               TextWrapping="Wrap" />
+                    <Border Background="{DynamicResource Brush.Panel}"
+                            BorderBrush="{DynamicResource Brush.Border}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="8"
+                            MaxHeight="140"
+                            Margin="0,0,0,16">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl x:Name="McpList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding Display}"
+                                                  IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                  Margin="4,2" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+
+                    <TextBlock Text="{loc:Localize Key=Schedule_Knowledge}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <TextBlock Text="{loc:Localize Key=Schedule_KnowledgeHint}"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               FontSize="11"
+                               Margin="0,0,0,6"
+                               TextWrapping="Wrap" />
+                    <Border Background="{DynamicResource Brush.Panel}"
+                            BorderBrush="{DynamicResource Brush.Border}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="8"
+                            MaxHeight="140"
+                            Margin="0,0,0,8">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl x:Name="KnowledgeList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding Display}"
+                                                  IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                  Margin="4,2" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
 

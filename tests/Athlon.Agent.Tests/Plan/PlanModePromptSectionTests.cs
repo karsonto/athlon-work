@@ -276,11 +276,13 @@ public sealed class PlanRuntimeContextContributorTests
         public bool IsAskMode(string? sessionId) => false;
         public bool IsPlanMode(string? sessionId) => true;
         public bool IsDebugMode(string? sessionId) => false;
+        public bool IsTeamsMode(string? sessionId) => false;
         public bool IsEnabled(string? sessionId) => true;
         public bool IsCodingModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => false;
         public bool IsAskModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => false;
         public bool IsPlanModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => true;
         public bool IsDebugModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => false;
+        public bool IsTeamsModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => false;
         public bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor) => true;
     }
 }

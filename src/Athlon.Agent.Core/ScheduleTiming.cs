@@ -124,6 +124,9 @@ public static class ScheduleTiming
         return string.IsNullOrWhiteSpace(schedule.Mode) ? "agent" : schedule.Mode;
     }
 
+    public static bool IsTeamsMode(string? mode) =>
+        string.Equals(mode, "teams", StringComparison.OrdinalIgnoreCase);
+
     public static string? ResolveModelName(ScheduledTask task, ScheduleSettings schedule, string globalModelName)
     {
         if (!string.IsNullOrWhiteSpace(task.Model) && !string.Equals(task.Model, "auto", StringComparison.OrdinalIgnoreCase))

@@ -40,6 +40,7 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
     private Func<bool>? _tryCancelCompaction;
     private Func<ComposerSlashCommandContext>? _createSlashCommandContext;
     private Func<Task>? _ensureSessionReady;
+    private Func<string, Task<bool>>? _trySubmitTeamsGoalAsync;
 
     public event EventHandler? FocusComposerRequested;
 
@@ -87,7 +88,8 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         Func<IReadOnlyList<string>> getIgnorePatterns,
         Func<bool> tryCancelCompaction,
         Func<ComposerSlashCommandContext> createSlashCommandContext,
-        Func<Task> ensureSessionReady)
+        Func<Task> ensureSessionReady,
+        Func<string, Task<bool>>? trySubmitTeamsGoalAsync = null)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
@@ -101,6 +103,7 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         _tryCancelCompaction = tryCancelCompaction;
         _createSlashCommandContext = createSlashCommandContext;
         _ensureSessionReady = ensureSessionReady;
+        _trySubmitTeamsGoalAsync = trySubmitTeamsGoalAsync;
     }
 
     public void RequestFocusComposer() => FocusComposerRequested?.Invoke(this, EventArgs.Empty);
@@ -237,6 +240,20 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         foreach (var visual in visualAttachments)
         {
             AddPendingImages([visual]);
+        }
+
+        if (_trySubmitTeamsGoalAsync is not null
+            && PendingImageAttachments.Count == 0
+            && extractionResults.Count == 0
+            && !string.IsNullOrWhiteSpace(input))
+        {
+            var handled = await _trySubmitTeamsGoalAsync(input.Trim()).ConfigureAwait(true);
+            if (handled)
+            {
+                ComposerText = string.Empty;
+                _notifyCommandStatesChanged!();
+                return;
+            }
         }
 
         var planPhase = _planPhaseAccessor.GetPhase(displayedSessionId);

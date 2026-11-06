@@ -437,6 +437,9 @@
   <data name="Common_Add" xml:space="preserve">
     <value>新增</value>
   </data>
+  <data name="Common_Back" xml:space="preserve">
+    <value>返回</value>
+  </data>
   <data name="Common_BackToChat" xml:space="preserve">
     <value>返回对话</value>
   </data>
@@ -760,6 +763,44 @@
   </data>
   <data name="Harness_Mode_Debug_Tooltip" xml:space="preserve">
     <value>用运行时日志调查可复现 bug：假设 → 埋点 → 复现 → 分析 → 修复 → 清理</value>
+  </data>
+  <data name="Harness_Mode_Teams" xml:space="preserve">
+    <value>Teams</value>
+  </data>
+  <data name="Harness_Mode_Teams_Tooltip" xml:space="preserve">
+    <value>用选定的 Agent Team 执行目标：Leader 拆解分派，Workers 并行/循环重派，Trace 弹窗可查看</value>
+  </data>
+  <data name="Harness_Teams_SelectTeam" xml:space="preserve">
+    <value>选择 Team</value>
+  </data>
+  <data name="Teams_DisabledToast" xml:space="preserve">
+    <value>请先在 Teams 页启用 Teams 功能</value>
+  </data>
+  <data name="Teams_NoTeamToast" xml:space="preserve">
+    <value>请先选择一个 Team（或在 Teams 页创建）</value>
+  </data>
+  <data name="Teams_RunningToast" xml:space="preserve">
+    <value>正在运行 Team Task…</value>
+  </data>
+  <data name="Teams_CompletedToast" xml:space="preserve">
+    <value>Team Task 完成：{0}</value>
+  </data>
+  <data name="Teams_FailedToast" xml:space="preserve">
+    <value>Team Task 失败：{0}</value>
+  </data>
+  <data name="Teams_ChatSummaryOk" xml:space="preserve">
+    <value>**Team Task · {0}**
+
+状态：{1}
+任务：`{2}`
+
+[打开 Trace](athlon://team-trace?taskId={2})</value>
+  </data>
+  <data name="Teams_ChatSummaryFail" xml:space="preserve">
+    <value>**Team Task · {0}**
+
+状态：失败
+原因：{1}</value>
   </data>
   <data name="Debug_PhaseLabel" xml:space="preserve">
     <value>Debug 阶段：{0}</value>
@@ -1416,6 +1457,24 @@
   </data>
   <data name="Schedule_ModeAsk" xml:space="preserve">
     <value>Ask（只读）</value>
+  </data>
+  <data name="Schedule_ModeTeams" xml:space="preserve">
+    <value>Teams（多 Agent 协作）</value>
+  </data>
+  <data name="Schedule_Team" xml:space="preserve">
+    <value>Team</value>
+  </data>
+  <data name="Schedule_TeamHint" xml:space="preserve">
+    <value>使用所选 Team 的 Leader / Worker 配置运行；Skills / MCP / 模型以 Team 成员配置为准。</value>
+  </data>
+  <data name="Schedule_TeamRequired" xml:space="preserve">
+    <value>请选择一个 Team。</value>
+  </data>
+  <data name="Schedule_TeamsDisabled" xml:space="preserve">
+    <value>请先在 Teams 页启用 Teams 功能。</value>
+  </data>
+  <data name="Schedule_TeamsNoTeam" xml:space="preserve">
+    <value>未配置可用 Team，请先在 Teams 页创建。</value>
   </data>
   <data name="Schedule_ComputerUse" xml:space="preserve">
     <value>启用 Computer Use</value>

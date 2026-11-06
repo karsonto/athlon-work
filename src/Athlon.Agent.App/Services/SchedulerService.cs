@@ -3,6 +3,7 @@ using Athlon.Agent.App.Services.ComputerUse;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.SubAgents;
+using Athlon.Agent.Core.Teams;
 
 namespace Athlon.Agent.App.Services;
 
@@ -12,6 +13,7 @@ public sealed class SchedulerService : IDisposable
     private readonly IFileStorageService _storage;
     private readonly ISessionKnowledgeState _sessionKnowledgeState;
     private readonly IComputerUseDesktopCaptureSession _computerUseDesktop;
+    private readonly ITeamTaskOrchestrator _teamOrchestrator;
     private readonly AppSettings _settings;
     private readonly IAppLogger _logger;
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _runningTasks = new();
@@ -27,6 +29,7 @@ public sealed class SchedulerService : IDisposable
         IFileStorageService storage,
         ISessionKnowledgeState sessionKnowledgeState,
         IComputerUseDesktopCaptureSession computerUseDesktop,
+        ITeamTaskOrchestrator teamOrchestrator,
         AppSettings settings,
         IAppLogger logger)
     {
@@ -34,6 +37,7 @@ public sealed class SchedulerService : IDisposable
         _storage = storage;
         _sessionKnowledgeState = sessionKnowledgeState;
         _computerUseDesktop = computerUseDesktop;
+        _teamOrchestrator = teamOrchestrator;
         _settings = settings;
         _logger = logger.ForContext("SchedulerService");
     }
@@ -163,7 +167,19 @@ public sealed class SchedulerService : IDisposable
                 return;
             }
 
+            if (keepAwake)
+            {
+                SystemKeepAwakeHelper.Acquire();
+                acquiredKeepAwake = true;
+            }
+
             var mode = ScheduleTiming.ResolveMode(task, schedule);
+            if (ScheduleTiming.IsTeamsMode(mode))
+            {
+                await ExecuteTeamsTaskAsync(task, workspaceRoot, cts.Token).ConfigureAwait(false);
+                return;
+            }
+
             var (allowToolCalls, maxRounds) = ScheduleTiming.ResolveModeOptions(mode);
             var computerUseActive = task.ComputerUse;
             if (computerUseActive)
@@ -173,17 +189,11 @@ public sealed class SchedulerService : IDisposable
                 // Minimize shell so BitBlt captures the desktop (same as interactive CU).
                 desktopCapture = await _computerUseDesktop.BeginAsync(cts.Token).ConfigureAwait(false);
                 // Keep the machine awake while capturing / interacting with the desktop.
-                if (!keepAwake)
+                if (!acquiredKeepAwake)
                 {
                     SystemKeepAwakeHelper.Acquire();
                     acquiredKeepAwake = true;
                 }
-            }
-
-            if (keepAwake && !acquiredKeepAwake)
-            {
-                SystemKeepAwakeHelper.Acquire();
-                acquiredKeepAwake = true;
             }
 
             var modelOverride = ScheduleTiming.ResolveModelName(task, schedule, _settings.Model.ModelName);
@@ -257,7 +267,7 @@ public sealed class SchedulerService : IDisposable
 
             var lastMessage = result.Messages.LastOrDefault(m => m.Role == MessageRole.Assistant);
             var resultText = lastMessage?.Content ?? "(无返回)";
-            var truncated = resultText.Length > 500 ? resultText[..500] + "…" : resultText;
+            var truncated = Truncate(resultText);
 
             task.LastStatus = "success";
             task.LastMessage = truncated;
@@ -323,6 +333,83 @@ public sealed class SchedulerService : IDisposable
             }
         }
     }
+
+    private async Task ExecuteTeamsTaskAsync(
+        ScheduledTask task,
+        string workspaceRoot,
+        CancellationToken cancellationToken)
+    {
+        if (!_settings.Teams.Enabled)
+        {
+            FailTask(task, "请先在 Teams 页启用 Teams 功能");
+            return;
+        }
+
+        var teamId = task.TeamId?.Trim();
+        if (string.IsNullOrWhiteSpace(teamId))
+        {
+            FailTask(task, "未选择 Team");
+            return;
+        }
+
+        var prompt = ScheduleTiming.BuildPrompt(task, _settings.Schedule);
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            FailTask(task, "Prompt 为空");
+            return;
+        }
+
+        // Persist root session before orchestration so TeamMemberRunExecutor can inherit workspace.
+        var session = AgentSession.Create($"定时任务: {task.Title}")
+            .WithWorkspace(workspaceRoot)
+            .WithMessage(ChatMessage.Create(MessageRole.User, prompt));
+        await _storage.SaveSessionAsync(session, cancellationToken).ConfigureAwait(false);
+
+        _logger.Information(
+            "Executing Teams scheduled task: {Title} team={TeamId} session={SessionId}",
+            task.Title,
+            teamId,
+            session.Id);
+
+        var result = await _teamOrchestrator.StartAsync(
+            new TeamTaskStartRequest
+            {
+                TeamId = teamId,
+                RootSessionId = session.Id,
+                Goal = prompt,
+                WorkspacePath = workspaceRoot
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        var summary = result.Ok
+            ? (result.Summary ?? result.Task.FinalResult ?? result.Task.Error ?? "(无返回)")
+            : (result.Error ?? result.Task.Error ?? "Teams 任务失败");
+        var truncated = Truncate(summary);
+
+        session = session.WithMessage(ChatMessage.Create(MessageRole.Assistant, summary));
+        await _storage.SaveSessionAsync(session, cancellationToken).ConfigureAwait(false);
+
+        task.LastThreadId = session.Id;
+        var succeeded = result.Ok && result.Task.Status != TeamTaskStatus.Failed;
+        task.LastStatus = succeeded ? "success" : "error";
+        task.LastMessage = truncated;
+        NotifyStatus(task, task.LastStatus, truncated);
+        _logger.Information(
+            "Teams scheduled task finished: {Title} status={Status} taskId={TaskId}",
+            task.Title,
+            result.Task.Status,
+            result.Task.TaskId);
+    }
+
+    private void FailTask(ScheduledTask task, string message)
+    {
+        task.LastStatus = "error";
+        task.LastMessage = message;
+        NotifyStatus(task, "error", message);
+    }
+
+    private static string Truncate(string text) =>
+        text.Length > 500 ? text[..500] + "…" : text;
 
     private async Task PersistSettingsAsync()
     {

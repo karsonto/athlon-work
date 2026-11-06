@@ -6,6 +6,7 @@ using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
 
@@ -17,6 +18,7 @@ public partial class ScheduleTaskEditWindow : Window
     private readonly AppSettings _settings;
     private readonly IUserNotifier _notifier;
     private readonly ILocalizationService _loc;
+    private readonly ITeamDefinitionStore? _teamStore;
     private readonly List<SelectableRow> _skillRows = [];
     private readonly List<SelectableRow> _mcpRows = [];
     private readonly List<SelectableRow> _knowledgeRows = [];
@@ -29,6 +31,7 @@ public partial class ScheduleTaskEditWindow : Window
         IKnowledgeStore knowledgeStore,
         IUserNotifier notifier,
         ILocalizationService localization,
+        ITeamDefinitionStore? teamStore = null,
         bool isNew = false)
     {
         InitializeComponent();
@@ -36,6 +39,7 @@ public partial class ScheduleTaskEditWindow : Window
         _settings = settings;
         _notifier = notifier;
         _loc = localization;
+        _teamStore = teamStore;
         var dialogTitle = isNew ? _loc["Schedule_NewTitle"] : _loc["Schedule_EditTitle"];
         Title = dialogTitle;
         HeaderText.Text = dialogTitle;
@@ -57,10 +61,12 @@ public partial class ScheduleTaskEditWindow : Window
 
         KindCombo.SelectionChanged += (_, _) => UpdatePanels();
         UpdatePanels();
+        UpdateModePanels();
 
         PopulateSkills(skillCatalog, task);
         PopulateMcp(task);
         _ = PopulateKnowledgeAsync(knowledgeStore, task);
+        _ = PopulateTeamsAsync(task.TeamId);
     }
 
     private void PopulateSkills(IAgentSkillCatalog skillCatalog, ScheduledTask task)
@@ -124,6 +130,43 @@ public partial class ScheduleTaskEditWindow : Window
         KnowledgeList.ItemsSource = _knowledgeRows;
     }
 
+    private async Task PopulateTeamsAsync(string? selectedTeamId)
+    {
+        if (_teamStore is null)
+        {
+            TeamCombo.ItemsSource = Array.Empty<TeamOption>();
+            return;
+        }
+
+        try
+        {
+            var teams = await _teamStore.ListAsync().ConfigureAwait(true);
+            var options = teams
+                .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(t => new TeamOption(t.Id, string.IsNullOrWhiteSpace(t.Name) ? t.Id : t.Name))
+                .ToList();
+            TeamCombo.ItemsSource = options;
+
+            if (!string.IsNullOrWhiteSpace(selectedTeamId))
+            {
+                TeamCombo.SelectedValue = selectedTeamId;
+            }
+            else if (!string.IsNullOrWhiteSpace(_settings.Teams.SelectedTeamId)
+                     && options.Any(o => string.Equals(o.Id, _settings.Teams.SelectedTeamId, StringComparison.OrdinalIgnoreCase)))
+            {
+                TeamCombo.SelectedValue = _settings.Teams.SelectedTeamId;
+            }
+            else if (options.Count > 0)
+            {
+                TeamCombo.SelectedIndex = 0;
+            }
+        }
+        catch
+        {
+            TeamCombo.ItemsSource = Array.Empty<TeamOption>();
+        }
+    }
+
     private static void SelectComboByTag(ComboBox combo, string? tag, int fallbackIndex)
     {
         foreach (var item in combo.Items)
@@ -144,6 +187,16 @@ public partial class ScheduleTaskEditWindow : Window
         DailyPanel.Visibility = kind == "daily" ? Visibility.Visible : Visibility.Collapsed;
         IntervalPanel.Visibility = kind == "interval" ? Visibility.Visible : Visibility.Collapsed;
         AtPanel.Visibility = kind == "at" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ModeCombo_OnSelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateModePanels();
+
+    private void UpdateModePanels()
+    {
+        var mode = (ModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "agent";
+        var isTeams = ScheduleTiming.IsTeamsMode(mode);
+        TeamsPanel.Visibility = isTeams ? Visibility.Visible : Visibility.Collapsed;
+        AgentOptionsPanel.Visibility = isTeams ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>
@@ -268,6 +321,28 @@ public partial class ScheduleTaskEditWindow : Window
             return;
         }
 
+        var mode = (ModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "agent";
+        string? teamId = null;
+        if (ScheduleTiming.IsTeamsMode(mode))
+        {
+            if (!_settings.Teams.Enabled)
+            {
+                _notifier.Warning("Common_Prompt", "Schedule_TeamsDisabled");
+                ModeCombo.Focus();
+                return;
+            }
+
+            teamId = TeamCombo.SelectedValue as string
+                ?? (TeamCombo.SelectedItem as TeamOption)?.Id;
+            if (string.IsNullOrWhiteSpace(teamId))
+            {
+                var key = TeamCombo.Items.Count == 0 ? "Schedule_TeamsNoTeam" : "Schedule_TeamRequired";
+                _notifier.Warning("Common_Prompt", key);
+                TeamCombo.Focus();
+                return;
+            }
+        }
+
         _task.Title = TitleBox.Text.Trim();
         _task.Prompt = PromptBox.Text;
         _task.Kind = kind;
@@ -279,13 +354,25 @@ public partial class ScheduleTaskEditWindow : Window
             ? atValue.ToString(ScheduleTiming.AtTimeFormat)
             : _task.AtTime;
         _task.WorkspaceRoot = workspace;
-        _task.Mode = (ModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "agent";
-        _task.ComputerUse = ComputerUseCheck.IsChecked == true;
+        _task.Mode = mode;
+        _task.TeamId = teamId;
+        _task.ComputerUse = !ScheduleTiming.IsTeamsMode(mode) && ComputerUseCheck.IsChecked == true;
         var model = ModelBox.Text.Trim();
         _task.Model = string.IsNullOrWhiteSpace(model) ? "auto" : model;
-        _task.SkillNames = _skillRows.Where(r => r.IsChecked).Select(r => r.Id).ToList();
-        _task.McpServerNames = _mcpRows.Where(r => r.IsChecked).Select(r => r.Id).ToList();
-        _task.KnowledgeModuleIds = _knowledgeRows.Where(r => r.IsChecked).Select(r => r.Id).ToList();
+        if (ScheduleTiming.IsTeamsMode(mode))
+        {
+            // Teams runs use profile-scoped Skills/MCP/Knowledge; clear schedule overrides.
+            _task.SkillNames = [];
+            _task.McpServerNames = [];
+            _task.KnowledgeModuleIds = [];
+        }
+        else
+        {
+            _task.SkillNames = _skillRows.Where(r => r.IsChecked).Select(r => r.Id).ToList();
+            _task.McpServerNames = _mcpRows.Where(r => r.IsChecked).Select(r => r.Id).ToList();
+            _task.KnowledgeModuleIds = _knowledgeRows.Where(r => r.IsChecked).Select(r => r.Id).ToList();
+        }
+
         _task.UpdatedAt = DateTime.UtcNow.ToString("O");
 
         // A consumed one-shot is auto-disabled after firing. Moving it to a future moment is an
@@ -315,4 +402,6 @@ public partial class ScheduleTaskEditWindow : Window
         public string Display { get; }
         public bool IsChecked { get; set; }
     }
+
+    public sealed record TeamOption(string Id, string Name);
 }

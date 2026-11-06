@@ -17,7 +17,11 @@ using Athlon.Agent.Core.Plan;
 
 using Athlon.Agent.Core.Sso;
 
+using Athlon.Agent.Core.Storage;
+
 using Athlon.Agent.Core.SubAgents;
+
+using Athlon.Agent.Core.Teams;
 
 using Athlon.Agent.Infrastructure;
 
@@ -204,7 +208,9 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<AppSettings>(),
             sp.GetRequiredService<ISessionPlanArtifactsClearer>(),
             sp.GetRequiredService<IPlanContinuationTracker>(),
-            sp.GetRequiredService<IAppLogger>()));
+            sp.GetRequiredService<IAppLogger>(),
+            teamStore: sp.GetRequiredService<ITeamDefinitionStore>(),
+            settingsRepository: sp.GetRequiredService<IAppSettingsRepository>()));
 
         services.AddSingleton<DebugActionBarViewModel>();
         services.AddSingleton<PlanActionBarViewModel>();

@@ -6,6 +6,8 @@ using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Plan;
+using Athlon.Agent.Core.Storage;
+using Athlon.Agent.Core.Teams;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -20,6 +22,8 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject, IDispos
     private readonly AppSettings _appSettings;
     private readonly ISessionPlanArtifactsClearer? _planArtifactsClearer;
     private readonly IPlanContinuationTracker? _planContinuationTracker;
+    private readonly ITeamDefinitionStore? _teamStore;
+    private readonly IAppSettingsRepository? _settingsRepository;
     private readonly IAppLogger? _logger;
     private string _sessionId = "";
     private bool _disposed;
@@ -51,7 +55,9 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject, IDispos
         ISessionPlanArtifactsClearer? planArtifactsClearer,
         IPlanContinuationTracker? planContinuationTracker,
         IAppLogger? logger,
-        Func<TimeSpan, Func<Task>, IDisposable>? autoClearScheduler = null)
+        Func<TimeSpan, Func<Task>, IDisposable>? autoClearScheduler = null,
+        ITeamDefinitionStore? teamStore = null,
+        IAppSettingsRepository? settingsRepository = null)
     {
         _harnessState = harnessState;
         _taskListStore = taskListStore;
@@ -60,6 +66,8 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject, IDispos
         _appSettings = appSettings;
         _planArtifactsClearer = planArtifactsClearer;
         _planContinuationTracker = planContinuationTracker;
+        _teamStore = teamStore;
+        _settingsRepository = settingsRepository;
         _logger = logger?.ForContext("ComposerHarnessViewModel");
         AutoClearSchedulerOverride = autoClearScheduler;
         AppCultureManager.CultureChanged += OnCultureChanged;
@@ -89,17 +97,24 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject, IDispos
 
     public ObservableCollection<SessionTaskItemViewModel> Tasks { get; } = new();
 
+    public ObservableCollection<TeamDefinition> AvailableTeams { get; } = new();
+
     [ObservableProperty]
     private SessionAgentMode _selectedMode = SessionAgentMode.Agent;
 
     [ObservableProperty]
     private bool _isModePickerOpen;
 
+    [ObservableProperty]
+    private TeamDefinition? _selectedTeam;
+
     public bool IsHarnessActive => SelectedMode == SessionAgentMode.Agent;
 
     public bool IsPlanMode => SelectedMode == SessionAgentMode.Plan;
 
     public bool IsDebugMode => SelectedMode == SessionAgentMode.Debug;
+
+    public bool IsTeamsMode => SelectedMode == SessionAgentMode.Teams;
 
     public bool ShowTaskPanel => IsHarnessActive && Tasks.Count > 0;
 
@@ -108,6 +123,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject, IDispos
         SessionAgentMode.Ask => _loc["Harness_Mode_Ask_Tooltip"],
         SessionAgentMode.Plan => _loc["Harness_Mode_Plan_Tooltip"],
         SessionAgentMode.Debug => _loc["Harness_Mode_Debug_Tooltip"],
+        SessionAgentMode.Teams => _loc["Harness_Mode_Teams_Tooltip"],
         _ => _loc["Harness_Mode_Agent_Tooltip"],
     };
 
@@ -116,6 +132,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject, IDispos
         SessionAgentMode.Ask => _loc["Harness_Mode_Ask"],
         SessionAgentMode.Plan => _loc["Harness_Mode_Plan"],
         SessionAgentMode.Debug => _loc["Harness_Mode_Debug"],
+        SessionAgentMode.Teams => _loc["Harness_Mode_Teams"],
         _ => _loc["Harness_Mode_Agent"],
     };
 
@@ -203,8 +220,28 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject, IDispos
         _sessionId = sessionId;
         await _harnessState.LoadAsync(sessionId).ConfigureAwait(true);
         SelectedMode = _harnessState.GetMode(sessionId);
+        await RefreshTeamsAsync().ConfigureAwait(true);
         await RefreshTasksAsync().ConfigureAwait(true);
         NotifyHarnessStateChanged();
+    }
+
+    public async Task RefreshTeamsAsync()
+    {
+        if (_teamStore is null)
+        {
+            return;
+        }
+
+        var previousId = SelectedTeam?.Id ?? _appSettings.Teams.SelectedTeamId;
+        AvailableTeams.Clear();
+        foreach (var team in await _teamStore.ListAsync().ConfigureAwait(true))
+        {
+            AvailableTeams.Add(team);
+        }
+
+        SelectedTeam = AvailableTeams.FirstOrDefault(t =>
+                           string.Equals(t.Id, previousId, StringComparison.OrdinalIgnoreCase))
+                       ?? AvailableTeams.FirstOrDefault();
     }
 
     [RelayCommand]
@@ -249,10 +286,30 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject, IDispos
             await RefreshTasksAsync().ConfigureAwait(true);
         }
 
+        if (mode == SessionAgentMode.Teams)
+        {
+            await RefreshTeamsAsync().ConfigureAwait(true);
+        }
+
         NotifyHarnessStateChanged();
         if (OnModeChangedAsync is not null)
         {
             await OnModeChangedAsync(previous, mode).ConfigureAwait(true);
+        }
+    }
+
+    partial void OnSelectedTeamChanged(TeamDefinition? value)
+    {
+        var id = value?.Id;
+        if (string.Equals(_appSettings.Teams.SelectedTeamId, id, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _appSettings.Teams.SelectedTeamId = id;
+        if (_settingsRepository is not null)
+        {
+            _ = _settingsRepository.SaveSettingsAsync(_appSettings);
         }
     }
 
@@ -459,6 +516,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject, IDispos
         OnPropertyChanged(nameof(IsHarnessActive));
         OnPropertyChanged(nameof(IsPlanMode));
         OnPropertyChanged(nameof(IsDebugMode));
+        OnPropertyChanged(nameof(IsTeamsMode));
     }
 
     partial void OnSelectedModeChanged(SessionAgentMode value) => NotifyHarnessStateChanged();

@@ -238,6 +238,21 @@ public partial class WebChatView
                         var openUrl = root.TryGetProperty("url", out var openUrlElement)
                             ? openUrlElement.GetString()
                             : null;
+                        if (!string.IsNullOrWhiteSpace(openUrl)
+                            && openUrl.StartsWith("athlon://team-trace", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (Dispatcher.CheckAccess())
+                            {
+                                TeamTraceLinkRequested?.Invoke(this, openUrl);
+                            }
+                            else
+                            {
+                                Dispatcher.BeginInvoke(() => TeamTraceLinkRequested?.Invoke(this, openUrl));
+                            }
+
+                            break;
+                        }
+
                         RequestOpenExternalLink(openUrl);
                         break;
                     case "toolApproval":

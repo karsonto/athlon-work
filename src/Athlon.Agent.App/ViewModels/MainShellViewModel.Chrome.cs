@@ -47,6 +47,19 @@ public partial class MainShellViewModel
         CurrentPage = AppPageExtensions.Parse(page);
     }
 
+    /// <summary>Return to the page that navigated into the current page (falls back to Chat).</summary>
+    [RelayCommand]
+    private void NavigateBack()
+    {
+        var target = _pageBeforeCurrent;
+        if (target == CurrentPage)
+        {
+            target = AppPage.Chat;
+        }
+
+        CurrentPage = target;
+    }
+
     void INavigationService.Navigate(AppPage page) => CurrentPage = page;
 
     /// <summary>Chat / shell entry: open Trace popup for the latest Team task of the active session.</summary>
@@ -54,6 +67,150 @@ public partial class MainShellViewModel
     private async Task OpenLatestTeamTraceAsync()
     {
         await TeamsPageVm.OpenLatestTraceAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Chat Teams mode send interceptor. Returns true when the composer submit was handled as a
+    /// Team Task (including validation failures that should not fall through to a normal turn).
+    /// </summary>
+    private async Task<bool> TrySubmitTeamsGoalFromChatAsync(string goal)
+    {
+        if (ComposerHarness.SelectedMode != Athlon.Agent.Core.Harness.SessionAgentMode.Teams)
+        {
+            return false;
+        }
+
+        if (!_appSettings.Teams.Enabled)
+        {
+            ShowShellToast(_loc["Teams_DisabledToast"], ShellToastKind.Error);
+            return true;
+        }
+
+        var team = ComposerHarness.SelectedTeam;
+        if (team is null)
+        {
+            await ComposerHarness.RefreshTeamsAsync().ConfigureAwait(true);
+            team = ComposerHarness.SelectedTeam;
+        }
+
+        if (team is null)
+        {
+            ShowShellToast(_loc["Teams_NoTeamToast"], ShellToastKind.Error);
+            return true;
+        }
+
+        if (_sessionTurns.IsRunning(_displayedSessionId))
+        {
+            ShowShellToast(_loc["AskUser_BusyCannotSubmit"], ShellToastKind.Error);
+            return true;
+        }
+
+        await EnsureDisplayedSessionReadyAsync().ConfigureAwait(true);
+        ShowShellToast(_loc["Teams_RunningToast"], ShellToastKind.Info);
+        SetComposerStatus($"Teams · {team.Name}");
+        IsBusy = true;
+
+        var userMessage = _activeUi.AppendLocalUserMessage(goal);
+        _session = _session.WithMessage(userMessage);
+        await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
+
+        try
+        {
+            var (ok, message, task) = await TeamsPageVm
+                .RunTeamGoalAsync(_displayedSessionId, goal, team.Id)
+                .ConfigureAwait(true);
+
+            string summaryMarkdown;
+            if (ok && task is not null)
+            {
+                var status = task.Status.ToString();
+                summaryMarkdown = _loc.Format(
+                    "Teams_ChatSummaryOk",
+                    team.Name,
+                    status,
+                    task.TaskId);
+                ShowShellToast(
+                    _loc.Format("Teams_CompletedToast", status),
+                    ShellToastKind.Success);
+            }
+            else
+            {
+                summaryMarkdown = _loc.Format(
+                    "Teams_ChatSummaryFail",
+                    team.Name,
+                    message);
+                ShowShellToast(
+                    _loc.Format("Teams_FailedToast", message),
+                    ShellToastKind.Error);
+            }
+
+            var assistantMessage = _activeUi.AppendLocalAssistantMessage(summaryMarkdown);
+            _session = _session.WithMessage(assistantMessage);
+            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
+        }
+        finally
+        {
+            IsBusy = false;
+            SetComposerStatus(null);
+            NotifyCommandStatesChanged();
+        }
+
+        return true;
+    }
+
+    private async void OnTeamTraceLinkRequested(object? sender, string uri)
+    {
+        try
+        {
+            if (!TryParseTeamTraceDeepLink(uri, out var taskId))
+            {
+                ShowShellToast(_loc["Teams_NoTeamToast"], ShellToastKind.Error);
+                return;
+            }
+
+            await TeamsPageVm.OpenTraceByTaskIdAsync(_displayedSessionId, taskId).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            ShowShellToast(ex.Message, ShellToastKind.Error);
+        }
+    }
+
+    private static bool TryParseTeamTraceDeepLink(string? uri, out string taskId)
+    {
+        taskId = "";
+        if (string.IsNullOrWhiteSpace(uri)
+            || !uri.StartsWith("athlon://team-trace", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // athlon://team-trace?taskId=tm_xxx  or athlon://team-trace/tm_xxx
+        var queryIndex = uri.IndexOf('?', StringComparison.Ordinal);
+        if (queryIndex >= 0)
+        {
+            var query = uri[(queryIndex + 1)..];
+            foreach (var part in query.Split('&', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var kv = part.Split('=', 2);
+                if (kv.Length == 2
+                    && string.Equals(kv[0], "taskId", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(kv[1]))
+                {
+                    taskId = Uri.UnescapeDataString(kv[1]);
+                    return true;
+                }
+            }
+        }
+
+        var path = uri["athlon://team-trace".Length..].TrimStart('/', '?');
+        if (!string.IsNullOrWhiteSpace(path) && !path.Contains('=', StringComparison.Ordinal))
+        {
+            taskId = Uri.UnescapeDataString(path);
+            return true;
+        }
+
+        return false;
     }
 
     [RelayCommand]
@@ -364,6 +521,7 @@ public partial class MainShellViewModel
         {
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
+            _savedChatView.TeamTraceLinkRequested -= OnTeamTraceLinkRequested;
             _savedChatView.ForkChatRequested -= OnForkChatRequested;
             _savedChatView.ReportDownloadRequested -= OnReportDownloadRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
@@ -372,6 +530,7 @@ public partial class MainShellViewModel
         }
 
         _savedChatView = chatView;
+        chatView.TeamTraceLinkRequested += OnTeamTraceLinkRequested;
         chatView.OlderMessagesRequested += OnOlderMessagesRequested;
         chatView.ExternalLinkRequested += OnChatExternalLinkRequested;
         chatView.ForkChatRequested += OnForkChatRequested;

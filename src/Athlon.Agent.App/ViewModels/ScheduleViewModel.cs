@@ -5,6 +5,7 @@ using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -18,6 +19,7 @@ public sealed partial class ScheduleViewModel : ObservableObject
     private readonly SchedulerService _scheduler;
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly IKnowledgeStore _knowledgeStore;
+    private readonly ITeamDefinitionStore _teamStore;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
     private readonly Func<string, Task>? _openSession;
@@ -29,6 +31,7 @@ public sealed partial class ScheduleViewModel : ObservableObject
         SchedulerService scheduler,
         IAgentSkillCatalog skillCatalog,
         IKnowledgeStore knowledgeStore,
+        ITeamDefinitionStore teamStore,
         Lazy<ISessionHost> sessionHost,
         ILocalizationService localization,
         IUserNotifier notifier)
@@ -38,6 +41,7 @@ public sealed partial class ScheduleViewModel : ObservableObject
         _scheduler = scheduler;
         _skillCatalog = skillCatalog;
         _knowledgeStore = knowledgeStore;
+        _teamStore = teamStore;
         _loc = localization;
         _notifier = notifier;
         _openSession = id => sessionHost.Value.OpenSessionByIdAsync(id);
@@ -135,6 +139,7 @@ public sealed partial class ScheduleViewModel : ObservableObject
             _scheduler,
             _skillCatalog,
             _knowledgeStore,
+            _teamStore,
             _loc,
             _notifier,
             onDeleted: HandleTaskDeleted,
@@ -272,6 +277,7 @@ public sealed partial class ScheduleViewModel : ObservableObject
             _knowledgeStore,
             _notifier,
             _loc,
+            _teamStore,
             isNew: true);
         window.Owner = Application.Current.MainWindow;
         if (window.ShowDialog() != true)

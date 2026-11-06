@@ -17,6 +17,7 @@ namespace Athlon.Agent.Infrastructure.Teams;
 public sealed class TeamMemberRunExecutor(
     AppSettings settings,
     IServiceProvider serviceProvider,
+    IFileStorageService storage,
     ITeamTaskStore taskStore,
     ISessionKnowledgeState sessionKnowledgeState,
     IJsonFileStore jsonFileStore,
@@ -67,6 +68,9 @@ public sealed class TeamMemberRunExecutor(
             runtimeDiagnosticEventSink: serviceProvider.GetService<IRuntimeDiagnosticEventSink>(),
             logger: logger);
 
+        var rootSession = await storage.LoadSessionAsync(task.RootSessionId, cancellationToken)
+            .ConfigureAwait(false);
+
         var memberDir = taskStore.ResolveMemberDirectory(task.RootSessionId, task.TaskId, memberSessionId);
         Directory.CreateDirectory(memberDir);
 
@@ -75,12 +79,14 @@ public sealed class TeamMemberRunExecutor(
         if (File.Exists(sessionPath))
         {
             session = await jsonFileStore.LoadAsync<AgentSession>(sessionPath, cancellationToken).ConfigureAwait(false)
-                ?? CreateMemberSession(task, memberSessionId, profile);
+                ?? CreateMemberSession(task, memberSessionId, profile, rootSession);
         }
         else
         {
-            session = CreateMemberSession(task, memberSessionId, profile);
+            session = CreateMemberSession(task, memberSessionId, profile, rootSession);
         }
+
+        session = InheritWorkspaceFromRoot(session, rootSession);
 
         if (!string.IsNullOrWhiteSpace(profile.ModelNameOverride))
         {
@@ -89,28 +95,29 @@ public sealed class TeamMemberRunExecutor(
 
         await EnsureKnowledgeAsync(memberSessionId, profile, task.RootSessionId, cancellationToken).ConfigureAwait(false);
 
-        var ignorePatterns = WorkspaceIgnoreResolver.Resolve(
-            workspacePatterns: null,
-            globalPatterns: settings.WorkspaceIgnore.DirectoryNames);
+        var ignorePatterns = WorkspaceSessionResolver.ResolveIgnorePatterns(session, settings);
         var workspaceKind = runContextAccessor.Current?.WorkspaceKind
             ?? WorkspaceSessionResolver.ResolveKind(session, settings);
-        var workspaceRoot = string.IsNullOrWhiteSpace(session.ActiveWorkspace)
-            ? runContextAccessor.Current?.WorkspaceRoot
-            : workspaceKind == WorkspaceKind.Ssh
-                ? RemotePathNormalizer.NormalizeRoot(session.ActiveWorkspace)
-                : Path.GetFullPath(session.ActiveWorkspace);
+        var workspaceRoot = WorkspaceSessionResolver.NormalizeRoot(session, settings)
+            ?? runContextAccessor.Current?.WorkspaceRoot;
+
+        var parentSeed = rootSession?.WithWorkspace(session.ActiveWorkspace, session.ActiveWorkspaceId)
+            ?? new AgentSession(
+                task.RootSessionId,
+                string.Empty,
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow,
+                session.ActiveWorkspace,
+                null,
+                settings.Model.ModelName,
+                [])
+            {
+                ActiveWorkspaceId = session.ActiveWorkspaceId
+            };
 
         var parentContext = runContextAccessor.Current
             ?? AgentRunContext.CreateRoot(
-                new AgentSession(
-                    task.RootSessionId,
-                    string.Empty,
-                    DateTimeOffset.UtcNow,
-                    DateTimeOffset.UtcNow,
-                    workspaceRoot,
-                    null,
-                    settings.Model.ModelName,
-                    []),
+                parentSeed,
                 IdGen.NewId(),
                 router,
                 promptOrchestrator,
@@ -223,10 +230,15 @@ public sealed class TeamMemberRunExecutor(
             cancellationToken).ConfigureAwait(false);
     }
 
-    private AgentSession CreateMemberSession(TeamTask task, string memberSessionId, AgentProfile profile)
+    private AgentSession CreateMemberSession(
+        TeamTask task,
+        string memberSessionId,
+        AgentProfile profile,
+        AgentSession? rootSession)
     {
-        var root = runContextAccessor.Current;
-        var workspace = root?.WorkspaceRoot;
+        var workspace = rootSession?.ActiveWorkspace
+            ?? runContextAccessor.Current?.WorkspaceRoot
+            ?? SessionWorkspaceScope.CurrentState?.RootPath;
         return new AgentSession(
             memberSessionId,
             string.Empty,
@@ -235,7 +247,36 @@ public sealed class TeamMemberRunExecutor(
             workspace,
             null,
             profile.ModelNameOverride ?? settings.Model.ModelName,
-            []);
+            [])
+        {
+            ActiveWorkspaceId = rootSession?.ActiveWorkspaceId
+        };
+    }
+
+    /// <summary>
+    /// Keep Team member sessions aligned with the Chat root session workspace (path + id),
+    /// matching SubAgent inheritance. Falls back to ambient run/scope workspace when the root
+    /// session has none.
+    /// </summary>
+    private AgentSession InheritWorkspaceFromRoot(AgentSession member, AgentSession? rootSession)
+    {
+        var workspace = rootSession?.ActiveWorkspace
+            ?? runContextAccessor.Current?.WorkspaceRoot
+            ?? SessionWorkspaceScope.CurrentState?.RootPath;
+        var workspaceId = rootSession?.ActiveWorkspaceId;
+
+        if (string.IsNullOrWhiteSpace(workspace) && string.IsNullOrWhiteSpace(workspaceId))
+        {
+            return member;
+        }
+
+        if (string.Equals(member.ActiveWorkspace, workspace, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(member.ActiveWorkspaceId, workspaceId, StringComparison.OrdinalIgnoreCase))
+        {
+            return member;
+        }
+
+        return member.WithWorkspace(workspace, workspaceId);
     }
 
     private static string BuildCompletePrompt(AgentProfile profile, bool isLeader, TeamTask task)

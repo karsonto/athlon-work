@@ -3,6 +3,7 @@ using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -17,6 +18,7 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
     private readonly SchedulerService _scheduler;
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly IKnowledgeStore _knowledgeStore;
+    private readonly ITeamDefinitionStore _teamStore;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
     private readonly Action<ScheduleTaskItemViewModel>? _onDeleted;
@@ -29,6 +31,7 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
         SchedulerService scheduler,
         IAgentSkillCatalog skillCatalog,
         IKnowledgeStore knowledgeStore,
+        ITeamDefinitionStore teamStore,
         ILocalizationService localization,
         IUserNotifier notifier,
         Action<ScheduleTaskItemViewModel>? onDeleted = null,
@@ -40,6 +43,7 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
         _scheduler = scheduler;
         _skillCatalog = skillCatalog;
         _knowledgeStore = knowledgeStore;
+        _teamStore = teamStore;
         _loc = localization;
         _notifier = notifier;
         _onDeleted = onDeleted;
@@ -194,7 +198,8 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
             _skillCatalog,
             _knowledgeStore,
             _notifier,
-            _loc);
+            _loc,
+            _teamStore);
         window.Owner = System.Windows.Application.Current.MainWindow;
         if (window.ShowDialog() == true)
         {

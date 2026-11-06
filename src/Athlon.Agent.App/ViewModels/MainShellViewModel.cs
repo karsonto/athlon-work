@@ -224,7 +224,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             () => _workspaceContext.IgnorePatterns,
             TryCancelCompaction,
             CreateSlashCommandContext,
-            EnsureDisplayedSessionReadyAsync);
+            EnsureDisplayedSessionReadyAsync,
+            TrySubmitTeamsGoalFromChatAsync);
         _planSurface.Configure(
             () => _displayedSessionId,
             () => _session,
@@ -1038,6 +1039,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         {
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
+            _savedChatView.TeamTraceLinkRequested -= OnTeamTraceLinkRequested;
             _savedChatView.ForkChatRequested -= OnForkChatRequested;
             _savedChatView.ReportDownloadRequested -= OnReportDownloadRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
@@ -1057,11 +1059,19 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _runtime.Dispose();
     }
 
-    partial void OnCurrentPageChanged(AppPage value)
+    /// <summary>Page shown immediately before the current one; used by <c>NavigateBack</c>.</summary>
+    private AppPage _pageBeforeCurrent = AppPage.Chat;
+
+    partial void OnCurrentPageChanged(AppPage oldValue, AppPage newValue)
     {
-        CurrentPageView = _pageViewFactory.GetOrCreate(value);
+        if (oldValue != newValue)
+        {
+            _pageBeforeCurrent = oldValue;
+        }
+
+        CurrentPageView = _pageViewFactory.GetOrCreate(newValue);
         _navigation.HandlePageChanged(
-            value.ToPageKey(),
+            newValue.ToPageKey(),
             Settings,
             SchedulePageVm,
             KnowledgePageVm,

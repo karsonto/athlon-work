@@ -41,6 +41,12 @@
                             <Setter Property="BorderBrush" Value="{DynamicResource Brush.ModeDebugBorder}" />
                             <Setter Property="Foreground" Value="{DynamicResource Brush.ModeDebugForeground}" />
                         </DataTrigger>
+                        <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
+                                     Value="{x:Static harness:SessionAgentMode.Teams}">
+                            <Setter Property="Background" Value="{DynamicResource Brush.ModeTeamsBg}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.ModeTeamsBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.ModeTeamsForeground}" />
+                        </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </Button.Style>
@@ -69,6 +75,10 @@
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
                                                  Value="{x:Static harness:SessionAgentMode.Debug}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
+                                                 Value="{x:Static harness:SessionAgentMode.Teams}">
                                         <Setter Property="Visibility" Value="Collapsed" />
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -146,6 +156,36 @@
                             <Line X1="11.5" Y1="5.5" X2="13.5" Y2="3.5"
                                   Style="{StaticResource ModeIconStroke}"
                                   Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
+                        </Canvas>
+                    </Viewbox>
+                    <!-- Teams people -->
+                    <Viewbox Width="13" Height="13" Stretch="Uniform">
+                        <Viewbox.Style>
+                            <Style TargetType="Viewbox">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
+                                                 Value="{x:Static harness:SessionAgentMode.Teams}">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Viewbox.Style>
+                        <Canvas Width="16" Height="16">
+                            <Ellipse Canvas.Left="5.5" Canvas.Top="2" Width="5" Height="5"
+                                     Style="{StaticResource ModeIconStroke}"
+                                     Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
+                            <Path Data="M4,13.5 C4,11.2 5.8,10 8,10 C10.2,10 12,11.2 12,13.5"
+                                  Style="{StaticResource ModeIconStroke}"
+                                  Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
+                            <Ellipse Canvas.Left="1.5" Canvas.Top="3.5" Width="3.5" Height="3.5"
+                                     Style="{StaticResource ModeIconStroke}"
+                                     Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
+                                     Opacity="0.75" />
+                            <Ellipse Canvas.Left="11" Canvas.Top="3.5" Width="3.5" Height="3.5"
+                                     Style="{StaticResource ModeIconStroke}"
+                                     Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
+                                     Opacity="0.75" />
                         </Canvas>
                     </Viewbox>
                 </Grid>
@@ -437,9 +477,97 @@
                             </TextBlock>
                         </Grid>
                     </Button>
+
+                    <!-- Teams -->
+                    <Button Command="{Binding ComposerHarness.SelectModeCommand}"
+                            CommandParameter="{x:Static harness:SessionAgentMode.Teams}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource ComposerModeMenuItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
+                                                 Value="{x:Static harness:SessionAgentMode.Teams}">
+                                        <Setter Property="Background" Value="{DynamicResource Brush.MenuHover}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="28" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Viewbox Grid.Column="0"
+                                     Width="14"
+                                     Height="14"
+                                     HorizontalAlignment="Left"
+                                     Margin="1,0,0,0"
+                                     VerticalAlignment="Center">
+                                <Canvas Width="16" Height="16">
+                                    <Ellipse Canvas.Left="5.5" Canvas.Top="2" Width="5" Height="5"
+                                             Style="{StaticResource ModeIconStroke}"
+                                             Stroke="{DynamicResource Brush.ModeTeamsBorder}" />
+                                    <Path Data="M4,13.5 C4,11.2 5.8,10 8,10 C10.2,10 12,11.2 12,13.5"
+                                          Style="{StaticResource ModeIconStroke}"
+                                          Stroke="{DynamicResource Brush.ModeTeamsBorder}" />
+                                    <Ellipse Canvas.Left="1.5" Canvas.Top="3.5" Width="3.5" Height="3.5"
+                                             Style="{StaticResource ModeIconStroke}"
+                                             Stroke="{DynamicResource Brush.ModeTeamsBorder}"
+                                             Opacity="0.75" />
+                                    <Ellipse Canvas.Left="11" Canvas.Top="3.5" Width="3.5" Height="3.5"
+                                             Style="{StaticResource ModeIconStroke}"
+                                             Stroke="{DynamicResource Brush.ModeTeamsBorder}"
+                                             Opacity="0.75" />
+                                </Canvas>
+                            </Viewbox>
+                            <TextBlock Grid.Column="1"
+                                       Text="{loc:Localize Key=Harness_Mode_Teams}"
+                                       FontSize="13"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2"
+                                       Text="✓"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       Margin="16,0,2,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Brush.TextSecondary}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
+                                                         Value="{x:Static harness:SessionAgentMode.Teams}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Button>
                 </StackPanel>
                 </Border>
             </Border>
         </Popup>
+
+        <ComboBox Margin="8,0,0,0"
+                  MinWidth="140"
+                  MaxWidth="220"
+                  VerticalAlignment="Center"
+                  ToolTip="{loc:Localize Key=Harness_Teams_SelectTeam}"
+                  ItemsSource="{Binding ComposerHarness.AvailableTeams}"
+                  SelectedItem="{Binding ComposerHarness.SelectedTeam}"
+                  DisplayMemberPath="Name">
+            <ComboBox.Style>
+                <Style TargetType="ComboBox">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ComposerHarness.IsTeamsMode}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ComboBox.Style>
+        </ComboBox>
     </StackPanel>
 </UserControl>

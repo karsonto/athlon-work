@@ -437,6 +437,9 @@ Hold to talk</value>
   <data name="Common_Add" xml:space="preserve">
     <value>Add</value>
   </data>
+  <data name="Common_Back" xml:space="preserve">
+    <value>Back</value>
+  </data>
   <data name="Common_BackToChat" xml:space="preserve">
     <value>Back to chat</value>
   </data>
@@ -766,6 +769,44 @@ Hold to talk</value>
   </data>
   <data name="Harness_Mode_Debug_Tooltip" xml:space="preserve">
     <value>Investigate reproducible bugs with runtime JSONL logs: hypothesize → instrument → repro → analyze → fix → cleanup</value>
+  </data>
+  <data name="Harness_Mode_Teams" xml:space="preserve">
+    <value>Teams</value>
+  </data>
+  <data name="Harness_Mode_Teams_Tooltip" xml:space="preserve">
+    <value>Run a goal with a selected Agent Team: Leader plans and dispatches, Workers collaborate with optional redispatch, Trace opens as a popup</value>
+  </data>
+  <data name="Harness_Teams_SelectTeam" xml:space="preserve">
+    <value>Select Team</value>
+  </data>
+  <data name="Teams_DisabledToast" xml:space="preserve">
+    <value>Enable Teams on the Teams page first</value>
+  </data>
+  <data name="Teams_NoTeamToast" xml:space="preserve">
+    <value>Select a Team first (or create one on the Teams page)</value>
+  </data>
+  <data name="Teams_RunningToast" xml:space="preserve">
+    <value>Running Team Task…</value>
+  </data>
+  <data name="Teams_CompletedToast" xml:space="preserve">
+    <value>Team Task finished: {0}</value>
+  </data>
+  <data name="Teams_FailedToast" xml:space="preserve">
+    <value>Team Task failed: {0}</value>
+  </data>
+  <data name="Teams_ChatSummaryOk" xml:space="preserve">
+    <value>**Team Task · {0}**
+
+Status: {1}
+Task: `{2}`
+
+[Open Trace](athlon://team-trace?taskId={2})</value>
+  </data>
+  <data name="Teams_ChatSummaryFail" xml:space="preserve">
+    <value>**Team Task · {0}**
+
+Status: Failed
+Reason: {1}</value>
   </data>
   <data name="Debug_PhaseLabel" xml:space="preserve">
     <value>Debug phase: {0}</value>
@@ -1407,6 +1448,24 @@ Save anyway?</value>
   </data>
   <data name="Schedule_ModeAsk" xml:space="preserve">
     <value>Ask (read-only)</value>
+  </data>
+  <data name="Schedule_ModeTeams" xml:space="preserve">
+    <value>Teams (multi-agent)</value>
+  </data>
+  <data name="Schedule_Team" xml:space="preserve">
+    <value>Team</value>
+  </data>
+  <data name="Schedule_TeamHint" xml:space="preserve">
+    <value>Runs with the selected Team's Leader / Worker profiles; Skills / MCP / model come from those profiles.</value>
+  </data>
+  <data name="Schedule_TeamRequired" xml:space="preserve">
+    <value>Select a Team.</value>
+  </data>
+  <data name="Schedule_TeamsDisabled" xml:space="preserve">
+    <value>Enable Teams on the Teams page first.</value>
+  </data>
+  <data name="Schedule_TeamsNoTeam" xml:space="preserve">
+    <value>No Team available. Create one on the Teams page first.</value>
   </data>
   <data name="Schedule_ComputerUse" xml:space="preserve">
     <value>Enable Computer Use</value>

@@ -42,6 +42,10 @@ public sealed class UiChromeColors
     public required Color ModeDebugBg { get; init; }
     public required Color ModeDebugBorder { get; init; }
     public required Color ModeDebugForeground { get; init; }
+    /// <summary>Composer mode pill: Teams (teal / indigo).</summary>
+    public required Color ModeTeamsBg { get; init; }
+    public required Color ModeTeamsBorder { get; init; }
+    public required Color ModeTeamsForeground { get; init; }
     public required Color SurfaceHover { get; init; }
     public required Color SurfaceActive { get; init; }
     public required Color UserBubble { get; init; }

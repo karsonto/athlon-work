@@ -1,6 +1,7 @@
 <UserControl x:Class="Athlon.Agent.App.Views.TeamsPageView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
              xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
              Background="{DynamicResource Brush.ChatBackground}">
     <UserControl.Resources>
@@ -34,10 +35,17 @@
                                 ToolTip="新建 Team"
                                 Command="{Binding CreateTeamCommand}"
                                 Style="{StaticResource TeamsIconPrimaryButtonStyle}" />
-                        <TextBlock Text="Agent Teams"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Command="{Binding DataContext.NavigateBackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    Style="{StaticResource GhostIconButtonStyle}"
+                                    Margin="0,0,6,0"
+                                    ToolTip="{loc:Localize Key=Common_Back}"
+                                    Content="←" />
+                            <TextBlock Text="Agent Teams"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
                     </DockPanel>
                 </Border>
 
@@ -118,6 +126,10 @@
                                 Style="{StaticResource TeamsSecondaryButtonStyle}" Margin="0,0,8,0" />
                         <Button Content="打开 Trace" Command="{Binding OpenSelectedTraceCommand}"
                                 Style="{StaticResource TeamsSecondaryButtonStyle}" Margin="0,0,8,0" />
+                        <Button Content="删除 Team" Command="{Binding DeleteTeamCommand}"
+                                Style="{StaticResource TeamsDangerButtonStyle}"
+                                Margin="0,0,8,0"
+                                IsEnabled="{Binding HasSelectedTeam}" />
                         <Button Content="保存" Command="{Binding SaveAllCommand}"
                                 Style="{StaticResource TeamsPrimaryButtonStyle}" />
                     </StackPanel>
@@ -174,9 +186,17 @@
                                              AcceptsReturn="True" TextWrapping="Wrap" Height="72" Margin="0,0,0,4" />
 
                                     <DockPanel Margin="0,12,0,10">
-                                        <Button DockPanel.Dock="Right" Content="＋ 添加 Worker"
-                                                Command="{Binding AddWorkerCommand}"
-                                                Style="{StaticResource TeamsSecondaryButtonStyle}" />
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                            <Button Content="删除 Worker"
+                                                    Command="{Binding DeleteWorkerCommand}"
+                                                    CommandParameter="{Binding SelectedMember}"
+                                                    Style="{StaticResource TeamsDangerButtonStyle}"
+                                                    Margin="0,0,8,0"
+                                                    Visibility="{Binding CanDeleteSelectedWorker, Converter={StaticResource BoolToVis}}" />
+                                            <Button Content="＋ 添加 Worker"
+                                                    Command="{Binding AddWorkerCommand}"
+                                                    Style="{StaticResource TeamsSecondaryButtonStyle}" />
+                                        </StackPanel>
                                         <TextBlock Text="成员" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     </DockPanel>
 
@@ -187,30 +207,48 @@
                                                         MouseLeftButtonUp="OnMemberCardClick">
                                                     <StackPanel>
                                                         <DockPanel>
-                                                            <Border DockPanel.Dock="Right">
-                                                                <Border.Style>
-                                                                    <Style TargetType="Border" BasedOn="{StaticResource TeamsBadgeStyle}">
-                                                                        <Setter Property="Background" Value="{StaticResource Teams.WorkerSoft}" />
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding IsLeader}" Value="True">
-                                                                                <Setter Property="Background" Value="{StaticResource Teams.LeaderSoft}" />
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </Border.Style>
-                                                                <TextBlock Text="{Binding RoleLabel}" FontSize="11" FontWeight="SemiBold">
-                                                                    <TextBlock.Style>
-                                                                        <Style TargetType="TextBlock">
-                                                                            <Setter Property="Foreground" Value="{StaticResource Teams.Worker}" />
+                                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                                                                <Button Content="删除"
+                                                                        Margin="0,0,8,0"
+                                                                        Command="{Binding DataContext.DeleteWorkerCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        PreviewMouseLeftButtonDown="OnDeleteWorkerButtonPreviewMouseDown">
+                                                                    <Button.Style>
+                                                                        <Style TargetType="Button" BasedOn="{StaticResource TeamsDangerLinkButtonStyle}">
+                                                                            <Setter Property="Visibility" Value="Visible" />
                                                                             <Style.Triggers>
                                                                                 <DataTrigger Binding="{Binding IsLeader}" Value="True">
-                                                                                    <Setter Property="Foreground" Value="{StaticResource Teams.Leader}" />
+                                                                                    <Setter Property="Visibility" Value="Collapsed" />
                                                                                 </DataTrigger>
                                                                             </Style.Triggers>
                                                                         </Style>
-                                                                    </TextBlock.Style>
-                                                                </TextBlock>
-                                                            </Border>
+                                                                    </Button.Style>
+                                                                </Button>
+                                                                <Border>
+                                                                    <Border.Style>
+                                                                        <Style TargetType="Border" BasedOn="{StaticResource TeamsBadgeStyle}">
+                                                                            <Setter Property="Background" Value="{StaticResource Teams.WorkerSoft}" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsLeader}" Value="True">
+                                                                                    <Setter Property="Background" Value="{StaticResource Teams.LeaderSoft}" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Border.Style>
+                                                                    <TextBlock Text="{Binding RoleLabel}" FontSize="11" FontWeight="SemiBold">
+                                                                        <TextBlock.Style>
+                                                                            <Style TargetType="TextBlock">
+                                                                                <Setter Property="Foreground" Value="{StaticResource Teams.Worker}" />
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding IsLeader}" Value="True">
+                                                                                        <Setter Property="Foreground" Value="{StaticResource Teams.Leader}" />
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </TextBlock.Style>
+                                                                    </TextBlock>
+                                                                </Border>
+                                                            </StackPanel>
 
                                                             <StackPanel Orientation="Horizontal">
                                                                 <Border Width="28" Height="28" CornerRadius="8" Margin="0,0,8,0">
@@ -299,7 +337,12 @@
                                         <StackPanel>
                                             <TextBlock Text="运行 Team Task" FontWeight="SemiBold" Margin="0,0,0,6" />
                                             <TextBox Text="{Binding RunGoal, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
-                                            <Button Content="运行所选 Team"
+                                            <TextBlock Text="推荐在 Chat 切换到 Teams 模式发送目标。此处试跑仍需当前会话。"
+                                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,0,0,8" />
+                                            <Button Content="试跑（当前 Chat 会话）"
                                                     Command="{Binding RunSelectedTeamCommand}"
                                                     HorizontalAlignment="Left">
                                                 <Button.Style>
@@ -393,7 +436,8 @@
                                                 <TextBlock Text="允许被循环重派" Style="{StaticResource TeamsFieldLabelStyle}" />
                                                 <CheckBox Content="是 · Leader 可多次 dispatch"
                                                           IsChecked="{Binding EditingAllowRedispatch}"
-                                                          VerticalAlignment="Center" />
+                                                          VerticalAlignment="Center"
+                                                          Style="{StaticResource TeamsCheckBoxStyle}" />
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Margin="8,0,0,0">
                                                 <TextBlock Text="MaxIterations（防死循环）" Style="{StaticResource TeamsFieldLabelStyle}" />
@@ -460,7 +504,7 @@
                                                         <CheckBox Content="{Binding Label}"
                                                                   IsChecked="{Binding IsChecked}"
                                                                   IsEnabled="{Binding IsEnabled}"
-                                                                  FontSize="12" />
+                                                                  Style="{StaticResource TeamsCheckBoxStyle}" />
                                                     </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
@@ -476,7 +520,9 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:CapabilityOptionViewModel}">
                                                     <Border Style="{StaticResource TeamsCheckItemStyle}">
-                                                        <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" FontSize="12" />
+                                                        <CheckBox Content="{Binding Label}"
+                                                                  IsChecked="{Binding IsChecked}"
+                                                                  Style="{StaticResource TeamsCheckBoxStyle}" />
                                                     </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
@@ -492,7 +538,9 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:CapabilityOptionViewModel}">
                                                     <Border Style="{StaticResource TeamsCheckItemStyle}">
-                                                        <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" FontSize="12" />
+                                                        <CheckBox Content="{Binding Label}"
+                                                                  IsChecked="{Binding IsChecked}"
+                                                                  Style="{StaticResource TeamsCheckBoxStyle}" />
                                                     </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
@@ -508,7 +556,9 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:CapabilityOptionViewModel}">
                                                     <Border Style="{StaticResource TeamsCheckItemStyle}">
-                                                        <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" FontSize="12" />
+                                                        <CheckBox Content="{Binding Label}"
+                                                                  IsChecked="{Binding IsChecked}"
+                                                                  Style="{StaticResource TeamsCheckBoxStyle}" />
                                                     </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
