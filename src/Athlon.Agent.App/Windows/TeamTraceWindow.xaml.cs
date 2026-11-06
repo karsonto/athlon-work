@@ -13,19 +13,31 @@ public partial class TeamTraceWindow : Window
     private readonly TeamTask _task;
     private readonly IReadOnlyList<TeamTraceEvent> _events;
     private readonly ITeamTraceStore? _traceStore;
+    private readonly string? _teamName;
 
-    private TeamTraceWindow(TeamTask task, IReadOnlyList<TeamTraceEvent> events, ITeamTraceStore? traceStore)
+    private TeamTraceWindow(
+        TeamTask task,
+        IReadOnlyList<TeamTraceEvent> events,
+        ITeamTraceStore? traceStore,
+        string? teamName)
     {
         _task = task;
         _events = events;
         _traceStore = traceStore;
+        _teamName = teamName;
         InitializeComponent();
-        Title = $"Team Trace · {task.TaskId}";
+        var label = string.IsNullOrWhiteSpace(teamName) ? task.TeamId : teamName;
+        Title = $"Team Trace · {label}";
         TitleText.Text = Title;
         Loaded += OnLoaded;
     }
 
-    public static void ShowOrFocus(TeamTask task, IReadOnlyList<TeamTraceEvent> events, Window? owner, ITeamTraceStore? traceStore = null)
+    public static void ShowOrFocus(
+        TeamTask task,
+        IReadOnlyList<TeamTraceEvent> events,
+        Window? owner,
+        ITeamTraceStore? traceStore = null,
+        string? teamName = null)
     {
         if (_singleton is { IsLoaded: true })
         {
@@ -33,7 +45,7 @@ public partial class TeamTraceWindow : Window
             _singleton = null;
         }
 
-        var window = new TeamTraceWindow(task, events, traceStore);
+        var window = new TeamTraceWindow(task, events, traceStore, teamName);
         _singleton = window;
         if (owner is not null)
         {
@@ -62,7 +74,7 @@ public partial class TeamTraceWindow : Window
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.IsStatusBarEnabled = false;
             core.WebMessageReceived += OnWebMessageReceived;
-            core.NavigateToString(TeamTraceHtml.Build(_task, _events));
+            core.NavigateToString(TeamTraceHtml.Build(_task, _events, _teamName));
         }
         catch (Exception ex)
         {
@@ -72,16 +84,22 @@ public partial class TeamTraceWindow : Window
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if (_traceStore is null)
-        {
-            return;
-        }
-
         try
         {
             using var doc = JsonDocument.Parse(e.WebMessageAsJson);
-            if (!doc.RootElement.TryGetProperty("type", out var typeEl)
-                || !string.Equals(typeEl.GetString(), "traceLayout", StringComparison.Ordinal))
+            if (!doc.RootElement.TryGetProperty("type", out var typeEl))
+            {
+                return;
+            }
+
+            var type = typeEl.GetString();
+            if (string.Equals(type, "close", StringComparison.Ordinal))
+            {
+                Dispatcher.Invoke(Close);
+                return;
+            }
+
+            if (!string.Equals(type, "traceLayout", StringComparison.Ordinal) || _traceStore is null)
             {
                 return;
             }

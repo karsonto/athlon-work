@@ -17,28 +17,38 @@
                             ResizeBorderThickness="8"
                             UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
-    <Grid Margin="16">
+    <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="28" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0"
-              Margin="0,0,0,10"
-              MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
-            <TextBlock x:Name="TitleText"
-                       Style="{StaticResource PreviewWindowTitleStyle}"
-                       Text="Team Trace" />
-            <Button HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
-                    Click="CloseButton_OnClick"
-                    ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
-                    shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                    Style="{StaticResource WindowCloseCaptionButtonStyle}" />
-        </Grid>
+        <Border Grid.Row="0"
+                Background="{DynamicResource Brush.Panel}"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,0,0,1"
+                MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
+            <Grid Margin="12,0,8,0">
+                <TextBlock x:Name="TitleText"
+                           Text="Team Trace"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Brush.SubtleText}" />
+                <Button HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Click="CloseButton_OnClick"
+                        ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                        Style="{StaticResource WindowCloseCaptionButtonStyle}" />
+            </Grid>
+        </Border>
 
         <Border Grid.Row="1"
-                Style="{StaticResource PreviewContentFrameStyle}">
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="1"
+                CornerRadius="0"
+                ClipToBounds="True">
             <wv2:WebView2 x:Name="TraceWebView" />
         </Border>
     </Grid>

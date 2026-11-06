@@ -12,6 +12,7 @@
         <ResourceDictionary Source="Controls.xaml" />
         <ResourceDictionary Source="ChatStyles.xaml" />
         <ResourceDictionary Source="ChatNavIconStyles.xaml" />
+        <ResourceDictionary Source="TeamsPageStyles.xaml" />
         <ResourceDictionary Source="TaskListStyles.xaml" />
         <ResourceDictionary Source="Overlays.xaml" />
     </ResourceDictionary.MergedDictionaries>
