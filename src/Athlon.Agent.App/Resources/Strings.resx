@@ -795,18 +795,20 @@
     <value>用户停止</value>
   </data>
   <data name="Teams_ChatSummaryOk" xml:space="preserve">
-    <value>**Team Task · {0}**
+    <value>{0}
 
-状态：{1}
-任务：`{2}`
-
-[打开 Trace](athlon://team-trace?taskId={2})</value>
+[查看 Trace](athlon://team-trace?taskId={1})</value>
   </data>
   <data name="Teams_ChatSummaryFail" xml:space="preserve">
-    <value>**Team Task · {0}**
+    <value>{0}
 
-状态：失败
-原因：{1}</value>
+[查看 Trace](athlon://team-trace?taskId={1})</value>
+  </data>
+  <data name="Teams_ChatSummaryFailNoTrace" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="Teams_TraceBubbleLabel" xml:space="preserve">
+    <value>查看 Trace</value>
   </data>
   <data name="Debug_PhaseLabel" xml:space="preserve">
     <value>Debug 阶段：{0}</value>

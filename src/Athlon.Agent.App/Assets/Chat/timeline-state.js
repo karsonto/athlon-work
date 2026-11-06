@@ -1039,11 +1039,31 @@ function findAssistantBubbleRow(messageId) {
   return document.querySelector(selector);
 }
 
+function enhanceTeamTraceBubbles(root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll('a[href^="athlon://team-trace"]').forEach(function (anchor) {
+    if (anchor.dataset.traceBubble === '1') return;
+    anchor.dataset.traceBubble = '1';
+    anchor.classList.add('team-trace-bubble');
+    if (!anchor.textContent || !String(anchor.textContent).trim()) {
+      anchor.textContent = t('teamsTraceOpen') || 'View Trace';
+    }
+    var parent = anchor.parentElement;
+    if (parent
+      && parent.tagName === 'P'
+      && parent.childNodes.length === 1
+      && parent.parentElement) {
+      parent.replaceWith(anchor);
+    }
+  });
+}
+
 function applyMarkdownHtml(node, html, enhance) {
   if (!node) return;
   node.classList.add('md-root');
   node.innerHTML = html || '';
   if (enhance === false) return;
+  enhanceTeamTraceBubbles(node);
   if (state.batching) {
     state.pendingEnhancementRoots.push(node);
   } else {

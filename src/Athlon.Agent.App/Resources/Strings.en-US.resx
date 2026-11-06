@@ -801,18 +801,20 @@ Hold to talk</value>
     <value>Stopped by user</value>
   </data>
   <data name="Teams_ChatSummaryOk" xml:space="preserve">
-    <value>**Team Task · {0}**
+    <value>{0}
 
-Status: {1}
-Task: `{2}`
-
-[Open Trace](athlon://team-trace?taskId={2})</value>
+[View Trace](athlon://team-trace?taskId={1})</value>
   </data>
   <data name="Teams_ChatSummaryFail" xml:space="preserve">
-    <value>**Team Task · {0}**
+    <value>{0}
 
-Status: Failed
-Reason: {1}</value>
+[View Trace](athlon://team-trace?taskId={1})</value>
+  </data>
+  <data name="Teams_ChatSummaryFailNoTrace" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="Teams_TraceBubbleLabel" xml:space="preserve">
+    <value>View Trace</value>
   </data>
   <data name="Debug_PhaseLabel" xml:space="preserve">
     <value>Debug phase: {0}</value>

@@ -83,7 +83,10 @@ public sealed class ProfileToolRouter : IToolRouter
     {
         foreach (var tool in tools)
         {
-            if (tool is IExcludedFromChildAgentToolkit)
+            // Team Leader orchestration tools are IExcludedFromChildAgentToolkit so Workers /
+            // sub-agents never inherit them — but the Leader itself must still receive them.
+            if (tool is IExcludedFromChildAgentToolkit
+                && !(isLeader && tool is ITeamLeaderTool))
             {
                 continue;
             }

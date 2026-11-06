@@ -386,6 +386,38 @@ html.replaying .message-row { animation: none; }
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+.message-content.md-root a.team-trace-bubble,
+a.team-trace-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border, rgba(127,127,127,0.35));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--user-bubble, rgba(127,127,127,0.12)) 55%, transparent);
+  color: var(--assistant-text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.message-content.md-root a.team-trace-bubble:hover,
+a.team-trace-bubble:hover {
+  border-color: var(--md-link, #6366f1);
+  color: var(--md-link, #6366f1);
+  text-decoration: none;
+}
+.message-content.md-root a.team-trace-bubble::before,
+a.team-trace-bubble::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--md-link, #6366f1);
+  flex-shrink: 0;
+}
 .message-content.md-root code:not(pre code),
 .tool-result-html.md-root code:not(pre code) {
   border-radius: 6px;

@@ -125,29 +125,30 @@ public partial class MainShellViewModel
             if (string.Equals(message, "cancelled", StringComparison.OrdinalIgnoreCase)
                 || task?.Status == Athlon.Agent.Core.Teams.TeamTaskStatus.Cancelled)
             {
-                summaryMarkdown = _loc.Format("Teams_ChatSummaryFail", team.Name, _loc["Teams_CancelledReason"]);
+                summaryMarkdown = FormatTeamsChatSummary(
+                    _loc["Teams_CancelledReason"],
+                    task?.TaskId,
+                    failed: true);
                 ShowShellToast(_loc["Teams_CancelledToast"], ShellToastKind.Info);
             }
             else if (ok && task is not null)
             {
-                var status = task.Status.ToString();
-                summaryMarkdown = _loc.Format(
-                    "Teams_ChatSummaryOk",
-                    team.Name,
-                    status,
-                    task.TaskId);
+                var resultText = !string.IsNullOrWhiteSpace(task.FinalResult)
+                    ? task.FinalResult!
+                    : message;
+                summaryMarkdown = FormatTeamsChatSummary(resultText, task.TaskId, failed: false);
                 ShowShellToast(
-                    _loc.Format("Teams_CompletedToast", status),
+                    _loc.Format("Teams_CompletedToast", task.Status.ToString()),
                     ShellToastKind.Success);
             }
             else
             {
-                summaryMarkdown = _loc.Format(
-                    "Teams_ChatSummaryFail",
-                    team.Name,
-                    message);
+                var failText = !string.IsNullOrWhiteSpace(task?.Error)
+                    ? task!.Error!
+                    : message;
+                summaryMarkdown = FormatTeamsChatSummary(failText, task?.TaskId, failed: true);
                 ShowShellToast(
-                    _loc.Format("Teams_FailedToast", message),
+                    _loc.Format("Teams_FailedToast", failText),
                     ShellToastKind.Error);
             }
 
@@ -163,6 +164,21 @@ public partial class MainShellViewModel
         }
 
         return true;
+    }
+
+    private string FormatTeamsChatSummary(string body, string? taskId, bool failed)
+    {
+        var text = string.IsNullOrWhiteSpace(body) ? "(empty)" : body.Trim();
+        if (string.IsNullOrWhiteSpace(taskId))
+        {
+            return failed
+                ? _loc.Format("Teams_ChatSummaryFailNoTrace", text)
+                : text;
+        }
+
+        return failed
+            ? _loc.Format("Teams_ChatSummaryFail", text, taskId)
+            : _loc.Format("Teams_ChatSummaryOk", text, taskId);
     }
 
     private async void OnTeamTraceLinkRequested(object? sender, string uri)

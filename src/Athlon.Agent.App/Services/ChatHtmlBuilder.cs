@@ -181,6 +181,7 @@ public sealed class ChatHtmlBuilder
             ["planReadyTitle"] = Strings.Get("Plan_ReadyCardTitle"),
             ["planBuild"] = Strings.Get("Harness_PlanBuild"),
             ["planRevise"] = Strings.Get("Harness_PlanRevise"),
+            ["teamsTraceOpen"] = Strings.Get("Teams_TraceBubbleLabel"),
         };
 
     private static string BuildEmptyStateHtml(string? ssoDisplayName)
