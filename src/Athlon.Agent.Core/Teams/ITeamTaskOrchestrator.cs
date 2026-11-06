@@ -32,6 +32,14 @@ public sealed class TeamTaskStartResult
 
 public interface ITeamTaskOrchestrator
 {
+    /// <summary>
+    /// Creates and persists a Running task (with <c>task.started</c> trace) without executing members.
+    /// Callers that need a live Trace window should open it after this returns, then call
+    /// <see cref="RunToCompletionAsync"/>.
+    /// </summary>
+    Task<TeamTaskStartResult> BeginAsync(TeamTaskStartRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Begins a task and runs it to completion (schedule / fire-and-forget callers).</summary>
     Task<TeamTaskStartResult> StartAsync(TeamTaskStartRequest request, CancellationToken cancellationToken = default);
 
     Task<TeamTask?> GetTaskAsync(string rootSessionId, string taskId, CancellationToken cancellationToken = default);

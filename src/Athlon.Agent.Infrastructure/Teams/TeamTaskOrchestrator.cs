@@ -15,7 +15,7 @@ public sealed class TeamTaskOrchestrator(
 {
     private readonly IAppLogger _logger = logger.ForContext("TeamTaskOrchestrator");
 
-    public async Task<TeamTaskStartResult> StartAsync(
+    public async Task<TeamTaskStartResult> BeginAsync(
         TeamTaskStartRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -57,8 +57,20 @@ public sealed class TeamTaskOrchestrator(
             cancellationToken).ConfigureAwait(false);
 
         _logger.Information("Team task started id={TaskId} team={TeamId}", task.TaskId, team.Id);
+        return TeamTaskStartResult.Success(task, "started");
+    }
 
-        var completed = await RunToCompletionAsync(task.RootSessionId, task.TaskId, cancellationToken)
+    public async Task<TeamTaskStartResult> StartAsync(
+        TeamTaskStartRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var began = await BeginAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!began.Ok)
+        {
+            return began;
+        }
+
+        var completed = await RunToCompletionAsync(began.Task.RootSessionId, began.Task.TaskId, cancellationToken)
             .ConfigureAwait(false);
         return TeamTaskStartResult.Success(
             completed,
@@ -85,62 +97,79 @@ public sealed class TeamTaskOrchestrator(
         await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
 
         var leaderMessage = BuildLeaderKickoff(task);
-        using (TeamTaskExecutionScope.Enter(task))
+        try
         {
-            var outcome = await memberExecutor.ExecuteAsync(
-                task,
-                leader,
-                leaderSessionId,
-                leaderMessage,
-                isLeader: true,
-                cancellationToken).ConfigureAwait(false);
-
-            task = TeamTaskExecutionScope.Current?.Task ?? task;
-
-            if (!outcome.Ok)
+            using (TeamTaskExecutionScope.Enter(task))
             {
-                task.Status = TeamTaskStatus.Failed;
-                task.Error = outcome.Error ?? outcome.ResponseText;
-                task.CompletedAt = DateTimeOffset.UtcNow;
-                await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
-                await traceStore.AppendAsync(
-                    task.RootSessionId,
-                    task.TaskId,
-                    new TeamTraceEvent { Type = "task.failed", Message = task.Error },
+                var outcome = await memberExecutor.ExecuteAsync(
+                    task,
+                    leader,
+                    leaderSessionId,
+                    leaderMessage,
+                    isLeader: true,
                     cancellationToken).ConfigureAwait(false);
-                return task;
-            }
 
-            // If Leader never submitted, keep Running/AwaitingHuman or auto-complete when all workers done.
-            if (task.Status == TeamTaskStatus.Running
-                && task.SubTasks.Count > 0
-                && task.SubTasks.All(s => s.Status is TeamSubTaskStatus.Succeeded or TeamSubTaskStatus.Failed or TeamSubTaskStatus.Cancelled)
-                && string.IsNullOrWhiteSpace(task.FinalResult))
-            {
-                task.FinalResult = AggregateResults(task);
-                task.Status = task.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Failed)
-                    ? TeamTaskStatus.Failed
-                    : TeamTaskStatus.Succeeded;
-                task.CompletedAt = DateTimeOffset.UtcNow;
-            }
-            else if (task.Status == TeamTaskStatus.Running && string.IsNullOrWhiteSpace(task.FinalResult))
-            {
-                // Leader finished without submit — treat assistant text as summary, leave Running only if work pending.
-                if (task.SubTasks.Any(s => s.Status is TeamSubTaskStatus.Ready or TeamSubTaskStatus.Pending or TeamSubTaskStatus.Running))
+                task = TeamTaskExecutionScope.Current?.Task ?? task;
+
+                if (!outcome.Ok)
                 {
-                    task.Status = TeamTaskStatus.Running;
+                    task.Status = TeamTaskStatus.Failed;
+                    task.Error = outcome.Error ?? outcome.ResponseText;
+                    task.CompletedAt = DateTimeOffset.UtcNow;
+                    await taskStore.SaveAsync(task, CancellationToken.None).ConfigureAwait(false);
+                    await traceStore.AppendAsync(
+                        task.RootSessionId,
+                        task.TaskId,
+                        new TeamTraceEvent { Type = "task.failed", Message = task.Error },
+                        CancellationToken.None).ConfigureAwait(false);
+                    return task;
                 }
-                else
+
+                // If Leader never submitted, keep Running/AwaitingHuman or auto-complete when all workers done.
+                if (task.Status == TeamTaskStatus.Running
+                    && task.SubTasks.Count > 0
+                    && task.SubTasks.All(s => s.Status is TeamSubTaskStatus.Succeeded or TeamSubTaskStatus.Failed or TeamSubTaskStatus.Cancelled)
+                    && string.IsNullOrWhiteSpace(task.FinalResult))
                 {
-                    task.FinalResult = outcome.ResponseText;
-                    task.Status = TeamTaskStatus.Succeeded;
+                    task.FinalResult = AggregateResults(task);
+                    task.Status = task.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Failed)
+                        ? TeamTaskStatus.Failed
+                        : TeamTaskStatus.Succeeded;
                     task.CompletedAt = DateTimeOffset.UtcNow;
                 }
+                else if (task.Status == TeamTaskStatus.Running && string.IsNullOrWhiteSpace(task.FinalResult))
+                {
+                    // Leader finished without submit — treat assistant text as summary, leave Running only if work pending.
+                    if (task.SubTasks.Any(s => s.Status is TeamSubTaskStatus.Ready or TeamSubTaskStatus.Pending or TeamSubTaskStatus.Running))
+                    {
+                        task.Status = TeamTaskStatus.Running;
+                    }
+                    else
+                    {
+                        task.FinalResult = outcome.ResponseText;
+                        task.Status = TeamTaskStatus.Succeeded;
+                        task.CompletedAt = DateTimeOffset.UtcNow;
+                    }
+                }
             }
-        }
 
-        await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
-        return task;
+            await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
+            return task;
+        }
+        catch (OperationCanceledException)
+        {
+            task = await taskStore.GetAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false) ?? task;
+            task.Status = TeamTaskStatus.Cancelled;
+            task.Error = "cancelled";
+            task.CompletedAt = DateTimeOffset.UtcNow;
+            await taskStore.SaveAsync(task, CancellationToken.None).ConfigureAwait(false);
+            await traceStore.AppendAsync(
+                task.RootSessionId,
+                task.TaskId,
+                new TeamTraceEvent { Type = "task.cancelled", Message = "cancelled by user" },
+                CancellationToken.None).ConfigureAwait(false);
+            return task;
+        }
     }
 
     private static string BuildLeaderKickoff(TeamTask task)

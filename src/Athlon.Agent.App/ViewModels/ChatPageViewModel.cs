@@ -38,6 +38,7 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
     private Action<bool>? _setIsBusy;
     private Func<IReadOnlyList<string>>? _getIgnorePatterns;
     private Func<bool>? _tryCancelCompaction;
+    private Func<bool>? _tryCancelTeamRun;
     private Func<ComposerSlashCommandContext>? _createSlashCommandContext;
     private Func<Task>? _ensureSessionReady;
     private Func<string, Task<bool>>? _trySubmitTeamsGoalAsync;
@@ -89,7 +90,8 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         Func<bool> tryCancelCompaction,
         Func<ComposerSlashCommandContext> createSlashCommandContext,
         Func<Task> ensureSessionReady,
-        Func<string, Task<bool>>? trySubmitTeamsGoalAsync = null)
+        Func<string, Task<bool>>? trySubmitTeamsGoalAsync = null,
+        Func<bool>? tryCancelTeamRun = null)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
@@ -101,6 +103,7 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         _setIsBusy = setIsBusy;
         _getIgnorePatterns = getIgnorePatterns;
         _tryCancelCompaction = tryCancelCompaction;
+        _tryCancelTeamRun = tryCancelTeamRun;
         _createSlashCommandContext = createSlashCommandContext;
         _ensureSessionReady = ensureSessionReady;
         _trySubmitTeamsGoalAsync = trySubmitTeamsGoalAsync;
@@ -452,6 +455,11 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
     private void Stop()
     {
         if (_tryCancelCompaction?.Invoke() == true)
+        {
+            return;
+        }
+
+        if (_tryCancelTeamRun?.Invoke() == true)
         {
             return;
         }

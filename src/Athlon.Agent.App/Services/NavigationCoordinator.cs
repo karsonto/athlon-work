@@ -67,7 +67,8 @@ public sealed class NavigationCoordinator
         }
         else if (string.Equals(page, "Teams", StringComparison.Ordinal) && teams is not null)
         {
-            _ = teams.RefreshAsync();
+            // Soft load: keep in-memory SPA edits; Chat Teams runs must not reshuffle this page.
+            _ = teams.EnsureLoadedAsync();
         }
     }
 

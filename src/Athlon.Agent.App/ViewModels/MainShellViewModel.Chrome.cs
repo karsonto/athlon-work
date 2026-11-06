@@ -116,12 +116,19 @@ public partial class MainShellViewModel
 
         try
         {
+            // Run via orchestrator path without mutating Teams config page (no new Team / no list refresh).
             var (ok, message, task) = await TeamsPageVm
-                .RunTeamGoalAsync(_displayedSessionId, goal, team.Id)
+                .RunTeamGoalAsync(_displayedSessionId, goal, team.Id, openTrace: true)
                 .ConfigureAwait(true);
 
             string summaryMarkdown;
-            if (ok && task is not null)
+            if (string.Equals(message, "cancelled", StringComparison.OrdinalIgnoreCase)
+                || task?.Status == Athlon.Agent.Core.Teams.TeamTaskStatus.Cancelled)
+            {
+                summaryMarkdown = _loc.Format("Teams_ChatSummaryFail", team.Name, _loc["Teams_CancelledReason"]);
+                ShowShellToast(_loc["Teams_CancelledToast"], ShellToastKind.Info);
+            }
+            else if (ok && task is not null)
             {
                 var status = task.Status.ToString();
                 summaryMarkdown = _loc.Format(

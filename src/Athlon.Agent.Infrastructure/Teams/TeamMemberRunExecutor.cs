@@ -166,12 +166,34 @@ public sealed class TeamMemberRunExecutor(
             memberSessionId,
             isLeader);
 
+        var transcript = serviceProvider.GetService<IConversationTranscriptWriter>();
+        var lastPersistMs = 0L;
         var callbacks = new AgentTurnCallbacks
         {
-            OnSessionUpdated = updated =>
+            OnSessionUpdated = async updated =>
             {
                 session = updated;
-                return Task.CompletedTask;
+                var now = Environment.TickCount64;
+                if (now - lastPersistMs < 750)
+                {
+                    return;
+                }
+
+                lastPersistMs = now;
+                try
+                {
+                    // Let live Trace read mid-turn tool/model activity without waiting for completion.
+                    await jsonFileStore.SaveAsync(sessionPath, session, CancellationToken.None).ConfigureAwait(false);
+                    if (transcript is not null)
+                    {
+                        await transcript.FlushSessionAsync(memberSessionId, CancellationToken.None)
+                            .ConfigureAwait(false);
+                    }
+                }
+                catch
+                {
+                    // Best-effort checkpoint; final save still happens below.
+                }
             }
         };
 
@@ -181,6 +203,10 @@ public sealed class TeamMemberRunExecutor(
             session = await orchestrator.SendAsync(session, message.Trim(), null, callbacks, cancellationToken)
                 .ConfigureAwait(false);
             await jsonFileStore.SaveAsync(sessionPath, session, cancellationToken).ConfigureAwait(false);
+            if (transcript is not null)
+            {
+                await transcript.FlushSessionAsync(memberSessionId, cancellationToken).ConfigureAwait(false);
+            }
 
             var responseText = SubAgentResultFormatter.ExtractLastAssistantText(session)
                 ?? "(Team member finished without assistant text.)";

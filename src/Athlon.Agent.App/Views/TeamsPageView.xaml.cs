@@ -17,7 +17,7 @@ public partial class TeamsPageView : UserControl
     {
         if (FindTeamsVm() is { } vm)
         {
-            await vm.RefreshAsync().ConfigureAwait(true);
+            await vm.EnsureLoadedAsync().ConfigureAwait(true);
         }
     }
 

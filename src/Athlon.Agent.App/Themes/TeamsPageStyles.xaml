@@ -260,22 +260,55 @@
         <Setter Property="Margin" Value="0,0,6,6" />
     </Style>
 
-    <!-- MaterialDesign CheckBox content can stay near-black in dark mode; force theme text. -->
-    <Style x:Key="TeamsCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+    <!-- Custom mark: green ✓ when checked (avoids MaterialDesign near-black glyph). -->
+    <Style x:Key="TeamsCheckBoxStyle" TargetType="CheckBox">
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
-        <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="ContentTemplate">
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
             <Setter.Value>
-                <DataTemplate>
-                    <TextBlock Text="{Binding}"
-                               Foreground="{DynamicResource Brush.Text}"
-                               TextWrapping="Wrap"
-                               VerticalAlignment="Center" />
-                </DataTemplate>
+                <ControlTemplate TargetType="CheckBox">
+                    <StackPanel x:Name="Root" Orientation="Horizontal" Background="Transparent">
+                        <Border x:Name="Box"
+                                Width="16"
+                                Height="16"
+                                CornerRadius="4"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource Brush.Border}"
+                                Background="{DynamicResource Brush.ChatBackground}"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center">
+                            <TextBlock x:Name="Mark"
+                                       Text="✓"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource Teams.Success}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Visibility="Collapsed" />
+                        </Border>
+                        <ContentPresenter VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          TextElement.Foreground="{TemplateBinding Foreground}"
+                                          TextElement.FontSize="{TemplateBinding FontSize}" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Box" Property="Background" Value="{StaticResource Teams.SuccessSoft}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Teams.Success}" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Opacity" Value="0.92" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Root" Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>

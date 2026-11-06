@@ -794,6 +794,12 @@ Hold to talk</value>
   <data name="Teams_FailedToast" xml:space="preserve">
     <value>Team Task failed: {0}</value>
   </data>
+  <data name="Teams_CancelledToast" xml:space="preserve">
+    <value>Team Task stopped</value>
+  </data>
+  <data name="Teams_CancelledReason" xml:space="preserve">
+    <value>Stopped by user</value>
+  </data>
   <data name="Teams_ChatSummaryOk" xml:space="preserve">
     <value>**Team Task · {0}**
 

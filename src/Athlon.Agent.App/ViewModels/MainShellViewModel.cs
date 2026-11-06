@@ -225,7 +225,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             TryCancelCompaction,
             CreateSlashCommandContext,
             EnsureDisplayedSessionReadyAsync,
-            TrySubmitTeamsGoalFromChatAsync);
+            TrySubmitTeamsGoalFromChatAsync,
+            () => TeamsPageVm.CancelActiveTeamRun());
         _planSurface.Configure(
             () => _displayedSessionId,
             () => _session,

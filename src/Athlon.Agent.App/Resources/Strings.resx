@@ -788,6 +788,12 @@
   <data name="Teams_FailedToast" xml:space="preserve">
     <value>Team Task 失败：{0}</value>
   </data>
+  <data name="Teams_CancelledToast" xml:space="preserve">
+    <value>已停止 Team Task</value>
+  </data>
+  <data name="Teams_CancelledReason" xml:space="preserve">
+    <value>用户停止</value>
+  </data>
   <data name="Teams_ChatSummaryOk" xml:space="preserve">
     <value>**Team Task · {0}**
 

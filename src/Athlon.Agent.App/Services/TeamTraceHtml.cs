@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Athlon.Agent.App.Themes;
 using Athlon.Agent.Core.Teams;
 
 namespace Athlon.Agent.App.Services;
@@ -9,7 +10,11 @@ public static class TeamTraceHtml
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public static string Build(TeamTask task, IReadOnlyList<TeamTraceEvent> events, string? teamName = null)
+    public static string BuildPayloadJson(
+        TeamTask task,
+        IReadOnlyList<TeamTraceEvent> events,
+        string? teamName = null,
+        IReadOnlyDictionary<string, IReadOnlyList<object>>? transcripts = null)
     {
         var payload = JsonSerializer.Serialize(new
         {
@@ -24,6 +29,7 @@ public static class TeamTraceHtml
             finalResult = task.FinalResult,
             error = task.Error,
             leaderProfileId = task.LeaderProfileId,
+            leaderSessionId = task.LeaderSessionId,
             layout = task.TraceLayout.ToDictionary(
                 kv => kv.Key,
                 kv => new { x = kv.Value.X, y = kv.Value.Y },
@@ -34,6 +40,7 @@ public static class TeamTraceHtml
                 title = s.Title,
                 status = s.Status.ToString(),
                 profileId = s.AssigneeProfileId,
+                memberSessionId = s.MemberSessionId,
                 iteration = s.Iteration,
                 maxIterations = s.MaxIterations,
                 result = s.Result,
@@ -57,17 +64,31 @@ public static class TeamTraceHtml
                 subTaskId = e.SubTaskId,
                 iteration = e.Iteration,
                 message = e.Message
-            })
+            }),
+            transcripts = transcripts ?? new Dictionary<string, IReadOnlyList<object>>()
         }, JsonOptions);
 
-        var safe = payload.Replace("</", "<\\/", StringComparison.Ordinal);
+        return payload.Replace("</", "<\\/", StringComparison.Ordinal);
+    }
+
+    public static string CurrentThemeAttribute() =>
+        AppThemeManager.CurrentKind == AppThemeKind.Dark ? "dark" : "light";
+
+    public static string Build(
+        TeamTask task,
+        IReadOnlyList<TeamTraceEvent> events,
+        string? teamName = null,
+        IReadOnlyDictionary<string, IReadOnlyList<object>>? transcripts = null)
+    {
+        var safe = BuildPayloadJson(task, events, teamName, transcripts);
         var title = WebUtility.HtmlEncode($"Team Trace · {(string.IsNullOrWhiteSpace(teamName) ? task.TeamId : teamName)}");
         var goal = WebUtility.HtmlEncode(task.Goal ?? "");
+        var theme = CurrentThemeAttribute();
 
         var sb = new StringBuilder(48_000);
         sb.Append("""
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="@@THEME@@">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -201,7 +222,6 @@ svg.wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
       <div class="subtitle" id="subtitle">Goal: @@GOAL@@</div>
     </div>
     <div class="actions">
-      <button class="btn" id="themeBtn" type="button">切换深色</button>
       <button class="btn" id="resetLayout" type="button">重置布局</button>
       <button class="btn" id="toggleDrawer" type="button">收起详情</button>
       <button class="btn primary" id="closeBtn" type="button">关闭</button>
@@ -238,7 +258,6 @@ svg.wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
           <div id="nodes"></div>
         </div>
       </div>
-      <div class="note"><strong>形态</strong>：WPF TeamTraceWindow 弹窗（非 AppPage）。<strong>循环</strong>：橙色 loop 边 = Leader 重派 Worker。<strong>拖拽</strong>只改布局并回写宿主。</div>
     </section>
     <aside class="drawer" id="drawer">
       <div class="drawer-h">
@@ -267,7 +286,7 @@ svg.wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
           <details class="block" open><summary><span>Output · Result</span></summary><pre id="dOutput"></pre></details>
         </div>
         <div class="pane" data-pane="tools" hidden>
-          <details class="block" open><summary><span>Related events</span></summary><pre id="dTools"></pre></details>
+          <div id="dTools"></div>
         </div>
         <div class="pane" data-pane="timeline" hidden><div class="timeline" id="dTimeline"></div></div>
         <div class="pane" data-pane="loop" hidden>
@@ -289,7 +308,7 @@ svg.wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
   </div>
 </div>
 <script>
-const data = @@SAFE@@;
+let data = @@SAFE@@;
 const NODE_W=220, NODE_H=118;
 let scale=1, selectedId=null;
 const nodesEl=document.getElementById('nodes');
@@ -328,9 +347,9 @@ function loopInfo(){
   return `${s.title||s.id} loop ${s.iteration}/${s.maxIterations||1}`;
 }
 
-document.getElementById('title').textContent='Team Trace · '+(data.teamName||data.teamId||data.taskId);
-document.getElementById('subtitle').textContent='Goal: '+(data.goal||'')+' · 弹窗单例 · 可拖拽 · Worker 循环';
-(function renderStatus(){
+function renderStatus(){
+  document.getElementById('title').textContent='Team Trace · '+(data.teamName||data.teamId||data.taskId);
+  document.getElementById('subtitle').textContent='Goal: '+(data.goal||'')+' · 实时 · 可拖拽 · Worker 循环';
   const st=statusUi(data.status);
   const loop=loopInfo();
   document.getElementById('statusbar').innerHTML=
@@ -340,11 +359,71 @@ document.getElementById('subtitle').textContent='Goal: '+(data.goal||'')+' · �
     `<span>elapsed · ${elapsed()}</span>`+
     `<span>workers · ${(data.subtasks||[]).length}</span>`+
     `<span>拖拽节点排版 · 布局回写宿主</span>`;
-})();
+}
 
 const defaultLayout={leader:{x:560,y:80}, agg:{x:560,y:620}, submit:{x:560,y:860}};
 (data.subtasks||[]).forEach((s,i)=>{ defaultLayout[s.id]={x:180+i*380,y:320}; });
 const layout=Object.assign({}, defaultLayout, data.layout||{});
+let isDragging=false;
+let drawerScrollTop=0;
+const openToolKeys=new Set();
+renderStatus();
+
+function captureDrawerUi(){
+  const body=document.querySelector('.drawer-b');
+  if(body) drawerScrollTop=body.scrollTop;
+  openToolKeys.clear();
+  document.querySelectorAll('#dTools details.block').forEach((el,i)=>{
+    const key=el.querySelector('summary span')?.textContent||String(i);
+    if(el.open) openToolKeys.add(key);
+  });
+}
+function restoreDrawerUi(){
+  const body=document.querySelector('.drawer-b');
+  if(body) body.scrollTop=drawerScrollTop;
+  document.querySelectorAll('#dTools details.block').forEach((el,i)=>{
+    const key=el.querySelector('summary span')?.textContent||String(i);
+    if(openToolKeys.size) el.open=openToolKeys.has(key);
+  });
+}
+function fingerprintPayload(d){
+  const subs=(d.subtasks||[]).map(s=>s.id+':'+s.status+':'+s.iteration+(s.result||'').length).join('|');
+  const ev=(d.events||[]).length;
+  const tr=Object.keys(d.transcripts||{}).map(k=>{
+    const arr=d.transcripts[k]||[];
+    return k+':'+arr.length+':'+(arr[arr.length-1]?.at||'');
+  }).join(';');
+  return [d.taskId,d.status,d.updatedAt,d.finalResult||'',subs,ev,tr].join('~');
+}
+let lastPayloadFp=fingerprintPayload(data);
+
+window.applyTraceUpdate=function(next){
+  if(!next) return;
+  if(isDragging) return;
+  const fp=fingerprintPayload(next);
+  if(fp===lastPayloadFp) return;
+  lastPayloadFp=fp;
+  const keepSelection=selectedId;
+  const drawerClosed=document.getElementById('workspace')?.classList.contains('drawer-closed');
+  const activeTab=document.querySelector('.drawer-tab.active')?.dataset?.tab||'io';
+  captureDrawerUi();
+  data=next;
+  (data.subtasks||[]).forEach((s,i)=>{ if(!layout[s.id]) layout[s.id]={x:180+i*380,y:320}; });
+  if(next.layout){ Object.keys(next.layout).forEach(k=>{ if(!layout[k]) layout[k]=next.layout[k]; }); }
+  renderStatus();
+  renderNodes();
+  if(keepSelection) selectNode(keepSelection, {preserveUi:true});
+  if(drawerClosed){
+    document.getElementById('workspace').classList.add('drawer-closed');
+    document.getElementById('toggleDrawer').textContent='展开详情';
+  }
+  document.querySelectorAll('.drawer-tab').forEach(tab=>{
+    const on=tab.dataset.tab===activeTab;
+    tab.classList.toggle('active', on);
+  });
+  document.querySelectorAll('.pane').forEach(p=>{ p.hidden=p.dataset.pane!==activeTab; });
+  restoreDrawerUi();
+};
 
 function port(id,side){
   const p=layout[id]||{x:0,y:0}; const cx=p.x+NODE_W/2, cy=p.y+NODE_H/2;
@@ -405,7 +484,7 @@ function postLayout(){ try{ chrome.webview.postMessage({type:'traceLayout', layo
 function enableDrag(el){
   let sx=0,sy=0,ox=0,oy=0,dragging=false;
   el.addEventListener('pointerdown',ev=>{
-    if(ev.button!==0) return; dragging=true; el.dataset.didDrag='0'; el.classList.add('dragging');
+    if(ev.button!==0) return; dragging=true; isDragging=true; el.dataset.didDrag='0'; el.classList.add('dragging');
     el.setPointerCapture(ev.pointerId); sx=ev.clientX; sy=ev.clientY;
     const id=el.dataset.id; ox=layout[id].x; oy=layout[id].y; ev.stopPropagation();
   });
@@ -416,29 +495,95 @@ function enableDrag(el){
     const id=el.dataset.id; layout[id]={x:Math.max(16,ox+dx), y:Math.max(16,oy+dy)};
     el.style.left=layout[id].x+'px'; el.style.top=layout[id].y+'px'; redrawWires();
   });
-  el.addEventListener('pointerup',()=>{ if(!dragging) return; dragging=false; el.classList.remove('dragging'); postLayout(); });
+  el.addEventListener('pointerup',()=>{ if(!dragging) return; dragging=false; isDragging=false; el.classList.remove('dragging'); postLayout(); });
 }
 function fmtTime(v){ try{ return new Date(v).toLocaleTimeString(); }catch{ return String(v||''); } }
 function relatedEvents(id){
   return (data.events||[]).filter(e=>{
     const ids=[e.nodeId,e.fromNodeId,e.toNodeId,e.subTaskId];
-    return id==='leader' || ids.includes(id);
+    return id==='leader' || id==='agg' || id==='submit' || ids.includes(id);
+  });
+}
+function nodeTranscript(id){
+  const map=data.transcripts||{};
+  return map[id]||[];
+}
+function pillForToolStatus(status){
+  const s=String(status||'').toLowerCase();
+  if(s.includes('fail')) return {cls:'error', text:'failed'};
+  if(s.includes('run')) return {cls:'running', text:'running'};
+  if(s.includes('success')||s==='ok'||s==='succeeded') return {cls:'success', text:'ok'};
+  return {cls:'waiting', text:status||'tool'};
+}
+function renderTools(id){
+  const host=document.getElementById('dTools'); host.innerHTML='';
+  const items=nodeTranscript(id);
+  if(!items.length){
+    host.innerHTML='<div class="meta" style="color:var(--muted);padding:8px 2px">暂无模型回复或工具调用。成员开始运行后会实时出现在这里。</div>';
+    return;
+  }
+  items.forEach((item, idx)=>{
+    const kind=String(item.kind||'');
+    const details=document.createElement('details');
+    details.className='block';
+    details.open = idx >= items.length-6;
+    if(kind==='assistant'){
+      const body=[item.reasoning?`Reasoning:\n${item.reasoning}`:'', item.text||''].filter(Boolean).join('\n\n')||'(empty)';
+      details.innerHTML=`<summary><span>Model</span><span class="pill running">assistant</span></summary><pre>${esc(body)}</pre>`;
+    } else if(kind==='user'){
+      details.innerHTML=`<summary><span>Handoff / User</span><span class="pill waiting">user</span></summary><pre>${esc(item.text||'')}</pre>`;
+    } else if(kind==='tool_call' || kind==='tool'){
+      const st=pillForToolStatus(item.status||(kind==='tool_call'?'running':'succeeded'));
+      const name=item.toolName||'tool';
+      const parts=[];
+      if(item.arguments) parts.push('Arguments:\n'+item.arguments);
+      if(item.summary) parts.push('Summary:\n'+item.summary);
+      if(item.detail) parts.push('Result:\n'+item.detail);
+      if(!parts.length && item.text) parts.push(item.text);
+      details.innerHTML=`<summary><span>${esc(name)}</span><span class="pill ${st.cls}">${esc(st.text)}</span></summary><pre>${esc(parts.join('\n\n')||'(no detail)')}</pre>`;
+    } else {
+      details.innerHTML=`<summary><span>${esc(kind||'event')}</span></summary><pre>${esc(item.text||item.message||JSON.stringify(item))}</pre>`;
+    }
+    host.appendChild(details);
   });
 }
 function renderTimeline(id){
   const host=document.getElementById('dTimeline'); host.innerHTML='';
-  const list=relatedEvents(id);
-  if(!list.length){ host.innerHTML='<div class="step"><div class="step-dot"></div><div class="step-body"><div class="what">暂无事件</div></div></div>'; return; }
-  list.forEach(ev=>{
+  const steps=[];
+  relatedEvents(id).forEach(ev=>{
     const t=(ev.type||'').toLowerCase();
     const cls=t.includes('loop')||t.includes('redispatch')?'loop':(t.includes('fail')||t.includes('error')?'run':(t.includes('complete')||t.includes('success')?'ok':'run'));
-    const el=document.createElement('div'); el.className='step '+cls;
-    el.innerHTML=`<div class="step-dot"></div><div class="step-body"><div class="when">${esc(fmtTime(ev.at))}</div><div class="what">${esc(ev.type||'')}</div><div class="detail">${esc(ev.message||'')}</div></div>`;
+    steps.push({at:ev.at, cls, what:ev.type||'', detail:ev.message||''});
+  });
+  nodeTranscript(id).forEach(item=>{
+    const kind=String(item.kind||'');
+    if(kind==='assistant'){
+      const preview=(item.text||item.reasoning||'').slice(0,160);
+      steps.push({at:item.at, cls:'run', what:'model.response', detail:preview});
+    } else if(kind==='tool_call'){
+      steps.push({at:item.at, cls:'run', what:`tool.call · ${item.toolName||''}`, detail:(item.arguments||'').slice(0,160)});
+    } else if(kind==='tool'){
+      const failed=/fail/i.test(item.status||'');
+      steps.push({at:item.at, cls:failed?'run':'ok', what:`tool.result · ${item.toolName||''}`, detail:(item.summary||item.detail||'').slice(0,160)});
+    } else if(kind==='user'){
+      steps.push({at:item.at, cls:'ok', what:'handoff', detail:(item.text||'').slice(0,160)});
+    }
+  });
+  steps.sort((a,b)=>new Date(a.at)-new Date(b.at));
+  if(!steps.length){ host.innerHTML='<div class="step"><div class="step-dot"></div><div class="step-body"><div class="what">暂无事件</div></div></div>'; return; }
+  steps.forEach(ev=>{
+    const el=document.createElement('div'); el.className='step '+ev.cls;
+    el.innerHTML=`<div class="step-dot"></div><div class="step-body"><div class="when">${esc(fmtTime(ev.at))}</div><div class="what">${esc(ev.what)}</div><div class="detail">${esc(ev.detail||'')}</div></div>`;
     host.appendChild(el);
   });
 }
-function selectNode(id){
+function setTextIfChanged(el, value){
+  const next=value??'';
+  if(el && el.textContent!==next) el.textContent=next;
+}
+function selectNode(id, opts){
   selectedId=id;
+  const preserve=!!(opts&&opts.preserveUi);
   document.querySelectorAll('.node').forEach(n=>n.classList.toggle('selected', n.dataset.id===id));
   const sub=(data.subtasks||[]).find(s=>s.id===id);
   let title='Leader', meta='orchestrator', profile=data.leaderProfileId||'leader', iter='—', reason='—', input=data.goal||'', output=data.finalResult||data.error||'', depends='—', prev='—', max='—', cur='—', statusText=statusUi(data.status);
@@ -453,24 +598,32 @@ function selectNode(id){
     prev=sub.prevResultSummary||'(none)'; max=String(sub.maxIterations||1); cur=String(sub.iteration||1);
     statusText={cls:u.pill||u.cls, text:u.text};
   }
-  document.getElementById('dTitle').textContent=title;
-  document.getElementById('dMeta').textContent=meta;
-  document.getElementById('dProfile').textContent=profile;
-  document.getElementById('dIter').textContent=iter;
-  document.getElementById('dReason').textContent=reason;
-  document.getElementById('dNodeStatus').textContent=statusText.text;
-  document.getElementById('dDepends').textContent=depends;
-  document.getElementById('dInput').textContent=input;
-  document.getElementById('dOutput').textContent=output;
-  document.getElementById('dPrev').textContent=prev;
-  document.getElementById('dLoopMax').textContent=max;
-  document.getElementById('dLoopCur').textContent=cur;
+  // Prefer latest assistant text for output when Result 尚未回写.
+  const transcript=nodeTranscript(id);
+  if((!output || output==='(none)') && transcript.length){
+    for(let i=transcript.length-1;i>=0;i--){
+      if(transcript[i].kind==='assistant' && transcript[i].text){ output=transcript[i].text; break; }
+    }
+  }
+  setTextIfChanged(document.getElementById('dTitle'), title);
+  setTextIfChanged(document.getElementById('dMeta'), meta);
+  setTextIfChanged(document.getElementById('dProfile'), profile);
+  setTextIfChanged(document.getElementById('dIter'), iter);
+  setTextIfChanged(document.getElementById('dReason'), reason);
+  setTextIfChanged(document.getElementById('dNodeStatus'), statusText.text);
+  setTextIfChanged(document.getElementById('dDepends'), depends);
+  setTextIfChanged(document.getElementById('dInput'), input);
+  setTextIfChanged(document.getElementById('dOutput'), output);
+  setTextIfChanged(document.getElementById('dPrev'), prev);
+  setTextIfChanged(document.getElementById('dLoopMax'), max);
+  setTextIfChanged(document.getElementById('dLoopCur'), cur);
   const st=document.getElementById('dStatus'); st.className='pill '+statusText.cls; st.innerHTML=`<i class="dot"></i> ${esc(statusText.text)}`;
-  const tools=relatedEvents(id).map(e=>`${fmtTime(e.at)}  ${e.type||''}\n${e.message||''}`).join('\n\n');
-  document.getElementById('dTools').textContent=tools||'(no related events)';
+  renderTools(id);
   renderTimeline(id);
-  document.getElementById('workspace').classList.remove('drawer-closed');
-  document.getElementById('toggleDrawer').textContent='收起详情';
+  if(!preserve){
+    document.getElementById('workspace').classList.remove('drawer-closed');
+    document.getElementById('toggleDrawer').textContent='收起详情';
+  }
 }
 function renderNodes(){
   nodesEl.innerHTML='';
@@ -511,12 +664,6 @@ document.getElementById('toggleDrawer').onclick=()=>{
   const closed=document.getElementById('workspace').classList.toggle('drawer-closed');
   document.getElementById('toggleDrawer').textContent=closed?'展开详情':'收起详情';
 };
-document.getElementById('themeBtn').onclick=()=>{
-  const root=document.documentElement;
-  const next=root.getAttribute('data-theme')==='dark'?'light':'dark';
-  root.setAttribute('data-theme', next);
-  document.getElementById('themeBtn').textContent=next==='dark'?'切换浅色':'切换深色';
-};
 document.getElementById('closeBtn').onclick=()=>{ try{ chrome.webview.postMessage({type:'close'}); }catch(err){} };
 document.querySelectorAll('.drawer-tab').forEach(tab=>{
   tab.addEventListener('click',()=>{
@@ -535,6 +682,7 @@ applyZoom();
 </html>
 """);
         return sb.ToString()
+            .Replace("@@THEME@@", theme, StringComparison.Ordinal)
             .Replace("@@TITLE@@", title, StringComparison.Ordinal)
             .Replace("@@GOAL@@", goal, StringComparison.Ordinal)
             .Replace("@@SAFE@@", safe, StringComparison.Ordinal);

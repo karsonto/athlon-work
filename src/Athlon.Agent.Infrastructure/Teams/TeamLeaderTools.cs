@@ -276,6 +276,10 @@ public sealed class TeamDispatchTool(
             },
             cancellationToken).ConfigureAwait(false);
 
+        // Persist Running immediately so live Trace can show the node mid-flight.
+        TeamTaskExecutionScope.Current?.ReplaceTask(task);
+        await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
+
         var message = BuildWorkerMessage(task, sub);
         var outcome = await memberExecutor.ExecuteAsync(
             task,

@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using System.Threading;
 using System.Windows;
+using System.Windows.Threading;
 using Athlon.Agent.App.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Knowledge;
@@ -37,7 +39,9 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     private readonly IKnowledgeStore _knowledgeStore;
     private readonly IAppLogger _logger;
     private readonly Dictionary<string, AgentProfile> _profilesById = new(StringComparer.OrdinalIgnoreCase);
+    private CancellationTokenSource? _teamRunCts;
     private bool _suppressCapabilitySync;
+    private bool _catalogLoaded;
 
     public TeamsPageViewModel(
         AppSettings settings,
@@ -79,7 +83,6 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     [ObservableProperty] private TeamListItemViewModel? _selectedTeamItem;
     [ObservableProperty] private TeamMemberItemViewModel? _selectedMember;
     [ObservableProperty] private string _statusMessage = "";
-    [ObservableProperty] private string _runGoal = "整理一次发版材料摘要";
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _activeCapabilityTab = "tools";
     [ObservableProperty] private string _previewLeaderName = "Leader";
@@ -296,6 +299,13 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         OnPropertyChanged(nameof(IsKnowledgeTab));
     }
 
+    /// <summary>
+    /// First open loads from disk; later visits keep in-memory SPA edits (Chat Teams runs must
+    /// not reshuffle or append Team definitions on this page).
+    /// </summary>
+    public Task EnsureLoadedAsync() =>
+        _catalogLoaded ? Task.CompletedTask : RefreshAsync();
+
     public async Task RefreshAsync()
     {
         var selectedTeamId = SelectedTeamItem?.Team.Id;
@@ -327,15 +337,8 @@ public sealed partial class TeamsPageViewModel : ObservableObject
 
         await LoadCatalogOptionsAsync().ConfigureAwait(true);
         SyncCapabilityOptionsFromProfile();
-
-        var sessionId = _activeSession.SessionId;
-        if (!string.IsNullOrWhiteSpace(sessionId))
-        {
-            foreach (var task in await _taskStore.ListForRootSessionAsync(sessionId).ConfigureAwait(true))
-            {
-                RecentTasks.Add(task);
-            }
-        }
+        await RefreshRecentTasksAsync().ConfigureAwait(true);
+        _catalogLoaded = true;
 
         StatusMessage = TeamsEnabled
             ? $"{TeamItems.Count} 个 Team · {_profilesById.Count} 个 Profile"
@@ -378,19 +381,21 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             SelectedTeamItem?.RefreshMeta();
         }
 
-        if (SelectedProfile is not null)
+        // Persist every member currently on the page so SPA-style edits survive without a reload.
+        foreach (var member in Members.ToList())
         {
-            await _profileStore.SaveAsync(SelectedProfile).ConfigureAwait(true);
-            SelectedMember?.RefreshFromProfile();
+            await _profileStore.SaveAsync(member.Profile).ConfigureAwait(true);
+            member.RefreshFromProfile();
         }
 
         StatusMessage = "已保存 Team 与成员配置。";
-        await RefreshAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
     private async Task CreateTeamAsync()
     {
+        ApplyCapabilityOptionsToProfile();
+
         var leader = new AgentProfile
         {
             Id = "profile-" + Guid.NewGuid().ToString("N")[..10],
@@ -413,8 +418,11 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             MaxParallelWorkers = 2
         };
         await _teamStore.SaveAsync(team).ConfigureAwait(true);
-        await RefreshAsync().ConfigureAwait(true);
-        SelectedTeamItem = TeamItems.FirstOrDefault(t => t.Team.Id == team.Id);
+
+        _profilesById[leader.Id] = leader;
+        var item = new TeamListItemViewModel(team);
+        TeamItems.Add(item);
+        SelectedTeamItem = item;
         StatusMessage = "已创建新 Team。";
     }
 
@@ -426,6 +434,9 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             StatusMessage = "请先选择或创建一个 Team。";
             return;
         }
+
+        // Keep in-memory edits for the currently open member/team; only mutate the member strip.
+        ApplyCapabilityOptionsToProfile();
 
         var worker = new AgentProfile
         {
@@ -442,8 +453,13 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         SelectedTeam.WorkerProfileIds.Add(worker.Id);
         SelectedTeam.UpdatedAt = DateTimeOffset.UtcNow;
         await _teamStore.SaveAsync(SelectedTeam).ConfigureAwait(true);
-        await RefreshAsync().ConfigureAwait(true);
-        SelectedMember = Members.FirstOrDefault(m => m.Profile.Id == worker.Id);
+
+        _profilesById[worker.Id] = worker;
+        var item = new TeamMemberItemViewModel(worker, isLeader: false);
+        Members.Add(item);
+        SelectedTeamItem?.RefreshMeta();
+        RebuildOrgPreview();
+        SelectedMember = item;
         StatusMessage = "已添加 Worker。";
     }
 
@@ -484,16 +500,23 @@ public sealed partial class TeamsPageViewModel : ObservableObject
 
         await _teamStore.DeleteAsync(team.Id).ConfigureAwait(true);
 
-        var remainingTeams = await _teamStore.ListAsync().ConfigureAwait(true);
+        var remainingTeams = TeamItems
+            .Where(t => !string.Equals(t.Team.Id, team.Id, StringComparison.OrdinalIgnoreCase))
+            .Select(t => t.Team)
+            .ToList();
         foreach (var profileId in profileIds)
         {
             if (!IsProfileReferenced(profileId, remainingTeams))
             {
                 await _profileStore.DeleteAsync(profileId).ConfigureAwait(true);
+                _profilesById.Remove(profileId);
             }
         }
 
-        await RefreshAsync().ConfigureAwait(true);
+        var removeIndex = TeamItems.IndexOf(SelectedTeamItem);
+        TeamItems.Remove(SelectedTeamItem);
+        SelectedTeamItem = TeamItems.ElementAtOrDefault(Math.Max(0, removeIndex - 1))
+            ?? TeamItems.FirstOrDefault();
         StatusMessage = $"已删除 Team「{name}」。";
     }
 
@@ -525,18 +548,30 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             return;
         }
 
+        ApplyCapabilityOptionsToProfile();
+
         SelectedTeam.WorkerProfileIds.RemoveAll(id =>
             string.Equals(id, profileId, StringComparison.OrdinalIgnoreCase));
         SelectedTeam.UpdatedAt = DateTimeOffset.UtcNow;
         await _teamStore.SaveAsync(SelectedTeam).ConfigureAwait(true);
 
-        var teams = await _teamStore.ListAsync().ConfigureAwait(true);
+        var teams = TeamItems.Select(t => t.Team).ToList();
         if (!IsProfileReferenced(profileId, teams))
         {
             await _profileStore.DeleteAsync(profileId).ConfigureAwait(true);
+            _profilesById.Remove(profileId);
         }
 
-        await RefreshAsync().ConfigureAwait(true);
+        var removingSelected = ReferenceEquals(SelectedMember, member)
+            || string.Equals(SelectedMember?.Profile.Id, profileId, StringComparison.OrdinalIgnoreCase);
+        Members.Remove(member);
+        SelectedTeamItem?.RefreshMeta();
+        RebuildOrgPreview();
+        if (removingSelected)
+        {
+            SelectedMember = Members.FirstOrDefault(m => !m.IsLeader) ?? Members.FirstOrDefault();
+        }
+
         StatusMessage = $"已删除 Worker「{name}」。";
     }
 
@@ -622,48 +657,65 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             MaxParallelWorkers = 2
         };
         await _teamStore.SaveAsync(team).ConfigureAwait(true);
-        await RefreshAsync().ConfigureAwait(true);
-        SelectedTeamItem = TeamItems.FirstOrDefault(t => t.Team.Id == team.Id);
+
+        _profilesById[leader.Id] = leader;
+        _profilesById[eng.Id] = eng;
+        _profilesById[qa.Id] = qa;
+        _profilesById[docs.Id] = docs;
+
+        var existing = TeamItems.FirstOrDefault(t =>
+            string.Equals(t.Team.Id, team.Id, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            var index = TeamItems.IndexOf(existing);
+            TeamItems[index] = new TeamListItemViewModel(team);
+            SelectedTeamItem = TeamItems[index];
+        }
+        else
+        {
+            var item = new TeamListItemViewModel(team);
+            TeamItems.Add(item);
+            SelectedTeamItem = item;
+        }
+
         StatusMessage = "已创建示例 Team（Release Prep Squad）。";
     }
 
-    [RelayCommand]
-    private async Task RunSelectedTeamAsync()
+    /// <summary>Cancels the in-flight Chat / schedule Team run if any. Returns true when a run was cancelled.</summary>
+    public bool CancelActiveTeamRun()
     {
-        var sessionId = _activeSession.SessionId;
-        if (string.IsNullOrWhiteSpace(sessionId))
+        var cts = _teamRunCts;
+        if (cts is null || cts.IsCancellationRequested)
         {
-            StatusMessage = "试跑需要当前 Chat 会话；请改用 Chat 的 Teams 模式发送目标。";
-            return;
+            return false;
         }
 
-        if (string.IsNullOrWhiteSpace(RunGoal))
+        try
         {
-            StatusMessage = "请输入运行目标。";
-            return;
+            cts.Cancel();
+            return true;
         }
-
-        var (ok, message, _) = await RunTeamGoalAsync(sessionId, RunGoal.Trim(), SelectedTeam?.Id)
-            .ConfigureAwait(true);
-        StatusMessage = message;
-        if (!ok)
+        catch (ObjectDisposedException)
         {
-            return;
+            return false;
         }
     }
 
-    /// <summary>Runs a Team Task for a Chat session (Teams mode send path).</summary>
+    /// <summary>
+    /// Runs a Team Task for Chat / schedule. Does not mutate Teams config page state
+    /// (no auto-enable, no Team list refresh, no synthetic Team creation).
+    /// </summary>
     public async Task<(bool Ok, string Message, TeamTask? Task)> RunTeamGoalAsync(
         string rootSessionId,
         string goal,
-        string? teamId = null)
+        string? teamId = null,
+        bool openTrace = true,
+        CancellationToken cancellationToken = default)
     {
         if (!_settings.Teams.Enabled)
         {
             return (false, "Teams disabled", null);
         }
-
-        TeamsEnabled = true;
 
         teamId ??= SelectedTeam?.Id ?? _settings.Teams.SelectedTeamId;
         if (string.IsNullOrWhiteSpace(teamId))
@@ -681,25 +733,44 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             return (false, "Missing root session", null);
         }
 
+        CancelActiveTeamRun();
+        var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _teamRunCts = runCts;
         IsBusy = true;
         try
         {
-            var result = await _orchestrator.StartAsync(
-                new TeamTaskStartRequest
-                {
-                    TeamId = teamId,
-                    RootSessionId = rootSessionId,
-                    Goal = goal.Trim()
-                }).ConfigureAwait(true);
-
-            await RefreshAsync().ConfigureAwait(true);
-            if (result.Ok)
+            var request = new TeamTaskStartRequest
             {
-                await OpenTraceAsync(result.Task).ConfigureAwait(true);
-                return (true, $"Task {result.Task.TaskId}: {result.Task.Status}", result.Task);
+                TeamId = teamId,
+                RootSessionId = rootSessionId,
+                Goal = goal.Trim()
+            };
+
+            // Open Trace immediately so the user can watch Leader/Workers live.
+            var began = await _orchestrator.BeginAsync(request, runCts.Token).ConfigureAwait(true);
+            if (!began.Ok)
+            {
+                return (false, began.Error ?? "Failed", began.Task);
             }
 
-            return (false, result.Error ?? "Failed", result.Task);
+            if (openTrace)
+            {
+                await OpenTraceAsync(began.Task, live: true).ConfigureAwait(true);
+                // Let the Trace window paint before the Leader turn blocks the UI thread.
+                await Application.Current.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+            }
+
+            var completed = await _orchestrator
+                .RunToCompletionAsync(began.Task.RootSessionId, began.Task.TaskId, runCts.Token)
+                .ConfigureAwait(true);
+
+            var ok = completed.Status is not TeamTaskStatus.Failed and not TeamTaskStatus.Cancelled;
+            var message = completed.FinalResult ?? completed.Error ?? completed.Status.ToString();
+            return (ok, message, completed);
+        }
+        catch (OperationCanceledException)
+        {
+            return (false, "cancelled", null);
         }
         catch (Exception ex)
         {
@@ -708,6 +779,12 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_teamRunCts, runCts))
+            {
+                _teamRunCts = null;
+            }
+
+            runCts.Dispose();
             IsBusy = false;
         }
     }
@@ -737,10 +814,11 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             return;
         }
 
-        await OpenTraceAsync(latest).ConfigureAwait(true);
+        var live = latest.Status is TeamTaskStatus.Running or TeamTaskStatus.AwaitingHuman;
+        await OpenTraceAsync(latest, live).ConfigureAwait(true);
     }
 
-    public async Task OpenTraceAsync(TeamTask task)
+    public async Task OpenTraceAsync(TeamTask task, bool live = false)
     {
         var events = await _traceStore.ReadAsync(task.RootSessionId, task.TaskId).ConfigureAwait(true);
         var owner = Application.Current?.MainWindow;
@@ -756,7 +834,17 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             }
         }
 
-        TeamTraceWindow.ShowOrFocus(task, events, owner, _traceStore, teamName);
+        var shouldLive = live
+            || task.Status is TeamTaskStatus.Running or TeamTaskStatus.AwaitingHuman;
+
+        TeamTraceWindow.ShowOrFocus(
+            task,
+            events,
+            owner,
+            _traceStore,
+            teamName,
+            _taskStore,
+            shouldLive);
     }
 
     public async Task OpenTraceByTaskIdAsync(string rootSessionId, string taskId)
@@ -771,23 +859,23 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         if (task is null)
         {
             // Fall back to latest task in this session when the deep-link target is gone.
-            var latest = (await _taskStore.ListForRootSessionAsync(rootSessionId).ConfigureAwait(true))
-                .FirstOrDefault(t => string.Equals(t.TaskId, taskId, StringComparison.OrdinalIgnoreCase))
-                ?? (await _taskStore.ListForRootSessionAsync(rootSessionId).ConfigureAwait(true)).FirstOrDefault();
-            if (latest is null)
+            var listed = await _taskStore.ListForRootSessionAsync(rootSessionId).ConfigureAwait(true);
+            task = listed.FirstOrDefault(t => string.Equals(t.TaskId, taskId, StringComparison.OrdinalIgnoreCase))
+                ?? listed.FirstOrDefault();
+            if (task is null)
             {
                 StatusMessage = $"找不到 Team Task：{taskId}";
                 return;
             }
-
-            task = latest;
         }
 
-        await OpenTraceAsync(task).ConfigureAwait(true);
+        var live = task.Status is TeamTaskStatus.Running or TeamTaskStatus.AwaitingHuman;
+        await OpenTraceAsync(task, live).ConfigureAwait(true);
     }
 
     private void RebuildMembers()
     {
+        var previousProfileId = SelectedMember?.Profile.Id;
         Members.Clear();
         SelectedMember = null;
         if (SelectedTeam is null)
@@ -810,8 +898,25 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             }
         }
 
-        SelectedMember = Members.FirstOrDefault();
+        SelectedMember = Members.FirstOrDefault(m =>
+                             string.Equals(m.Profile.Id, previousProfileId, StringComparison.OrdinalIgnoreCase))
+                         ?? Members.FirstOrDefault();
         RebuildOrgPreview();
+    }
+
+    private async Task RefreshRecentTasksAsync()
+    {
+        RecentTasks.Clear();
+        var sessionId = _activeSession.SessionId;
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        foreach (var task in await _taskStore.ListForRootSessionAsync(sessionId).ConfigureAwait(true))
+        {
+            RecentTasks.Add(task);
+        }
     }
 
     private void RebuildOrgPreview()

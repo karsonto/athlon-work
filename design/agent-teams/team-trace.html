@@ -476,7 +476,6 @@
         </div>
       </div>
       <div class="actions">
-        <button class="btn" id="themeBtn" type="button">切换深色</button>
         <button class="btn" id="resetLayout" type="button">重置布局</button>
         <button class="btn" id="toggleDrawer" type="button">收起详情</button>
         <a class="btn" href="./teams-config.html">配置</a>
@@ -955,13 +954,6 @@ path: tests/</pre>
       const ws = document.getElementById("workspace");
       const closed = ws.classList.toggle("drawer-closed");
       document.getElementById("toggleDrawer").textContent = closed ? "展开详情" : "收起详情";
-    };
-
-    document.getElementById("themeBtn").onclick = () => {
-      const root = document.documentElement;
-      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-      root.setAttribute("data-theme", next);
-      document.getElementById("themeBtn").textContent = next === "dark" ? "切换浅色" : "切换深色";
     };
 
     document.querySelectorAll(".drawer-tab").forEach(tab => {

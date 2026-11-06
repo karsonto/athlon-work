@@ -328,36 +328,6 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
 
-                                    <Border Margin="0,8,0,0"
-                                            Background="{DynamicResource Brush.ChatBackground}"
-                                            BorderBrush="{DynamicResource Brush.Border}"
-                                            BorderThickness="1"
-                                            CornerRadius="10"
-                                            Padding="12">
-                                        <StackPanel>
-                                            <TextBlock Text="运行 Team Task" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                            <TextBox Text="{Binding RunGoal, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
-                                            <TextBlock Text="推荐在 Chat 切换到 Teams 模式发送目标。此处试跑仍需当前会话。"
-                                                       Foreground="{DynamicResource Brush.SubtleText}"
-                                                       FontSize="12"
-                                                       TextWrapping="Wrap"
-                                                       Margin="0,0,0,8" />
-                                            <Button Content="试跑（当前 Chat 会话）"
-                                                    Command="{Binding RunSelectedTeamCommand}"
-                                                    HorizontalAlignment="Left">
-                                                <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource TeamsPrimaryButtonStyle}">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsBusy}" Value="True">
-                                                                <Setter Property="IsEnabled" Value="False" />
-                                                                <Setter Property="Opacity" Value="0.55" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Button.Style>
-                                            </Button>
-                                        </StackPanel>
-                                    </Border>
                                     <TextBlock Text="{Binding StatusMessage}"
                                                Foreground="{DynamicResource Brush.SubtleText}"
                                                TextWrapping="Wrap"
