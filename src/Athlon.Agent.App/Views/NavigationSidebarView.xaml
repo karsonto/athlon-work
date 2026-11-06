@@ -652,9 +652,12 @@
                         <Button Command="{Binding NavigateCommand}"
                                 CommandParameter="Teams"
                                 Style="{StaticResource NavBottomButtonStyle}"
-                                ToolTip="Agent Teams">
+                                ToolTip="Agent Teams"
+                                Margin="0,0,0,8">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="👥" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource TeamsNavIconStyle}"
+                                                Margin="0,0,10,0"
+                                                VerticalAlignment="Center" />
                                 <TextBlock Text="Teams" Style="{StaticResource AppTextNav}" />
                             </StackPanel>
                         </Button>

@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Controls;
 using Athlon.Agent.App.Views;
 
@@ -28,7 +29,27 @@ public sealed class PageViewFactory
             AppPage.Knowledge => new KnowledgePageView(),
             AppPage.Schedule => new SchedulePageView(),
             AppPage.SkillHub => new SkillHubPageView(),
-            AppPage.Teams => new TeamsPageView(),
+            AppPage.Teams => CreateTeamsPageSafely(),
             _ => new ChatPageView()
         };
+
+    private static UserControl CreateTeamsPageSafely()
+    {
+        try
+        {
+            return new TeamsPageView();
+        }
+        catch (Exception ex)
+        {
+            return new UserControl
+            {
+                Content = new TextBlock
+                {
+                    Text = "Failed to open Teams page:\n" + ex.Message,
+                    Margin = new Thickness(40),
+                    TextWrapping = TextWrapping.Wrap
+                }
+            };
+        }
+    }
 }

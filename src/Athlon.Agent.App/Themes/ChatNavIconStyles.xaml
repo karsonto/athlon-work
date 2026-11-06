@@ -79,4 +79,47 @@
         </Setter>
     </Style>
 
+    <!-- Teams 导航图标：Leader + Workers -->
+    <Style x:Key="TeamsNavIconStyle" TargetType="ContentControl">
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContentControl">
+                    <Viewbox Stretch="Uniform">
+                        <Grid Width="28" Height="28">
+                            <Border CornerRadius="9">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#FF22C55E" Offset="0" />
+                                        <GradientStop Color="#FF0EA5E9" Offset="0.55" />
+                                        <GradientStop Color="#FF6366F1" Offset="1" />
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <!-- left worker -->
+                            <Ellipse Width="5.2" Height="5.2" Fill="#FFE0F2FE"
+                                     Margin="4.2,7.2,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Opacity="0.92" />
+                            <Path Data="M4.4,16.2 C4.4,14.1 6.2,12.8 8.4,12.8 C10.6,12.8 12.4,14.1 12.4,16.2 L12.4,19.2 L4.4,19.2 Z"
+                                  Fill="#FFBAE6FD" Opacity="0.9" />
+                            <!-- right worker -->
+                            <Ellipse Width="5.2" Height="5.2" Fill="#FFE0E7FF"
+                                     Margin="0,7.2,4.2,0" HorizontalAlignment="Right" VerticalAlignment="Top" Opacity="0.92" />
+                            <Path Data="M15.6,16.2 C15.6,14.1 17.4,12.8 19.6,12.8 C21.8,12.8 23.6,14.1 23.6,16.2 L23.6,19.2 L15.6,19.2 Z"
+                                  Fill="#FFC7D2FE" Opacity="0.9" />
+                            <!-- leader (front) -->
+                            <Ellipse Width="6.4" Height="6.4" Fill="#FFFFFFFF"
+                                     HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,5.2,0,0" />
+                            <Path Data="M8.2,17.4 C8.2,14.8 10.4,13.2 14,13.2 C17.6,13.2 19.8,14.8 19.8,17.4 L19.8,21.2 L8.2,21.2 Z"
+                                  Fill="#FFFFFFFF" />
+                            <!-- leader accent spark -->
+                            <Path Data="M14,2.8 L14.55,4.1 L16,4.55 L14.55,5 L14,6.3 L13.45,5 L12,4.55 L13.45,4.1 Z"
+                                  Fill="#FFFEF08A" />
+                        </Grid>
+                    </Viewbox>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

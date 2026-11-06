@@ -27,12 +27,12 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel>
                         <TextBlock Text="Enable Teams" FontWeight="SemiBold" FontSize="16" />
-                        <TextBlock Text="When enabled, Leader tools register at next app start. Default is off."
+                        <TextBlock Text="When enabled, Team orchestration tools become active. Default is off."
                                    Foreground="{DynamicResource Brush.SubtleText}" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
                         <CheckBox IsChecked="{Binding TeamsEnabled}" VerticalAlignment="Center" Margin="0,0,12,0" />
-                        <Button Content="Save" Command="{Binding SaveSettingsCommand}" Style="{StaticResource PrimaryButtonStyle}" />
+                        <Button Content="Save" Command="{Binding SaveSettingsCommand}" Style="{StaticResource GhostButtonStyle}" />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -43,7 +43,7 @@
                         <TextBlock Text="Teams" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
                         <Button DockPanel.Dock="Right" Content="Create sample team"
                                 Command="{Binding CreateSampleTeamCommand}"
-                                Style="{StaticResource GhostIconButtonStyle}" />
+                                Style="{StaticResource GhostButtonStyle}" />
                     </DockPanel>
                     <ListBox ItemsSource="{Binding Teams}"
                              SelectedItem="{Binding SelectedTeam}"
@@ -54,7 +54,7 @@
                     <TextBox Text="{Binding SelectedTeam.Description, UpdateSourceTrigger=PropertyChanged}"
                              AcceptsReturn="True" Height="60" TextWrapping="Wrap" Margin="0,4,0,8" />
                     <Button Content="Save team" Command="{Binding SaveTeamCommand}" HorizontalAlignment="Left"
-                            Style="{StaticResource PrimaryButtonStyle}" />
+                            Style="{StaticResource GhostButtonStyle}" />
                 </StackPanel>
             </Border>
 
@@ -83,7 +83,7 @@
                             <TextBlock Text="MaxIterations" />
                             <TextBox Text="{Binding SelectedProfile.MaxIterations, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,8" />
                             <Button Content="Save profile" Command="{Binding SaveProfileCommand}"
-                                    Style="{StaticResource PrimaryButtonStyle}" HorizontalAlignment="Left" />
+                                    Style="{StaticResource GhostButtonStyle}" HorizontalAlignment="Left" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>
@@ -97,9 +97,9 @@
                     <TextBox Text="{Binding RunGoal, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
                     <StackPanel Orientation="Horizontal">
                         <Button Content="Run selected team" Command="{Binding RunSelectedTeamCommand}"
-                                Style="{StaticResource PrimaryButtonStyle}" Margin="0,0,8,0" />
+                                Style="{StaticResource GhostButtonStyle}" Margin="0,0,8,0" />
                         <Button Content="Open latest Trace" Command="{Binding OpenSelectedTraceCommand}"
-                                Style="{StaticResource GhostIconButtonStyle}" />
+                                Style="{StaticResource GhostButtonStyle}" />
                     </StackPanel>
                 </StackPanel>
             </Border>
