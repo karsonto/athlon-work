@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.Debug;
@@ -93,8 +95,6 @@ public sealed class TeamMemberRunExecutor(
             session = session with { ModelName = profile.ModelNameOverride };
         }
 
-        await EnsureKnowledgeAsync(memberSessionId, profile, task.RootSessionId, cancellationToken).ConfigureAwait(false);
-
         var ignorePatterns = WorkspaceSessionResolver.ResolveIgnorePatterns(session, settings);
         var workspaceKind = runContextAccessor.Current?.WorkspaceKind
             ?? WorkspaceSessionResolver.ResolveKind(session, settings);
@@ -153,6 +153,9 @@ public sealed class TeamMemberRunExecutor(
 
         using var profileScope = AgentProfileTurnScope.Enter(profileOptions);
         using var runScope = runContextAccessor.Push(childContext);
+        // Knowledge must be written after Push so ResolveSessionDirectory targets
+        // teams/.../members/... rather than a top-level sessions/{memberId} folder.
+        await EnsureKnowledgeAsync(memberSessionId, profile, task.RootSessionId, cancellationToken).ConfigureAwait(false);
         using var sessionScope = activeSessionContext.Enter(memberSessionId);
         using var workspaceScope = SessionWorkspaceScope.Enter(
             childContext.WorkspaceRoot,
@@ -166,15 +169,18 @@ public sealed class TeamMemberRunExecutor(
             memberSessionId,
             isLeader);
 
-        var transcript = serviceProvider.GetService<IConversationTranscriptWriter>();
         var lastPersistMs = 0L;
+        var lastMessageCount = session.Messages.Count;
         var callbacks = new AgentTurnCallbacks
         {
             OnSessionUpdated = async updated =>
             {
+                var countChanged = updated.Messages.Count != lastMessageCount;
                 session = updated;
+                lastMessageCount = updated.Messages.Count;
                 var now = Environment.TickCount64;
-                if (now - lastPersistMs < 750)
+                // Always flush when a new message/tool row appears; throttle pure content churn.
+                if (!countChanged && now - lastPersistMs < 400)
                 {
                     return;
                 }
@@ -182,13 +188,10 @@ public sealed class TeamMemberRunExecutor(
                 lastPersistMs = now;
                 try
                 {
-                    // Let live Trace read mid-turn tool/model activity without waiting for completion.
-                    await jsonFileStore.SaveAsync(sessionPath, session, CancellationToken.None).ConfigureAwait(false);
-                    if (transcript is not null)
-                    {
-                        await transcript.FlushSessionAsync(memberSessionId, CancellationToken.None)
-                            .ConfigureAwait(false);
-                    }
+                    // Write directly under the member directory so Trace Tools can poll mid-turn
+                    // without depending on SessionRuntimeStore path/hydration for nested sessions.
+                    await PersistMemberTranscriptAsync(memberDir, sessionPath, session, CancellationToken.None)
+                        .ConfigureAwait(false);
                 }
                 catch
                 {
@@ -202,11 +205,8 @@ public sealed class TeamMemberRunExecutor(
             var orchestrator = serviceProvider.GetRequiredService<IAgentOrchestrator>();
             session = await orchestrator.SendAsync(session, message.Trim(), null, callbacks, cancellationToken)
                 .ConfigureAwait(false);
-            await jsonFileStore.SaveAsync(sessionPath, session, cancellationToken).ConfigureAwait(false);
-            if (transcript is not null)
-            {
-                await transcript.FlushSessionAsync(memberSessionId, cancellationToken).ConfigureAwait(false);
-            }
+            await PersistMemberTranscriptAsync(memberDir, sessionPath, session, cancellationToken)
+                .ConfigureAwait(false);
 
             var responseText = SubAgentResultFormatter.ExtractLastAssistantText(session)
                 ?? "(Team member finished without assistant text.)";
@@ -214,7 +214,8 @@ public sealed class TeamMemberRunExecutor(
         }
         catch (OperationCanceledException)
         {
-            await jsonFileStore.SaveAsync(sessionPath, session, CancellationToken.None).ConfigureAwait(false);
+            await PersistMemberTranscriptAsync(memberDir, sessionPath, session, CancellationToken.None)
+                .ConfigureAwait(false);
             throw;
         }
         catch (Exception ex)
@@ -222,6 +223,33 @@ public sealed class TeamMemberRunExecutor(
             _logger.Error(ex, "Team member run failed task={TaskId} member={MemberId}", task.TaskId, memberSessionId);
             return TeamMemberRunOutcome.Fail(ex.Message);
         }
+    }
+
+    private async Task PersistMemberTranscriptAsync(
+        string memberDir,
+        string sessionPath,
+        AgentSession session,
+        CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(memberDir);
+        await jsonFileStore.SaveAsync(sessionPath, session, cancellationToken).ConfigureAwait(false);
+
+        // Snapshot conversation.jsonl for Trace Tools polling. Prefer a full rewrite so mid-turn
+        // Upserts from SessionRuntimeStore (possibly under a different path) cannot leave a stale log.
+        var conversationPath = Path.Combine(memberDir, "conversation.jsonl");
+        var builder = new StringBuilder(Math.Max(256, session.Messages.Count * 128));
+        foreach (var message in session.Messages)
+        {
+            if (message.Role is MessageRole.System or MessageRole.Compaction)
+            {
+                continue;
+            }
+
+            builder.AppendLine(JsonSerializer.Serialize(message, JsonFileStore.JsonLineOptions));
+        }
+
+        await File.WriteAllTextAsync(conversationPath, builder.ToString(), Encoding.UTF8, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task EnsureKnowledgeAsync(

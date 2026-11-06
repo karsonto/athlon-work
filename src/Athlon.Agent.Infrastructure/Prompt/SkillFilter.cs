@@ -27,9 +27,10 @@ public static class SkillFilter
             return true;
         }
 
+        // Empty allow-list: deny (matches profile UI "skills×0" and MCP empty semantics).
         if (allowed.Count == 0)
         {
-            return true;
+            return false;
         }
 
         return allowed.Any(name =>

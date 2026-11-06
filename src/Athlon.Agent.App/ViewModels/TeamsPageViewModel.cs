@@ -39,7 +39,10 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     private readonly IKnowledgeStore _knowledgeStore;
     private readonly IAppLogger _logger;
     private readonly Dictionary<string, AgentProfile> _profilesById = new(StringComparer.OrdinalIgnoreCase);
-    private CancellationTokenSource? _teamRunCts;
+    private readonly Dictionary<string, CancellationTokenSource> _runCtsBySession =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (string RootSessionId, string TaskId)> _pendingAsksBySession =
+        new(StringComparer.OrdinalIgnoreCase);
     private bool _suppressCapabilitySync;
     private bool _catalogLoaded;
 
@@ -681,23 +684,106 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         StatusMessage = "已创建示例 Team（Release Prep Squad）。";
     }
 
-    /// <summary>Cancels the in-flight Chat / schedule Team run if any. Returns true when a run was cancelled.</summary>
-    public bool CancelActiveTeamRun()
+    /// <summary>
+    /// Cancels the in-flight Team run for <paramref name="rootSessionId"/> (or all sessions when null).
+    /// Returns true when at least one run was cancelled.
+    /// </summary>
+    public bool CancelActiveTeamRun(string? rootSessionId = null)
     {
-        var cts = _teamRunCts;
-        if (cts is null || cts.IsCancellationRequested)
+        if (!string.IsNullOrWhiteSpace(rootSessionId))
         {
-            return false;
+            return CancelRunForSession(rootSessionId);
         }
 
-        try
+        var any = false;
+        foreach (var sessionId in _runCtsBySession.Keys.ToList())
         {
-            cts.Cancel();
+            any |= CancelRunForSession(sessionId);
+        }
+
+        return any;
+    }
+
+    public bool IsTeamRunActive(string? rootSessionId = null)
+    {
+        if (!string.IsNullOrWhiteSpace(rootSessionId))
+        {
+            return _runCtsBySession.TryGetValue(rootSessionId, out var cts)
+                   && !cts.IsCancellationRequested;
+        }
+
+        return IsBusy || _runCtsBySession.Count > 0;
+    }
+
+    public bool TryGetPendingAsk(string rootSessionId, out string taskId)
+    {
+        if (_pendingAsksBySession.TryGetValue(rootSessionId, out var pending))
+        {
+            taskId = pending.TaskId;
             return true;
         }
-        catch (ObjectDisposedException)
+
+        taskId = "";
+        return false;
+    }
+
+    /// <summary>Resumes a Team Task paused on <see cref="TeamTaskStatus.AwaitingHuman"/>.</summary>
+    public async Task<(bool Ok, string Message, TeamTask? Task)> ResumeTeamAskAsync(
+        string rootSessionId,
+        string humanAnswer,
+        bool openTrace = true,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_pendingAsksBySession.TryGetValue(rootSessionId, out var pending))
         {
-            return false;
+            return (false, "No pending team question", null);
+        }
+
+        if (string.IsNullOrWhiteSpace(humanAnswer))
+        {
+            return (false, "Empty answer", null);
+        }
+
+        CancelRunForSession(rootSessionId);
+        var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _runCtsBySession[rootSessionId] = runCts;
+        IsBusy = true;
+        try
+        {
+            if (openTrace)
+            {
+                var existing = await _taskStore.GetAsync(pending.RootSessionId, pending.TaskId, runCts.Token)
+                    .ConfigureAwait(true);
+                if (existing is not null)
+                {
+                    await OpenTraceAsync(existing, live: true).ConfigureAwait(true);
+                    await Application.Current.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+                }
+            }
+
+            var completed = await _orchestrator
+                .RunToCompletionAsync(
+                    pending.RootSessionId,
+                    pending.TaskId,
+                    runCts.Token,
+                    humanAnswer.Trim())
+                .ConfigureAwait(true);
+
+            return FinalizeTeamRunResult(rootSessionId, completed);
+        }
+        catch (OperationCanceledException)
+        {
+            return (false, "cancelled", null);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Team ask resume failed");
+            return (false, ex.Message, null);
+        }
+        finally
+        {
+            ClearRunCts(rootSessionId, runCts);
+            IsBusy = false;
         }
     }
 
@@ -733,9 +819,9 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             return (false, "Missing root session", null);
         }
 
-        CancelActiveTeamRun();
+        CancelRunForSession(rootSessionId);
         var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _teamRunCts = runCts;
+        _runCtsBySession[rootSessionId] = runCts;
         IsBusy = true;
         try
         {
@@ -764,9 +850,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
                 .RunToCompletionAsync(began.Task.RootSessionId, began.Task.TaskId, runCts.Token)
                 .ConfigureAwait(true);
 
-            var ok = completed.Status is not TeamTaskStatus.Failed and not TeamTaskStatus.Cancelled;
-            var message = completed.FinalResult ?? completed.Error ?? completed.Status.ToString();
-            return (ok, message, completed);
+            return FinalizeTeamRunResult(rootSessionId, completed);
         }
         catch (OperationCanceledException)
         {
@@ -779,14 +863,61 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         }
         finally
         {
-            if (ReferenceEquals(_teamRunCts, runCts))
-            {
-                _teamRunCts = null;
-            }
-
-            runCts.Dispose();
+            ClearRunCts(rootSessionId, runCts);
             IsBusy = false;
         }
+    }
+
+    private (bool Ok, string Message, TeamTask? Task) FinalizeTeamRunResult(string rootSessionId, TeamTask completed)
+    {
+        if (completed.Status == TeamTaskStatus.AwaitingHuman)
+        {
+            _pendingAsksBySession[rootSessionId] = (completed.RootSessionId, completed.TaskId);
+            var question = completed.PendingHumanQuestion ?? "Team needs your input.";
+            return (false, question, completed);
+        }
+
+        _pendingAsksBySession.Remove(rootSessionId);
+
+        var ok = completed.Status == TeamTaskStatus.Succeeded
+                 && !string.IsNullOrWhiteSpace(completed.FinalResult);
+        var message = ok
+            ? completed.FinalResult!
+            : completed.Error
+              ?? (completed.Status == TeamTaskStatus.Succeeded
+                  ? "Succeeded without FinalResult"
+                  : completed.Status.ToString());
+        return (ok, message, completed);
+    }
+
+    private bool CancelRunForSession(string rootSessionId)
+    {
+        if (!_runCtsBySession.TryGetValue(rootSessionId, out var cts)
+            || cts.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        try
+        {
+            cts.Cancel();
+            return true;
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+    }
+
+    private void ClearRunCts(string rootSessionId, CancellationTokenSource runCts)
+    {
+        if (_runCtsBySession.TryGetValue(rootSessionId, out var current)
+            && ReferenceEquals(current, runCts))
+        {
+            _runCtsBySession.Remove(rootSessionId);
+        }
+
+        runCts.Dispose();
     }
 
     [RelayCommand]

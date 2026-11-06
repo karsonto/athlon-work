@@ -653,8 +653,21 @@ public sealed partial class SessionTurnUiController
         RunOnUiSync(() =>
         {
             assistant = ChatMessage.Create(MessageRole.Assistant, assistantMarkdown);
-            Messages.Add(new ChatMessageViewModel(assistant));
+            var viewModel = new ChatMessageViewModel(assistant);
+            Messages.Add(viewModel);
             TrimMessagesIfNeeded();
+            // Teams / local completions run outside a live agent turn. CollectionChanged may
+            // choose a deferred SyncChatView that gets dropped while HasLiveTurnSurface is still
+            // true from a prior turn — paint the bubble immediately like a sealed assistant reply.
+            if (CanTouchChatView && !string.IsNullOrWhiteSpace(viewModel.Content))
+            {
+                _ = ChatView!.ApplyAssistantMarkdownAsync(viewModel);
+            }
+            else
+            {
+                SyncChatView(immediate: true, authoritative: true);
+            }
+
             RequestScrollImmediate();
         });
 

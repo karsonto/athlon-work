@@ -106,64 +106,125 @@ public partial class MainShellViewModel
         }
 
         await EnsureDisplayedSessionReadyAsync().ConfigureAwait(true);
+        // Capture session + UI so a mid-run switch cannot write the summary into another chat.
+        var captureSessionId = _displayedSessionId;
+        var captureUi = _activeUi;
         ShowShellToast(_loc["Teams_RunningToast"], ShellToastKind.Info);
         SetComposerStatus($"Teams · {team.Name}");
         IsBusy = true;
 
-        var userMessage = _activeUi.AppendLocalUserMessage(goal);
-        _session = _session.WithMessage(userMessage);
-        await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
+        var userMessage = captureUi.AppendLocalUserMessage(goal);
+        if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
+        {
+            _session = _session.WithMessage(userMessage);
+            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
+        }
 
         try
         {
             // Run via orchestrator path without mutating Teams config page (no new Team / no list refresh).
             var (ok, message, task) = await TeamsPageVm
-                .RunTeamGoalAsync(_displayedSessionId, goal, team.Id, openTrace: true)
+                .RunTeamGoalAsync(captureSessionId, goal, team.Id, openTrace: true)
                 .ConfigureAwait(true);
 
-            string summaryMarkdown;
-            if (string.Equals(message, "cancelled", StringComparison.OrdinalIgnoreCase)
-                || task?.Status == Athlon.Agent.Core.Teams.TeamTaskStatus.Cancelled)
-            {
-                summaryMarkdown = FormatTeamsChatSummary(
-                    _loc["Teams_CancelledReason"],
-                    task?.TaskId,
-                    failed: true);
-                ShowShellToast(_loc["Teams_CancelledToast"], ShellToastKind.Info);
-            }
-            else if (ok && task is not null)
-            {
-                var resultText = !string.IsNullOrWhiteSpace(task.FinalResult)
-                    ? task.FinalResult!
-                    : message;
-                summaryMarkdown = FormatTeamsChatSummary(resultText, task.TaskId, failed: false);
-                ShowShellToast(
-                    _loc.Format("Teams_CompletedToast", task.Status.ToString()),
-                    ShellToastKind.Success);
-            }
-            else
-            {
-                var failText = !string.IsNullOrWhiteSpace(task?.Error)
-                    ? task!.Error!
-                    : message;
-                summaryMarkdown = FormatTeamsChatSummary(failText, task?.TaskId, failed: true);
-                ShowShellToast(
-                    _loc.Format("Teams_FailedToast", failText),
-                    ShellToastKind.Error);
-            }
-
-            var assistantMessage = _activeUi.AppendLocalAssistantMessage(summaryMarkdown);
-            _session = _session.WithMessage(assistantMessage);
-            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
+            await ApplyTeamRunOutcomeToChatAsync(
+                    captureSessionId,
+                    captureUi,
+                    ok,
+                    message,
+                    task)
+                .ConfigureAwait(true);
         }
         finally
         {
-            IsBusy = false;
+            if (!TeamsPageVm.IsTeamRunActive(captureSessionId))
+            {
+                IsBusy = false;
+            }
+
             SetComposerStatus(null);
             NotifyCommandStatesChanged();
         }
 
         return true;
+    }
+
+    private async Task ApplyTeamRunOutcomeToChatAsync(
+        string captureSessionId,
+        SessionTurnUiController captureUi,
+        bool ok,
+        string message,
+        Athlon.Agent.Core.Teams.TeamTask? task)
+    {
+        string summaryMarkdown;
+        if (string.Equals(message, "cancelled", StringComparison.OrdinalIgnoreCase)
+            || task?.Status == Athlon.Agent.Core.Teams.TeamTaskStatus.Cancelled)
+        {
+            summaryMarkdown = FormatTeamsChatSummary(
+                _loc["Teams_CancelledReason"],
+                task?.TaskId,
+                failed: true);
+            ShowShellToast(_loc["Teams_CancelledToast"], ShellToastKind.Info);
+        }
+        else if (task?.Status == Athlon.Agent.Core.Teams.TeamTaskStatus.AwaitingHuman)
+        {
+            PushTeamAskUserQuestion(captureSessionId, task);
+            summaryMarkdown = FormatTeamsChatSummary(
+                _loc.Format("Teams_AwaitingHumanSummary", task.PendingHumanQuestion ?? message),
+                task.TaskId,
+                failed: false);
+            ShowShellToast(_loc["Teams_AwaitingHumanToast"], ShellToastKind.Info);
+        }
+        else if (ok && task is not null)
+        {
+            var resultText = ResolveTeamsFinalResultText(task, message);
+            summaryMarkdown = FormatTeamsChatSummary(resultText, task.TaskId, failed: false);
+            ShowShellToast(
+                _loc.Format("Teams_CompletedToast", task.Status.ToString()),
+                ShellToastKind.Success);
+        }
+        else
+        {
+            var failText = !string.IsNullOrWhiteSpace(task?.Error)
+                ? task!.Error!
+                : message;
+            summaryMarkdown = FormatTeamsChatSummary(failText, task?.TaskId, failed: true);
+            ShowShellToast(
+                _loc.Format("Teams_FailedToast", failText),
+                ShellToastKind.Error);
+        }
+
+        var assistantMessage = captureUi.AppendLocalAssistantMessage(summaryMarkdown);
+        if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
+        {
+            _session = _session.WithMessage(assistantMessage);
+            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
+            QuestionBar.RefreshFromActiveSession();
+        }
+    }
+
+    private void PushTeamAskUserQuestion(string sessionId, Athlon.Agent.Core.Teams.TeamTask task)
+    {
+        var prompt = string.IsNullOrWhiteSpace(task.PendingHumanQuestion)
+            ? "Team needs your input."
+            : task.PendingHumanQuestion!;
+        _userQuestions.SetPending(
+            sessionId,
+            new Athlon.Agent.Core.Plan.UserQuestion
+            {
+                RequestId = "team_" + task.TaskId,
+                AllowFreeText = true,
+                Questions =
+                [
+                    new Athlon.Agent.Core.Plan.UserQuestionItem
+                    {
+                        Id = "q1",
+                        Prompt = prompt,
+                        AllowMultiple = false,
+                        Options = []
+                    }
+                ]
+            });
     }
 
     private string FormatTeamsChatSummary(string body, string? taskId, bool failed)
@@ -179,6 +240,25 @@ public partial class MainShellViewModel
         return failed
             ? _loc.Format("Teams_ChatSummaryFail", text, taskId)
             : _loc.Format("Teams_ChatSummaryOk", text, taskId);
+    }
+
+    private static string ResolveTeamsFinalResultText(Athlon.Agent.Core.Teams.TeamTask task, string fallback)
+    {
+        if (task.Status == Athlon.Agent.Core.Teams.TeamTaskStatus.Succeeded
+            && !string.IsNullOrWhiteSpace(task.FinalResult))
+        {
+            return task.FinalResult!;
+        }
+
+        if (!string.IsNullOrWhiteSpace(fallback)
+            && !string.Equals(fallback, "Succeeded", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(fallback, "Running", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(fallback, "AwaitingHuman", StringComparison.OrdinalIgnoreCase))
+        {
+            return fallback;
+        }
+
+        return string.IsNullOrWhiteSpace(task.Error) ? fallback : task.Error!;
     }
 
     private async void OnTeamTraceLinkRequested(object? sender, string uri)

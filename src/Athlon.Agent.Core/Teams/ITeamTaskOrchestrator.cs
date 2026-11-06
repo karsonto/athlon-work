@@ -44,8 +44,16 @@ public interface ITeamTaskOrchestrator
 
     Task<TeamTask?> GetTaskAsync(string rootSessionId, string taskId, CancellationToken cancellationToken = default);
 
-    /// <summary>Runs the Leader planning turn and serial worker loop for P0.</summary>
-    Task<TeamTask> RunToCompletionAsync(string rootSessionId, string taskId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Outer-loop orchestration: Leader turns enqueue workers; workers run in parallel up to
+    /// MaxParallelWorkers; after workers finish the Leader is re-invoked until submit / ask_user / fail.
+    /// </summary>
+    /// <param name="humanAnswer">When resuming from <see cref="TeamTaskStatus.AwaitingHuman"/>.</param>
+    Task<TeamTask> RunToCompletionAsync(
+        string rootSessionId,
+        string taskId,
+        CancellationToken cancellationToken = default,
+        string? humanAnswer = null);
 }
 
 public interface ITeamMemberRunExecutor

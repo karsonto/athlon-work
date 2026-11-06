@@ -85,6 +85,7 @@ public sealed class TeamListMembersTool(
 public sealed class TeamCreateSubtaskTool(
     AppSettings settings,
     ITeamTaskStore taskStore,
+    ITeamDefinitionStore teamStore,
     IAgentProfileStore profileStore,
     ITeamTraceStore traceStore) : IAgentTool, ITeamLeaderTool, IExcludedFromChildAgentToolkit
 {
@@ -125,6 +126,19 @@ public sealed class TeamCreateSubtaskTool(
         if (profile is null)
         {
             return ToolResult.Failure("Unknown profile", $"Profile '{assignee}' not found.");
+        }
+
+        var team = await teamStore.GetAsync(task.TeamId, cancellationToken).ConfigureAwait(false);
+        if (team is null)
+        {
+            return ToolResult.Failure("Team missing", $"Team '{task.TeamId}' not found.");
+        }
+
+        if (!team.WorkerProfileIds.Contains(profile.Id, StringComparer.OrdinalIgnoreCase))
+        {
+            return ToolResult.Failure(
+                "Not a worker",
+                $"Profile '{profile.Name}' is not a Worker on team '{team.Name}'.");
         }
 
         var depends = string.IsNullOrWhiteSpace(dependsRaw)
@@ -172,13 +186,11 @@ public sealed class TeamCreateSubtaskTool(
 public sealed class TeamDispatchTool(
     AppSettings settings,
     ITeamTaskStore taskStore,
-    IAgentProfileStore profileStore,
-    ITeamMemberRunExecutor memberExecutor,
     ITeamTraceStore traceStore) : IAgentTool, ITeamLeaderTool, IExcludedFromChildAgentToolkit
 {
     public ToolDefinition Definition => new(
         "team_dispatch",
-        "Start ready subtasks (respects MaxParallelWorkers). Pass subtask_ids or omit to dispatch all Ready.",
+        "Enqueue ready subtasks for background execution (respects MaxParallelWorkers in the outer loop). Returns immediately.",
         ToolSchema.Object()
             .String("subtask_ids", "Comma-separated subtask ids; empty = all Ready")
             .Build(),
@@ -202,7 +214,7 @@ public sealed class TeamDispatchTool(
             : idsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        RefreshReady(task);
+        TeamWorkerHelpers.RefreshReady(task);
         var candidates = task.SubTasks
             .Where(s => s.Status == TeamSubTaskStatus.Ready)
             .Where(s => requested is null || requested.Contains(s.Id))
@@ -213,163 +225,35 @@ public sealed class TeamDispatchTool(
             return ToolResult.Success("nothing to dispatch", "No Ready subtasks matched.");
         }
 
-        var teamMax = Math.Max(1, settings.Teams.MaxParallelWorkers);
-        var running = task.SubTasks.Count(s => s.Status == TeamSubTaskStatus.Running);
         var results = new StringBuilder();
-
-        // P0: serial dispatch even if parallel cap > 1 (P1 adds true parallel).
         foreach (var sub in candidates)
         {
-            if (running >= teamMax)
-            {
-                results.AppendLine($"{sub.Id}: deferred (parallel cap {teamMax})");
-                continue;
-            }
-
-            var outcome = await RunWorkerAsync(task, sub, redispatch: false, reason: null, cancellationToken)
-                .ConfigureAwait(false);
-            results.AppendLine($"{sub.Id}: {(outcome.Ok ? "ok" : "fail")} {Truncate(outcome.ResponseText)}");
-            running = task.SubTasks.Count(s => s.Status == TeamSubTaskStatus.Running);
+            sub.MemberSessionId ??= "mbr_" + IdGen.NewId()[..10];
+            sub.Status = TeamSubTaskStatus.Queued;
+            sub.StartedAt = null;
+            sub.CompletedAt = null;
+            sub.RedispatchReason = null;
+            results.AppendLine($"{sub.Id}: queued");
+            await traceStore.AppendAsync(
+                task.RootSessionId,
+                task.TaskId,
+                new TeamTraceEvent
+                {
+                    Type = "worker.queued",
+                    NodeId = sub.Id,
+                    FromNodeId = "leader",
+                    ToNodeId = sub.Id,
+                    ProfileId = sub.AssigneeProfileId,
+                    SubTaskId = sub.Id,
+                    Iteration = sub.Iteration,
+                    Message = "queued for outer loop"
+                },
+                cancellationToken).ConfigureAwait(false);
         }
 
         TeamTaskExecutionScope.Current?.ReplaceTask(task);
         await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
-        return ToolResult.Success("dispatch finished", results.ToString());
-    }
-
-    private async Task<TeamMemberRunOutcome> RunWorkerAsync(
-        TeamTask task,
-        TeamSubTask sub,
-        bool redispatch,
-        string? reason,
-        CancellationToken cancellationToken)
-    {
-        var profile = await profileStore.GetAsync(sub.AssigneeProfileId, cancellationToken).ConfigureAwait(false);
-        if (profile is null)
-        {
-            sub.Status = TeamSubTaskStatus.Failed;
-            sub.Error = "profile missing";
-            return TeamMemberRunOutcome.Fail("profile missing");
-        }
-
-        sub.MemberSessionId ??= "mbr_" + IdGen.NewId()[..10];
-        sub.Status = TeamSubTaskStatus.Running;
-        sub.StartedAt ??= DateTimeOffset.UtcNow;
-        if (redispatch)
-        {
-            sub.RedispatchReason = reason;
-        }
-
-        await traceStore.AppendAsync(
-            task.RootSessionId,
-            task.TaskId,
-            new TeamTraceEvent
-            {
-                Type = redispatch ? "worker.redispatch" : "worker.dispatch",
-                NodeId = sub.Id,
-                FromNodeId = "leader",
-                ToNodeId = sub.Id,
-                ProfileId = profile.Id,
-                SubTaskId = sub.Id,
-                Iteration = sub.Iteration,
-                Message = reason
-            },
-            cancellationToken).ConfigureAwait(false);
-
-        // Persist Running immediately so live Trace can show the node mid-flight.
-        TeamTaskExecutionScope.Current?.ReplaceTask(task);
-        await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
-
-        var message = BuildWorkerMessage(task, sub);
-        var outcome = await memberExecutor.ExecuteAsync(
-            task,
-            profile,
-            sub.MemberSessionId,
-            message,
-            isLeader: false,
-            cancellationToken).ConfigureAwait(false);
-
-        sub.CompletedAt = DateTimeOffset.UtcNow;
-        if (outcome.Ok)
-        {
-            sub.Status = TeamSubTaskStatus.Succeeded;
-            sub.Result = outcome.ResponseText;
-            sub.PrevResultSummary = Truncate(outcome.ResponseText, 1200);
-            sub.Error = null;
-        }
-        else
-        {
-            sub.Status = TeamSubTaskStatus.Failed;
-            sub.Error = outcome.Error ?? outcome.ResponseText;
-        }
-
-        await traceStore.AppendAsync(
-            task.RootSessionId,
-            task.TaskId,
-            new TeamTraceEvent
-            {
-                Type = outcome.Ok ? "worker.completed" : "worker.failed",
-                NodeId = sub.Id,
-                ProfileId = profile.Id,
-                SubTaskId = sub.Id,
-                Iteration = sub.Iteration,
-                Message = Truncate(outcome.ResponseText)
-            },
-            cancellationToken).ConfigureAwait(false);
-
-        RefreshReady(task);
-        return outcome;
-    }
-
-    internal static void RefreshReady(TeamTask task)
-    {
-        var done = task.SubTasks
-            .Where(s => s.Status is TeamSubTaskStatus.Succeeded)
-            .Select(s => s.Id)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var sub in task.SubTasks.Where(s => s.Status == TeamSubTaskStatus.Pending))
-        {
-            if (sub.DependsOn.All(d => done.Contains(d)))
-            {
-                sub.Status = TeamSubTaskStatus.Ready;
-            }
-        }
-    }
-
-    private static string BuildWorkerMessage(TeamTask task, TeamSubTask sub)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine($"Team goal: {task.Goal}");
-        sb.AppendLine($"Subtask: {sub.Title} ({sub.Id})");
-        sb.AppendLine($"Iteration: {sub.Iteration}/{sub.MaxIterations}");
-        if (!string.IsNullOrWhiteSpace(sub.RedispatchReason))
-        {
-            sb.AppendLine($"Redispatch reason: {sub.RedispatchReason}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(sub.PrevResultSummary) && sub.Iteration > 1)
-        {
-            sb.AppendLine();
-            sb.AppendLine("Previous result summary:");
-            sb.AppendLine(sub.PrevResultSummary);
-        }
-
-        sb.AppendLine();
-        sb.AppendLine("Handoff:");
-        sb.AppendLine(string.IsNullOrWhiteSpace(sub.Handoff) ? "(none — use team goal)" : sub.Handoff);
-        return sb.ToString();
-    }
-
-    private static string Truncate(string? text, int max = 400)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return "";
-        }
-
-        text = text.ReplaceLineEndings(" ").Trim();
-        return text.Length <= max ? text : text[..max] + "…";
+        return ToolResult.Success("dispatch enqueued", results.ToString());
     }
 }
 
@@ -377,12 +261,11 @@ public sealed class TeamRedispatchTool(
     AppSettings settings,
     ITeamTaskStore taskStore,
     IAgentProfileStore profileStore,
-    ITeamMemberRunExecutor memberExecutor,
     ITeamTraceStore traceStore) : IAgentTool, ITeamLeaderTool, IExcludedFromChildAgentToolkit
 {
     public ToolDefinition Definition => new(
         "team_redispatch",
-        "Re-run a completed Worker subtask with a required reason (loop). Honors AllowRedispatch and MaxIterations.",
+        "Queue another iteration of a completed Worker (loop). Honors AllowRedispatch and MaxIterations. Returns immediately.",
         ToolSchema.Object()
             .String("subtask_id", "Subtask id", required: true, minLength: 1)
             .String("reason", "Why another iteration is needed", required: true, minLength: 1)
@@ -416,9 +299,9 @@ public sealed class TeamRedispatchTool(
             return ToolResult.Failure("Not found", $"Subtask '{subId}' not found.");
         }
 
-        if (sub.Status is TeamSubTaskStatus.Running)
+        if (sub.Status is TeamSubTaskStatus.Running or TeamSubTaskStatus.Queued)
         {
-            return ToolResult.Failure("Busy", "Subtask is still running.");
+            return ToolResult.Failure("Busy", "Subtask is still queued or running.");
         }
 
         var profile = await profileStore.GetAsync(sub.AssigneeProfileId, cancellationToken).ConfigureAwait(false);
@@ -445,10 +328,10 @@ public sealed class TeamRedispatchTool(
             sub.Handoff = handoff.Trim();
         }
 
-        sub.Status = TeamSubTaskStatus.Running;
+        sub.Status = TeamSubTaskStatus.Queued;
         sub.RedispatchReason = reason.Trim();
-        var memberSessionId = sub.MemberSessionId ?? ("mbr_" + IdGen.NewId()[..10]);
-        sub.MemberSessionId = memberSessionId;
+        sub.MemberSessionId ??= "mbr_" + IdGen.NewId()[..10];
+        sub.CompletedAt = null;
 
         await traceStore.AppendAsync(
             task.RootSessionId,
@@ -465,66 +348,13 @@ public sealed class TeamRedispatchTool(
             },
             cancellationToken).ConfigureAwait(false);
 
-        var message = BuildWorkerMessage(task, sub);
-        var run = await memberExecutor.ExecuteAsync(task, profile, memberSessionId, message, false, cancellationToken)
-            .ConfigureAwait(false);
-
-        sub.CompletedAt = DateTimeOffset.UtcNow;
-        if (run.Ok)
-        {
-            sub.Status = TeamSubTaskStatus.Succeeded;
-            sub.Result = run.ResponseText;
-            sub.PrevResultSummary = Truncate(run.ResponseText, 1200);
-            sub.Error = null;
-        }
-        else
-        {
-            sub.Status = TeamSubTaskStatus.Failed;
-            sub.Error = run.Error ?? run.ResponseText;
-        }
-
-        TeamDispatchTool.RefreshReady(task);
+        TeamWorkerHelpers.RefreshReady(task);
         TeamTaskExecutionScope.Current?.ReplaceTask(task);
         await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
 
-        return run.Ok
-            ? ToolResult.Success($"redispatch iter {sub.Iteration}", Truncate(run.ResponseText))
-            : ToolResult.Failure("redispatch failed", run.Error ?? run.ResponseText);
-    }
-
-    private static string BuildWorkerMessage(TeamTask task, TeamSubTask sub)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine($"Team goal: {task.Goal}");
-        sb.AppendLine($"Subtask: {sub.Title} ({sub.Id})");
-        sb.AppendLine($"Iteration: {sub.Iteration}/{sub.MaxIterations}");
-        if (!string.IsNullOrWhiteSpace(sub.RedispatchReason))
-        {
-            sb.AppendLine($"Redispatch reason: {sub.RedispatchReason}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(sub.PrevResultSummary))
-        {
-            sb.AppendLine();
-            sb.AppendLine("Previous result summary:");
-            sb.AppendLine(sub.PrevResultSummary);
-        }
-
-        sb.AppendLine();
-        sb.AppendLine("Handoff:");
-        sb.AppendLine(string.IsNullOrWhiteSpace(sub.Handoff) ? "(none)" : sub.Handoff);
-        return sb.ToString();
-    }
-
-    private static string Truncate(string? text, int max = 400)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return "";
-        }
-
-        text = text.ReplaceLineEndings(" ").Trim();
-        return text.Length <= max ? text : text[..max] + "…";
+        return ToolResult.Success(
+            $"redispatch queued iter {sub.Iteration}",
+            $"Subtask {sub.Id} queued for iteration {sub.Iteration}/{sub.MaxIterations}.");
     }
 }
 
@@ -532,7 +362,7 @@ public sealed class TeamAwaitTool(AppSettings settings) : IAgentTool, ITeamLeade
 {
     public ToolDefinition Definition => new(
         "team_await",
-        "Report status of subtasks (P0 is synchronous — use after dispatch).",
+        "Report live status of subtasks (Queued / Running / Ready / Succeeded / Failed).",
         ToolSchema.Object()
             .String("subtask_ids", "Comma-separated ids; empty = all")
             .Build(),
@@ -557,11 +387,26 @@ public sealed class TeamAwaitTool(AppSettings settings) : IAgentTool, ITeamLeade
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var sb = new StringBuilder();
+        var queued = 0;
+        var running = 0;
+        var ready = 0;
+        var succeeded = 0;
+        var failed = 0;
         foreach (var sub in task.SubTasks.Where(s => filter is null || filter.Contains(s.Id)))
         {
             sb.AppendLine($"{sub.Id} [{sub.Status}] iter={sub.Iteration}/{sub.MaxIterations} {sub.Title}");
+            switch (sub.Status)
+            {
+                case TeamSubTaskStatus.Queued: queued++; break;
+                case TeamSubTaskStatus.Running: running++; break;
+                case TeamSubTaskStatus.Ready: ready++; break;
+                case TeamSubTaskStatus.Succeeded: succeeded++; break;
+                case TeamSubTaskStatus.Failed: failed++; break;
+            }
         }
 
+        sb.AppendLine(
+            $"summary: queued={queued} running={running} ready={ready} succeeded={succeeded} failed={failed}");
         return Task.FromResult(ToolResult.Success("await status", sb.Length == 0 ? "(no subtasks)" : sb.ToString()));
     }
 }
@@ -570,7 +415,7 @@ public sealed class TeamCollectTool(AppSettings settings) : IAgentTool, ITeamLea
 {
     public ToolDefinition Definition => new(
         "team_collect",
-        "Collect Result / artifacts from subtasks.",
+        "Collect Result / artifacts from subtasks (each result truncated).",
         ToolSchema.Object()
             .String("subtask_ids", "Comma-separated ids; empty = all succeeded")
             .Build(),
@@ -608,7 +453,7 @@ public sealed class TeamCollectTool(AppSettings settings) : IAgentTool, ITeamLea
             }
 
             sb.AppendLine($"### {sub.Id} {sub.Title} (iter {sub.Iteration})");
-            sb.AppendLine(sub.Result ?? sub.Error ?? "(empty)");
+            sb.AppendLine(TeamWorkerHelpers.Truncate(sub.Result ?? sub.Error ?? "(empty)", 1200));
             sb.AppendLine();
         }
 
@@ -662,38 +507,55 @@ public sealed class TeamSubmitResultTool(
     }
 }
 
-public sealed class TeamAskUserTool(AppSettings settings) : IAgentTool, ITeamLeaderTool, IExcludedFromChildAgentToolkit
+public sealed class TeamAskUserTool(
+    AppSettings settings,
+    ITeamTaskStore taskStore,
+    ITeamTraceStore traceStore) : IAgentTool, ITeamLeaderTool, IExcludedFromChildAgentToolkit
 {
     public ToolDefinition Definition => new(
         "team_ask_user",
-        "Pause the team task and ask the human a clarifying question.",
+        "Pause the team task and ask the human a clarifying question. Outer loop exits until the user answers.",
         ToolSchema.Object()
             .String("question", "Question for the user", required: true, minLength: 1)
             .Build(),
         Group: ToolGroup.Builtin);
 
-    public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
+    public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
         if (!settings.Teams.Enabled)
         {
-            return Task.FromResult(ToolResult.Failure("Teams disabled", "Teams feature is disabled."));
+            return ToolResult.Failure("Teams disabled", "Teams feature is disabled.");
         }
 
         if (!TeamToolHelpers.TryGetTask(out var task, out var gateError))
         {
-            return Task.FromResult(gateError!);
+            return gateError!;
         }
 
         invocation.Arguments.TryGetString("question", out var question);
         if (string.IsNullOrWhiteSpace(question))
         {
-            return Task.FromResult(ToolResult.Failure("Invalid args", "question is required."));
+            return ToolResult.Failure("Invalid args", "question is required.");
         }
 
+        var trimmed = question.Trim();
         task.Status = TeamTaskStatus.AwaitingHuman;
+        task.PendingHumanQuestion = trimmed;
         TeamTaskExecutionScope.Current?.ReplaceTask(task);
-        return Task.FromResult(ToolResult.Success(
+        await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
+        await traceStore.AppendAsync(
+            task.RootSessionId,
+            task.TaskId,
+            new TeamTraceEvent
+            {
+                Type = "task.awaiting_human",
+                NodeId = "leader",
+                Message = TeamWorkerHelpers.Truncate(trimmed, 400)
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return ToolResult.Success(
             "awaiting human",
-            $"ATHLON_TEAM_ASK_USER\n{question.Trim()}"));
+            $"ATHLON_TEAM_ASK_USER\n{trimmed}");
     }
 }

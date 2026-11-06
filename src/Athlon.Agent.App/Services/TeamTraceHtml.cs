@@ -322,6 +322,7 @@ function statusUi(raw){
   const s=String(raw||'').toLowerCase();
   if(s.includes('success')||s==='succeeded') return {cls:'success', text:'Success'};
   if(s.includes('fail')||s.includes('error')||s==='cancelled') return {cls:'error', text: raw||'Error'};
+  if(s.includes('queue')) return {cls:'waiting', text:'Queued'};
   if(s.includes('run')) return {cls:'running', text:'Running'};
   if(s.includes('wait')||s.includes('ready')||s.includes('pending')||s.includes('await')) return {cls:'waiting', text: raw||'Waiting'};
   return {cls:'waiting', text: raw||'Waiting'};

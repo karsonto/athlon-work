@@ -67,6 +67,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly SshWorkspaceCoordinator _sshWorkspace;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
+    private readonly IUserQuestionState _userQuestions;
     /// <summary>
     /// While a session is being deleted its directory must not be re-read: a pending task-list
     /// refresh would reopen tasks.json (or re-create the directory) and race the delete.
@@ -136,6 +137,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         SkillHubViewModel skillHubVm,
         ILocalizationService localization,
         IUserNotifier notifier,
+        IUserQuestionState userQuestions,
         ILongTermMemory longTermMemory,
         AppUpdateService updateService,
         AthlonWebStaticServer athlonWebServer,
@@ -164,6 +166,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sshWorkspace = sshWorkspace;
         _loc = localization;
         _notifier = notifier;
+        _userQuestions = userQuestions;
         _longTermMemory = longTermMemory;
         _athlonWebServer = athlonWebServer;
         _skillCatalog = skillCatalog;
@@ -205,7 +208,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             () => _displayedSessionId,
             ShowShellToast,
             OnUserQuestionAnswered,
-            sessionId => _sessionTurns.TurnHost.IsRunning(sessionId));
+            sessionId =>
+                _sessionTurns.TurnHost.IsRunning(sessionId)
+                || TeamsPageVm.IsTeamRunActive(sessionId));
         ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
         ComposerHarness.OnModeChangedAsync = OnComposerModeChangedAsync;
         ComposerHarness.OnPlanAutoCleared = _ =>
@@ -220,13 +225,24 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             SetComposerStatus,
             NotifyCommandStatesChanged,
             SyncWorkspaceContext,
-            busy => IsBusy = busy,
+            busy =>
+            {
+                if (busy || TeamsPageVm.IsTeamRunActive(_displayedSessionId))
+                {
+                    IsBusy = true;
+                }
+                else
+                {
+                    IsBusy = false;
+                }
+            },
             () => _workspaceContext.IgnorePatterns,
             TryCancelCompaction,
             CreateSlashCommandContext,
             EnsureDisplayedSessionReadyAsync,
             TrySubmitTeamsGoalFromChatAsync,
-            () => TeamsPageVm.CancelActiveTeamRun());
+            () => TeamsPageVm.CancelActiveTeamRun(_displayedSessionId),
+            () => TeamsPageVm.IsTeamRunActive(_displayedSessionId));
         _planSurface.Configure(
             () => _displayedSessionId,
             () => _session,

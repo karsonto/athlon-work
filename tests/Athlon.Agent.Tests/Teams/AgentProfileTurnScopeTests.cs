@@ -17,6 +17,28 @@ public sealed class AgentProfileTurnScopeTests
     }
 
     [Fact]
+    public void IsMcpServerAllowed_EmptyList_DeniesAll()
+    {
+        using var scope = AgentProfileTurnScope.Enter(new AgentProfileTurnOptions(
+            ProfileId: "p1",
+            McpServerNames: Array.Empty<string>()));
+
+        Assert.False(AgentProfileTurnScope.IsMcpServerAllowed("github"));
+        Assert.False(AgentProfileTurnScope.IsMcpServerAllowed("anything"));
+    }
+
+    [Fact]
+    public void SkillNames_EmptyList_IsExposedForDenySemantics()
+    {
+        using var scope = AgentProfileTurnScope.Enter(new AgentProfileTurnOptions(
+            ProfileId: "p1",
+            SkillNames: Array.Empty<string>()));
+
+        Assert.NotNull(AgentProfileTurnScope.SkillNames);
+        Assert.Empty(AgentProfileTurnScope.SkillNames!);
+    }
+
+    [Fact]
     public void IsMcpServerAllowed_FallsBackToSchedule_WhenNoProfileScope()
     {
         Assert.Null(AgentProfileTurnScope.Current);

@@ -794,6 +794,12 @@
   <data name="Teams_CancelledReason" xml:space="preserve">
     <value>用户停止</value>
   </data>
+  <data name="Teams_AwaitingHumanToast" xml:space="preserve">
+    <value>Team 等待你的回答</value>
+  </data>
+  <data name="Teams_AwaitingHumanSummary" xml:space="preserve">
+    <value>需要你的确认：{0}</value>
+  </data>
   <data name="Teams_ChatSummaryOk" xml:space="preserve">
     <value>{0}
 

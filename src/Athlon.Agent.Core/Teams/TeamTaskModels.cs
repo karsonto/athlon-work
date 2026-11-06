@@ -14,6 +14,8 @@ public enum TeamSubTaskStatus
 {
     Pending,
     Ready,
+    /// <summary>Enqueued by Leader dispatch; outer loop will start when a parallel slot is free.</summary>
+    Queued,
     Running,
     Succeeded,
     Failed,
@@ -40,6 +42,9 @@ public sealed class TeamTask
     public string? FinalResult { get; set; }
 
     public string? Error { get; set; }
+
+    /// <summary>Set when Status is AwaitingHuman; cleared after the human answers.</summary>
+    public string? PendingHumanQuestion { get; set; }
 
     public List<TeamSubTask> SubTasks { get; set; } = new();
 

@@ -79,15 +79,20 @@ public sealed class AgentProfileTurnScope : IDisposable
             return false;
         }
 
+        // Empty allow-list matches UI "0 MCP" — deny all servers for this profile turn.
         if (allowed.Count == 0)
         {
-            return true;
+            return false;
         }
 
         return allowed.Any(name =>
             string.Equals(name, serverName, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// When a profile scope is active: null means unrestricted; empty means deny all skills;
+    /// non-empty is an allow-list.
+    /// </summary>
     public static IReadOnlyList<string>? SkillNames => Current?.Options.SkillNames;
 
     public void Dispose() => Ambient.Value = _previous;

@@ -800,6 +800,12 @@ Hold to talk</value>
   <data name="Teams_CancelledReason" xml:space="preserve">
     <value>Stopped by user</value>
   </data>
+  <data name="Teams_AwaitingHumanToast" xml:space="preserve">
+    <value>Team is waiting for your answer</value>
+  </data>
+  <data name="Teams_AwaitingHumanSummary" xml:space="preserve">
+    <value>Needs your input: {0}</value>
+  </data>
   <data name="Teams_ChatSummaryOk" xml:space="preserve">
     <value>{0}
 

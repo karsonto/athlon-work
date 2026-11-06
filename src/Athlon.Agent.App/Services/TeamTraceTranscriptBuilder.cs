@@ -112,11 +112,20 @@ internal static class TeamTraceTranscriptBuilder
             }
         }
 
-        if (list.Count > 0)
+        // Prefer whichever source is richer — conversation.jsonl may lag session.json briefly,
+        // or the reverse when SessionRuntimeStore wrote a partial display log elsewhere first.
+        var fromSession = ReadSessionMessages(memberDir);
+        if (fromSession.Count > list.Count)
         {
-            return list;
+            return fromSession;
         }
 
+        return list.Count > 0 ? list : fromSession;
+    }
+
+    private static List<ChatMessage> ReadSessionMessages(string memberDir)
+    {
+        var list = new List<ChatMessage>();
         var sessionPath = Path.Combine(memberDir, "session.json");
         if (!File.Exists(sessionPath))
         {
@@ -135,7 +144,15 @@ internal static class TeamTraceTranscriptBuilder
             var session = JsonSerializer.Deserialize<AgentSession>(json, JsonOptions);
             if (session?.Messages is { Count: > 0 })
             {
-                list.AddRange(session.Messages);
+                foreach (var message in session.Messages)
+                {
+                    if (message.Role is MessageRole.System or MessageRole.Compaction)
+                    {
+                        continue;
+                    }
+
+                    list.Add(message);
+                }
             }
         }
         catch (IOException)

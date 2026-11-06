@@ -113,9 +113,8 @@ public partial class MainShellViewModel
     }
 
     /// <summary>
-    /// The user submitted an <c>ask_user</c> answer in the QuestionBar. The formatted
-    /// answer is sent as the next turn's user input: Plan resumes the AwaitClarify run,
-    /// any other mode just continues the conversation.
+    /// The user submitted an <c>ask_user</c> answer in the QuestionBar. Team asks resume the
+    /// outer loop; Plan resumes AwaitClarify; other modes continue the conversation.
     /// </summary>
     private void OnUserQuestionAnswered(string text)
     {
@@ -124,11 +123,49 @@ public partial class MainShellViewModel
             return;
         }
 
+        if (TeamsPageVm.TryGetPendingAsk(_displayedSessionId, out _))
+        {
+            _ = RunGuardedAsync(
+                () => ResumeTeamAskFromQuestionBarAsync(text),
+                "answer team question");
+            return;
+        }
+
         // If starting the turn fails (e.g. busy), SessionTurnCoordinator leaves the
         // pending question intact so the bar stays visible for a retry.
         _ = RunGuardedAsync(
             () => ChatPage.TrySubmitPlanInputAsync(text),
             "answer user question");
+    }
+
+    private async Task ResumeTeamAskFromQuestionBarAsync(string text)
+    {
+        var captureSessionId = _displayedSessionId;
+        var captureUi = _activeUi;
+        _userQuestions.Clear(captureSessionId);
+        QuestionBar.RefreshFromActiveSession();
+
+        ShowShellToast(_loc["Teams_RunningToast"], ShellToastKind.Info);
+        SetComposerStatus("Teams · resume");
+        IsBusy = true;
+        try
+        {
+            var (ok, message, task) = await TeamsPageVm
+                .ResumeTeamAskAsync(captureSessionId, text, openTrace: true)
+                .ConfigureAwait(true);
+            await ApplyTeamRunOutcomeToChatAsync(captureSessionId, captureUi, ok, message, task)
+                .ConfigureAwait(true);
+        }
+        finally
+        {
+            if (!TeamsPageVm.IsTeamRunActive(captureSessionId))
+            {
+                IsBusy = false;
+            }
+
+            SetComposerStatus(null);
+            NotifyCommandStatesChanged();
+        }
     }
 
     private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)

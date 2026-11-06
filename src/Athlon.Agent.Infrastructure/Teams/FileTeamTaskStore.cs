@@ -19,7 +19,27 @@ public sealed class FileTeamTaskStore(IAppPathProvider paths, IJsonFileStore jso
             return null;
         }
 
-        return await jsonFileStore.LoadAsync<TeamTask>(path, cancellationToken).ConfigureAwait(false);
+        var task = await jsonFileStore.LoadAsync<TeamTask>(path, cancellationToken).ConfigureAwait(false);
+        if (task is null)
+        {
+            return null;
+        }
+
+        var layoutPath = Path.Combine(ResolveTaskDirectory(rootSessionId, taskId), "layout.json");
+        if (File.Exists(layoutPath))
+        {
+            var layout = await jsonFileStore
+                .LoadAsync<Dictionary<string, TeamTraceNodeLayout>>(layoutPath, cancellationToken)
+                .ConfigureAwait(false);
+            if (layout is { Count: > 0 })
+            {
+                task.TraceLayout = new Dictionary<string, TeamTraceNodeLayout>(
+                    layout,
+                    StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        return task;
     }
 
     public async Task SaveAsync(TeamTask task, CancellationToken cancellationToken = default)

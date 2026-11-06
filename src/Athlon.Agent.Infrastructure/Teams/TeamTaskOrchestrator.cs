@@ -49,7 +49,7 @@ public sealed class TeamTaskOrchestrator(
             UpdatedAt = DateTimeOffset.UtcNow
         };
 
-        await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
+        await SaveLockedAsync(task, cancellationToken).ConfigureAwait(false);
         await traceStore.AppendAsync(
             task.RootSessionId,
             task.TaskId,
@@ -70,7 +70,10 @@ public sealed class TeamTaskOrchestrator(
             return began;
         }
 
-        var completed = await RunToCompletionAsync(began.Task.RootSessionId, began.Task.TaskId, cancellationToken)
+        var completed = await RunToCompletionAsync(
+                began.Task.RootSessionId,
+                began.Task.TaskId,
+                cancellationToken)
             .ConfigureAwait(false);
         return TeamTaskStartResult.Success(
             completed,
@@ -83,85 +86,528 @@ public sealed class TeamTaskOrchestrator(
     public async Task<TeamTask> RunToCompletionAsync(
         string rootSessionId,
         string taskId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? humanAnswer = null)
     {
-        var task = await taskStore.GetAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException($"Team task '{taskId}' not found.");
+        var team = await LoadTeamForTaskAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false);
+        var maxParallel = ResolveMaxParallel(team);
 
-        var leader = await profileStore.GetAsync(task.LeaderProfileId ?? "", cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Leader profile missing.");
+        AgentProfile leader;
+        string leaderSessionId;
+        string leaderKickoff;
 
-        var leaderSessionId = task.LeaderSessionId ?? ("ldr_" + IdGen.NewId()[..10]);
-        task.LeaderSessionId = leaderSessionId;
-        task.Status = TeamTaskStatus.Running;
-        await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
-
-        var leaderMessage = BuildLeaderKickoff(task);
-        try
+        using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false))
         {
-            using (TeamTaskExecutionScope.Enter(task))
+            var task = await taskStore.GetAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"Team task '{taskId}' not found.");
+
+            leader = await profileStore.GetAsync(task.LeaderProfileId ?? "", cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Leader profile missing.");
+
+            leaderSessionId = task.LeaderSessionId ?? ("ldr_" + IdGen.NewId()[..10]);
+            task.LeaderSessionId = leaderSessionId;
+            if (task.Status is TeamTaskStatus.AwaitingHuman && !string.IsNullOrWhiteSpace(humanAnswer))
             {
-                var outcome = await memberExecutor.ExecuteAsync(
-                    task,
-                    leader,
-                    leaderSessionId,
-                    leaderMessage,
-                    isLeader: true,
-                    cancellationToken).ConfigureAwait(false);
-
-                task = TeamTaskExecutionScope.Current?.Task ?? task;
-
-                if (!outcome.Ok)
-                {
-                    task.Status = TeamTaskStatus.Failed;
-                    task.Error = outcome.Error ?? outcome.ResponseText;
-                    task.CompletedAt = DateTimeOffset.UtcNow;
-                    await taskStore.SaveAsync(task, CancellationToken.None).ConfigureAwait(false);
-                    await traceStore.AppendAsync(
-                        task.RootSessionId,
-                        task.TaskId,
-                        new TeamTraceEvent { Type = "task.failed", Message = task.Error },
-                        CancellationToken.None).ConfigureAwait(false);
-                    return task;
-                }
-
-                // If Leader never submitted, keep Running/AwaitingHuman or auto-complete when all workers done.
-                if (task.Status == TeamTaskStatus.Running
-                    && task.SubTasks.Count > 0
-                    && task.SubTasks.All(s => s.Status is TeamSubTaskStatus.Succeeded or TeamSubTaskStatus.Failed or TeamSubTaskStatus.Cancelled)
-                    && string.IsNullOrWhiteSpace(task.FinalResult))
-                {
-                    task.FinalResult = AggregateResults(task);
-                    task.Status = task.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Failed)
-                        ? TeamTaskStatus.Failed
-                        : TeamTaskStatus.Succeeded;
-                    task.CompletedAt = DateTimeOffset.UtcNow;
-                }
-                else if (task.Status == TeamTaskStatus.Running && string.IsNullOrWhiteSpace(task.FinalResult))
-                {
-                    // Leader finished without submit — treat assistant text as summary, leave Running only if work pending.
-                    if (task.SubTasks.Any(s => s.Status is TeamSubTaskStatus.Ready or TeamSubTaskStatus.Pending or TeamSubTaskStatus.Running))
-                    {
-                        task.Status = TeamTaskStatus.Running;
-                    }
-                    else
-                    {
-                        task.FinalResult = outcome.ResponseText;
-                        task.Status = TeamTaskStatus.Succeeded;
-                        task.CompletedAt = DateTimeOffset.UtcNow;
-                    }
-                }
+                task.Status = TeamTaskStatus.Running;
+                task.PendingHumanQuestion = null;
+            }
+            else if (task.Status is not TeamTaskStatus.Succeeded and not TeamTaskStatus.Failed and not TeamTaskStatus.Cancelled)
+            {
+                task.Status = TeamTaskStatus.Running;
             }
 
             await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
-            return task;
+            leaderKickoff = string.IsNullOrWhiteSpace(humanAnswer)
+                ? BuildLeaderKickoff(task)
+                : BuildLeaderResume(task, humanAnswer!);
+        }
+
+        var inFlight = new Dictionary<string, Task<WorkerRunResult>>(StringComparer.OrdinalIgnoreCase);
+        var needsLeader = true;
+
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                // Phase 1: start queued workers up to parallel cap.
+                using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false))
+                {
+                    var task = await taskStore.GetAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false)
+                        ?? throw new InvalidOperationException($"Team task '{taskId}' not found.");
+
+                    if (TeamWorkerHelpers.IsTerminal(task.Status) || task.Status == TeamTaskStatus.AwaitingHuman)
+                    {
+                        return task;
+                    }
+
+                    TeamWorkerHelpers.RefreshReady(task);
+                    // Prefer in-flight count over disk Running so orphaned Running rows
+                    // (e.g. after process restart) cannot starve the queue forever.
+                    foreach (var orphan in task.SubTasks.Where(s =>
+                                 s.Status == TeamSubTaskStatus.Running && !inFlight.ContainsKey(s.Id)))
+                    {
+                        orphan.Status = TeamSubTaskStatus.Queued;
+                    }
+
+                    var runningCount = inFlight.Count;
+                    foreach (var sub in task.SubTasks.Where(s => s.Status == TeamSubTaskStatus.Queued).ToList())
+                    {
+                        if (inFlight.ContainsKey(sub.Id) || runningCount >= maxParallel)
+                        {
+                            continue;
+                        }
+
+                        var started = await TryStartWorkerAsync(task, sub, cancellationToken).ConfigureAwait(false);
+                        if (started is not null)
+                        {
+                            inFlight[sub.Id] = started;
+                            runningCount++;
+                        }
+                    }
+
+                    await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
+                }
+
+                // Phase 2: wait for any in-flight worker (no lock held).
+                if (inFlight.Count > 0)
+                {
+                    var finished = await Task.WhenAny(inFlight.Values).ConfigureAwait(false);
+                    var result = await finished.ConfigureAwait(false);
+                    inFlight.Remove(result.SubTaskId);
+                    await ApplyWorkerResultAsync(rootSessionId, taskId, result).ConfigureAwait(false);
+                    needsLeader = true;
+                    continue;
+                }
+
+                // Phase 3: decide Leader turn vs finalize.
+                TeamTask snapshot;
+                using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false))
+                {
+                    snapshot = await taskStore.GetAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false)
+                        ?? throw new InvalidOperationException($"Team task '{taskId}' not found.");
+
+                    if (TeamWorkerHelpers.IsTerminal(snapshot.Status) || snapshot.Status == TeamTaskStatus.AwaitingHuman)
+                    {
+                        return snapshot;
+                    }
+
+                    if (snapshot.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Queued) && inFlight.Count > 0)
+                    {
+                        // Slot was full earlier; wait for capacity then start more.
+                        continue;
+                    }
+
+                    if (snapshot.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Queued) && inFlight.Count == 0)
+                    {
+                        // Orphaned Running on disk blocked starts; reclaim then retry.
+                        foreach (var orphan in snapshot.SubTasks.Where(s =>
+                                     s.Status == TeamSubTaskStatus.Running && !inFlight.ContainsKey(s.Id)))
+                        {
+                            orphan.Status = TeamSubTaskStatus.Queued;
+                        }
+
+                        await taskStore.SaveAsync(snapshot, CancellationToken.None).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    if (!needsLeader)
+                    {
+                        // Finalize while still holding the lock (SaveLocked would deadlock).
+                        return await FinalizeIfIncompleteCoreAsync(snapshot).ConfigureAwait(false);
+                    }
+                }
+
+                await RunLeaderTurnAsync(
+                        rootSessionId,
+                        taskId,
+                        leader,
+                        leaderSessionId,
+                        leaderKickoff,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false))
+                {
+                    snapshot = await taskStore.GetAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false)
+                        ?? snapshot;
+                    if (TeamWorkerHelpers.IsTerminal(snapshot.Status) || snapshot.Status == TeamTaskStatus.AwaitingHuman)
+                    {
+                        return snapshot;
+                    }
+
+                    leaderKickoff = BuildLeaderFollowUp(snapshot);
+                }
+
+                needsLeader = false;
+            }
+
+            throw new OperationCanceledException(cancellationToken);
         }
         catch (OperationCanceledException)
         {
-            task = await taskStore.GetAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false) ?? task;
+            return await CancelTaskAsync(rootSessionId, taskId).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RunLeaderTurnAsync(
+        string rootSessionId,
+        string taskId,
+        AgentProfile leader,
+        string leaderSessionId,
+        string kickoff,
+        CancellationToken cancellationToken)
+    {
+        TeamTask task;
+        using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false))
+        {
+            task = await taskStore.GetAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"Team task '{taskId}' not found.");
+        }
+
+        using (TeamTaskExecutionScope.Enter(task))
+        {
+            var outcome = await memberExecutor.ExecuteAsync(
+                task,
+                leader,
+                leaderSessionId,
+                kickoff,
+                isLeader: true,
+                cancellationToken).ConfigureAwait(false);
+
+            using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false))
+            {
+                var latest = await taskStore.GetAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false)
+                    ?? task;
+                var scoped = TeamTaskExecutionScope.Current?.Task ?? task;
+                MergeLeaderMutations(latest, scoped);
+
+                if (!outcome.Ok)
+                {
+                    if (latest.Status == TeamTaskStatus.Succeeded
+                        && !string.IsNullOrWhiteSpace(latest.FinalResult))
+                    {
+                        await taskStore.SaveAsync(latest, CancellationToken.None).ConfigureAwait(false);
+                        return;
+                    }
+
+                    latest.Status = TeamTaskStatus.Failed;
+                    latest.Error = outcome.Error ?? outcome.ResponseText;
+                    latest.CompletedAt = DateTimeOffset.UtcNow;
+                    await taskStore.SaveAsync(latest, CancellationToken.None).ConfigureAwait(false);
+                    await traceStore.AppendAsync(
+                        latest.RootSessionId,
+                        latest.TaskId,
+                        new TeamTraceEvent { Type = "task.failed", Message = latest.Error },
+                        CancellationToken.None).ConfigureAwait(false);
+                    return;
+                }
+
+                await taskStore.SaveAsync(latest, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static void MergeLeaderMutations(TeamTask disk, TeamTask scoped)
+    {
+        if (scoped.Status is TeamTaskStatus.Succeeded or TeamTaskStatus.AwaitingHuman or TeamTaskStatus.Failed)
+        {
+            disk.Status = scoped.Status;
+        }
+
+        if (!string.IsNullOrWhiteSpace(scoped.FinalResult))
+        {
+            disk.FinalResult = scoped.FinalResult;
+            disk.CompletedAt = scoped.CompletedAt ?? disk.CompletedAt;
+        }
+
+        disk.PendingHumanQuestion = scoped.PendingHumanQuestion;
+        if (!string.IsNullOrWhiteSpace(scoped.Error) && disk.Status == TeamTaskStatus.Failed)
+        {
+            disk.Error = scoped.Error;
+        }
+
+        foreach (var scopedSub in scoped.SubTasks)
+        {
+            var diskSub = disk.SubTasks.FirstOrDefault(s =>
+                string.Equals(s.Id, scopedSub.Id, StringComparison.OrdinalIgnoreCase));
+            if (diskSub is null)
+            {
+                disk.SubTasks.Add(CloneSub(scopedSub));
+                continue;
+            }
+
+            if (diskSub.Status == TeamSubTaskStatus.Running
+                && scopedSub.Status is TeamSubTaskStatus.Ready or TeamSubTaskStatus.Pending)
+            {
+                continue;
+            }
+
+            if (scopedSub.Status is TeamSubTaskStatus.Queued
+                or TeamSubTaskStatus.Ready
+                or TeamSubTaskStatus.Pending
+                or TeamSubTaskStatus.WaitingRedispatch)
+            {
+                diskSub.Status = scopedSub.Status;
+            }
+
+            diskSub.Title = scopedSub.Title;
+            diskSub.Handoff = scopedSub.Handoff;
+            diskSub.DependsOn = scopedSub.DependsOn.ToList();
+            diskSub.Iteration = scopedSub.Iteration;
+            diskSub.MaxIterations = scopedSub.MaxIterations;
+            diskSub.RedispatchReason = scopedSub.RedispatchReason;
+            diskSub.MemberSessionId ??= scopedSub.MemberSessionId;
+            diskSub.AssigneeProfileId = scopedSub.AssigneeProfileId;
+            if (!string.IsNullOrWhiteSpace(scopedSub.PrevResultSummary))
+            {
+                diskSub.PrevResultSummary = scopedSub.PrevResultSummary;
+            }
+        }
+    }
+
+    private static TeamSubTask CloneSub(TeamSubTask s) => new()
+    {
+        Id = s.Id,
+        Title = s.Title,
+        AssigneeProfileId = s.AssigneeProfileId,
+        MemberSessionId = s.MemberSessionId,
+        DependsOn = s.DependsOn.ToList(),
+        Status = s.Status,
+        Handoff = s.Handoff,
+        ArtifactRefs = s.ArtifactRefs.ToList(),
+        Iteration = s.Iteration,
+        MaxIterations = s.MaxIterations,
+        RedispatchReason = s.RedispatchReason,
+        PrevResultSummary = s.PrevResultSummary,
+        Result = s.Result,
+        Error = s.Error,
+        StartedAt = s.StartedAt,
+        CompletedAt = s.CompletedAt
+    };
+
+    private async Task<TeamTask> FinalizeIfIncompleteCoreAsync(TeamTask task)
+    {
+        if (task.Status == TeamTaskStatus.Running && string.IsNullOrWhiteSpace(task.FinalResult))
+        {
+            if (task.SubTasks.Count > 0
+                && task.SubTasks.All(s => TeamWorkerHelpers.IsWorkerFinished(s.Status)))
+            {
+                task.FinalResult = AggregateResults(task);
+                task.Status = task.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Failed)
+                    ? TeamTaskStatus.Failed
+                    : TeamTaskStatus.Succeeded;
+                task.CompletedAt = DateTimeOffset.UtcNow;
+            }
+            else if (task.SubTasks.Any(s =>
+                         s.Status is TeamSubTaskStatus.Ready or TeamSubTaskStatus.Pending or TeamSubTaskStatus.Queued))
+            {
+                task.Status = TeamTaskStatus.Failed;
+                task.Error = "Incomplete: Leader finished with pending/ready work and no workers running.";
+                task.CompletedAt = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                task.Status = TeamTaskStatus.Failed;
+                task.Error = "Incomplete: Leader did not submit a final result.";
+                task.CompletedAt = DateTimeOffset.UtcNow;
+            }
+
+            await taskStore.SaveAsync(task, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        return task;
+    }
+
+    private async Task<TeamDefinition?> LoadTeamForTaskAsync(
+        string rootSessionId,
+        string taskId,
+        CancellationToken cancellationToken)
+    {
+        var task = await taskStore.GetAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false);
+        if (task is null)
+        {
+            return null;
+        }
+
+        return await teamStore.GetAsync(task.TeamId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private int ResolveMaxParallel(TeamDefinition? team)
+    {
+        var fromSettings = Math.Max(1, settings.Teams.MaxParallelWorkers);
+        var fromTeam = team?.MaxParallelWorkers ?? 0;
+        if (fromTeam <= 0)
+        {
+            return fromSettings;
+        }
+
+        return Math.Max(1, Math.Min(fromTeam, fromSettings));
+    }
+
+    private async Task<Task<WorkerRunResult>?> TryStartWorkerAsync(
+        TeamTask task,
+        TeamSubTask sub,
+        CancellationToken cancellationToken)
+    {
+        var profile = await profileStore.GetAsync(sub.AssigneeProfileId, cancellationToken).ConfigureAwait(false);
+        if (profile is null)
+        {
+            sub.Status = TeamSubTaskStatus.Failed;
+            sub.Error = "profile missing";
+            sub.CompletedAt = DateTimeOffset.UtcNow;
+            await traceStore.AppendAsync(
+                task.RootSessionId,
+                task.TaskId,
+                new TeamTraceEvent
+                {
+                    Type = "worker.failed",
+                    NodeId = sub.Id,
+                    SubTaskId = sub.Id,
+                    Message = "profile missing"
+                },
+                cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        sub.MemberSessionId ??= "mbr_" + IdGen.NewId()[..10];
+        sub.Status = TeamSubTaskStatus.Running;
+        sub.StartedAt ??= DateTimeOffset.UtcNow;
+        sub.CompletedAt = null;
+
+        await traceStore.AppendAsync(
+            task.RootSessionId,
+            task.TaskId,
+            new TeamTraceEvent
+            {
+                Type = string.IsNullOrWhiteSpace(sub.RedispatchReason) ? "worker.dispatch" : "worker.redispatch",
+                NodeId = sub.Id,
+                FromNodeId = "leader",
+                ToNodeId = sub.Id,
+                ProfileId = profile.Id,
+                SubTaskId = sub.Id,
+                Iteration = sub.Iteration,
+                Message = sub.RedispatchReason
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        var message = TeamWorkerHelpers.BuildWorkerMessage(task, sub);
+        var memberSessionId = sub.MemberSessionId!;
+        var subId = sub.Id;
+        var profileId = profile.Id;
+        var iteration = sub.Iteration;
+        var taskForExec = task;
+
+        return Task.Run(async () =>
+        {
+            try
+            {
+                var outcome = await memberExecutor.ExecuteAsync(
+                    taskForExec,
+                    profile,
+                    memberSessionId,
+                    message,
+                    isLeader: false,
+                    cancellationToken).ConfigureAwait(false);
+                return new WorkerRunResult(subId, profileId, iteration, outcome);
+            }
+            catch (OperationCanceledException)
+            {
+                return new WorkerRunResult(
+                    subId,
+                    profileId,
+                    iteration,
+                    TeamMemberRunOutcome.Fail("cancelled"),
+                    Cancelled: true);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Worker run crashed sub={SubTaskId}", subId);
+                return new WorkerRunResult(subId, profileId, iteration, TeamMemberRunOutcome.Fail(ex.Message));
+            }
+        }, CancellationToken.None);
+    }
+
+    private async Task ApplyWorkerResultAsync(string rootSessionId, string taskId, WorkerRunResult result)
+    {
+        using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false))
+        {
+            var task = await taskStore.GetAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"Team task '{taskId}' not found.");
+            var sub = task.SubTasks.FirstOrDefault(s =>
+                string.Equals(s.Id, result.SubTaskId, StringComparison.OrdinalIgnoreCase));
+            if (sub is null)
+            {
+                return;
+            }
+
+            sub.CompletedAt = DateTimeOffset.UtcNow;
+            if (result.Cancelled)
+            {
+                sub.Status = TeamSubTaskStatus.Cancelled;
+                sub.Error = "cancelled";
+            }
+            else if (result.Outcome.Ok)
+            {
+                sub.Status = TeamSubTaskStatus.Succeeded;
+                sub.Result = result.Outcome.ResponseText;
+                sub.PrevResultSummary = TeamWorkerHelpers.Truncate(result.Outcome.ResponseText, 1200);
+                sub.Error = null;
+            }
+            else
+            {
+                sub.Status = TeamSubTaskStatus.Failed;
+                sub.Error = result.Outcome.Error ?? result.Outcome.ResponseText;
+            }
+
+            await traceStore.AppendAsync(
+                task.RootSessionId,
+                task.TaskId,
+                new TeamTraceEvent
+                {
+                    Type = result.Cancelled
+                        ? "worker.cancelled"
+                        : result.Outcome.Ok ? "worker.completed" : "worker.failed",
+                    NodeId = sub.Id,
+                    ProfileId = result.ProfileId,
+                    SubTaskId = sub.Id,
+                    Iteration = result.Iteration,
+                    Message = TeamWorkerHelpers.Truncate(result.Outcome.ResponseText)
+                },
+                CancellationToken.None).ConfigureAwait(false);
+
+            TeamWorkerHelpers.RefreshReady(task);
+            await taskStore.SaveAsync(task, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<TeamTask> CancelTaskAsync(string rootSessionId, string taskId)
+    {
+        using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false))
+        {
+            var task = await taskStore.GetAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false)
+                ?? new TeamTask { RootSessionId = rootSessionId, TaskId = taskId };
             task.Status = TeamTaskStatus.Cancelled;
             task.Error = "cancelled";
             task.CompletedAt = DateTimeOffset.UtcNow;
+            foreach (var sub in task.SubTasks.Where(s =>
+                         s.Status is TeamSubTaskStatus.Running or TeamSubTaskStatus.Queued or TeamSubTaskStatus.Ready))
+            {
+                sub.Status = TeamSubTaskStatus.Cancelled;
+                sub.Error = "cancelled";
+                sub.CompletedAt = DateTimeOffset.UtcNow;
+                await traceStore.AppendAsync(
+                    task.RootSessionId,
+                    task.TaskId,
+                    new TeamTraceEvent
+                    {
+                        Type = "worker.cancelled",
+                        NodeId = sub.Id,
+                        SubTaskId = sub.Id,
+                        Message = "cancelled by user"
+                    },
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+
             await taskStore.SaveAsync(task, CancellationToken.None).ConfigureAwait(false);
             await traceStore.AppendAsync(
                 task.RootSessionId,
@@ -169,6 +615,14 @@ public sealed class TeamTaskOrchestrator(
                 new TeamTraceEvent { Type = "task.cancelled", Message = "cancelled by user" },
                 CancellationToken.None).ConfigureAwait(false);
             return task;
+        }
+    }
+
+    private async Task SaveLockedAsync(TeamTask task, CancellationToken cancellationToken)
+    {
+        using (await TeamTaskLock.AcquireAsync(task.RootSessionId, task.TaskId, cancellationToken).ConfigureAwait(false))
+        {
+            await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -181,9 +635,35 @@ public sealed class TeamTaskOrchestrator(
         sb.AppendLine("Recommended flow:");
         sb.AppendLine("1) team_list_members");
         sb.AppendLine("2) team_create_subtask for each worker assignment");
-        sb.AppendLine("3) team_dispatch");
-        sb.AppendLine("4) team_collect");
+        sb.AppendLine("3) team_dispatch (returns immediately; workers run in the background)");
+        sb.AppendLine("4) after workers finish you will be re-invoked — then team_collect");
         sb.AppendLine("5) team_submit_result (or team_redispatch / team_ask_user when needed)");
+        return sb.ToString();
+    }
+
+    private static string BuildLeaderFollowUp(TeamTask task)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Continue the team task. Current subtask status:");
+        foreach (var sub in task.SubTasks)
+        {
+            sb.AppendLine(
+                $"- {sub.Id} [{sub.Status}] iter={sub.Iteration}/{sub.MaxIterations} {sub.Title}");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("If work remains, dispatch/redispatch. If ready, team_collect then team_submit_result.");
+        return sb.ToString();
+    }
+
+    private static string BuildLeaderResume(TeamTask task, string humanAnswer)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("The human answered your question. Continue the team task.");
+        sb.AppendLine("Human answer:");
+        sb.AppendLine(humanAnswer.Trim());
+        sb.AppendLine();
+        sb.AppendLine(BuildLeaderFollowUp(task));
         return sb.ToString();
     }
 
@@ -200,4 +680,11 @@ public sealed class TeamTaskOrchestrator(
 
         return sb.ToString();
     }
+
+    private sealed record WorkerRunResult(
+        string SubTaskId,
+        string ProfileId,
+        int Iteration,
+        TeamMemberRunOutcome Outcome,
+        bool Cancelled = false);
 }

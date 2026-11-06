@@ -39,6 +39,7 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
     private Func<IReadOnlyList<string>>? _getIgnorePatterns;
     private Func<bool>? _tryCancelCompaction;
     private Func<bool>? _tryCancelTeamRun;
+    private Func<bool>? _isTeamBusy;
     private Func<ComposerSlashCommandContext>? _createSlashCommandContext;
     private Func<Task>? _ensureSessionReady;
     private Func<string, Task<bool>>? _trySubmitTeamsGoalAsync;
@@ -91,7 +92,8 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         Func<ComposerSlashCommandContext> createSlashCommandContext,
         Func<Task> ensureSessionReady,
         Func<string, Task<bool>>? trySubmitTeamsGoalAsync = null,
-        Func<bool>? tryCancelTeamRun = null)
+        Func<bool>? tryCancelTeamRun = null,
+        Func<bool>? isTeamBusy = null)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
@@ -104,6 +106,7 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         _getIgnorePatterns = getIgnorePatterns;
         _tryCancelCompaction = tryCancelCompaction;
         _tryCancelTeamRun = tryCancelTeamRun;
+        _isTeamBusy = isTeamBusy;
         _createSlashCommandContext = createSlashCommandContext;
         _ensureSessionReady = ensureSessionReady;
         _trySubmitTeamsGoalAsync = trySubmitTeamsGoalAsync;
@@ -471,7 +474,9 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
     }
 
     public void UpdateDisplayedBusyState() =>
-        _setIsBusy!(_sessionTurns.TurnHost.IsRunning(_getDisplayedSessionId!()));
+        _setIsBusy!(
+            _sessionTurns.TurnHost.IsRunning(_getDisplayedSessionId!())
+            || (_isTeamBusy?.Invoke() ?? false));
 
 
     private void RequestScrollToBottom() => _chatScroll.ScrollToBottom();

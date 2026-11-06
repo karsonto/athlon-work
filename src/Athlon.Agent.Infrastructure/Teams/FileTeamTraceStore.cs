@@ -69,19 +69,18 @@ public sealed class FileTeamTraceStore(ITeamTaskStore taskStore, IJsonFileStore 
         IReadOnlyDictionary<string, TeamTraceNodeLayout> layout,
         CancellationToken cancellationToken = default)
     {
-        var task = await taskStore.GetAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false);
-        if (task is null)
+        // Layout-only write — never re-save task.json (avoids stomping live worker progress).
+        var dir = taskStore.ResolveTaskDirectory(rootSessionId, taskId);
+        if (!Directory.Exists(dir))
         {
             return;
         }
 
-        task.TraceLayout = layout.ToDictionary(
+        var path = Path.Combine(dir, "layout.json");
+        var dict = layout.ToDictionary(
             kv => kv.Key,
             kv => kv.Value,
             StringComparer.OrdinalIgnoreCase);
-        await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
-
-        var path = Path.Combine(taskStore.ResolveTaskDirectory(rootSessionId, taskId), "layout.json");
-        await jsonFileStore.SaveAsync(path, task.TraceLayout, cancellationToken).ConfigureAwait(false);
+        await jsonFileStore.SaveAsync(path, dict, cancellationToken).ConfigureAwait(false);
     }
 }
