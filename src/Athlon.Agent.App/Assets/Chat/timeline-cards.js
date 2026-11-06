@@ -269,10 +269,6 @@ function appendFilesChangedCard(event) {
       button.className = 'files-changed-row';
       button.title = file.path || file.displayName || '';
 
-      var icon = document.createElement('span');
-      icon.className = 'files-changed-icon';
-      button.appendChild(icon);
-
       var name = document.createElement('span');
       name.className = 'files-changed-name';
       name.textContent = file.displayName || file.path || '';

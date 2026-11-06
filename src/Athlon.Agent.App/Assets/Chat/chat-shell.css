@@ -679,13 +679,6 @@ html.replaying .message-row { animation: none; }
   border-radius: 8px;
 }
 .files-changed-row:hover { background: rgba(127,127,127,0.12); }
-.files-changed-icon {
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  flex-shrink: 0;
-}
 .files-changed-name {
   flex: 1;
   min-width: 0;
