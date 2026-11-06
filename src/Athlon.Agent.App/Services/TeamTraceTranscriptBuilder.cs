@@ -11,7 +11,9 @@ namespace Athlon.Agent.App.Services;
 /// </summary>
 internal static class TeamTraceTranscriptBuilder
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    // Must match JsonFileStore line/session writers (string enums). Plain Web defaults
+    // fail to deserialize MessageRole and silently drop every transcript line.
+    private static readonly JsonSerializerOptions JsonOptions = JsonFileStoreOptions.WebCompactRelaxed;
     private const int MaxMessagesPerMember = 240;
     private const int MaxTextChars = 12_000;
     private const int MaxToolDetailChars = 8_000;
@@ -112,15 +114,39 @@ internal static class TeamTraceTranscriptBuilder
             }
         }
 
-        // Prefer whichever source is richer — conversation.jsonl may lag session.json briefly,
-        // or the reverse when SessionRuntimeStore wrote a partial display log elsewhere first.
+        // Prefer whichever source is richer — conversation.jsonl may lag session.json briefly
+        // (running tool placeholders often land in session.json first via PersistMessageAsync).
         var fromSession = ReadSessionMessages(memberDir);
         if (fromSession.Count > list.Count)
         {
             return fromSession;
         }
 
+        if (fromSession.Count == list.Count && fromSession.Count > 0)
+        {
+            // Same count can still mean session.json has newer upserted tool rows.
+            var convStamp = TryFileTicks(conversationPath);
+            var sessionStamp = TryFileTicks(Path.Combine(memberDir, "session.json"));
+            if (sessionStamp > convStamp)
+            {
+                return fromSession;
+            }
+        }
+
         return list.Count > 0 ? list : fromSession;
+    }
+
+    private static long TryFileTicks(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.Exists ? info.LastWriteTimeUtc.Ticks : 0;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     private static List<ChatMessage> ReadSessionMessages(string memberDir)

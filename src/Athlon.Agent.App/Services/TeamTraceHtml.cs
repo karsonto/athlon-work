@@ -105,6 +105,7 @@ public static class TeamTraceHtml
   --loop:#D97706; --loop-soft:#FFFBEB; --loop-border:#FCD34D; --leader:#7C3AED;
   --dot:rgba(99,102,241,.18);
   --shadow:0 1px 2px rgba(15,23,42,.05), 0 10px 28px rgba(15,23,42,.08);
+  --scroll-thumb:rgba(100,116,139,.45);
   --font:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","PingFang SC",system-ui,sans-serif;
   --mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;
 }
@@ -119,9 +120,21 @@ public static class TeamTraceHtml
   --loop:#FBBF24; --loop-soft:rgba(251,191,36,.12); --loop-border:rgba(251,191,36,.45); --leader:#A78BFA;
   --dot:rgba(129,140,248,.12);
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 36px rgba(0,0,0,.35);
+  --scroll-thumb:rgba(148,163,184,.4);
 }
-*{box-sizing:border-box} html,body{height:100%;margin:0}
+*{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:var(--scroll-thumb) transparent}
+html,body{height:100%;margin:0}
 body{font-family:var(--font);font-size:13px;color:var(--fg);background:var(--bg);line-height:1.45;overflow:hidden}
+/* Match Chat page thin scrollbars (10px track + 2px transparent border). */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{
+  border:2px solid transparent;
+  border-radius:9999px;
+  background:var(--scroll-thumb);
+  background-clip:padding-box;
+  min-height:40px;
+}
 button{font:inherit;color:inherit;cursor:pointer}
 .app{display:grid;grid-template-rows:48px 36px 1fr;height:100%;background:var(--shell)}
 .topbar{background:var(--shell);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 14px;gap:12px}
@@ -392,7 +405,9 @@ function fingerprintPayload(d){
   const ev=(d.events||[]).length;
   const tr=Object.keys(d.transcripts||{}).map(k=>{
     const arr=d.transcripts[k]||[];
-    return k+':'+arr.length+':'+(arr[arr.length-1]?.at||'');
+    const last=arr[arr.length-1]||{};
+    // Include kind/status/toolName so running→succeeded updates are not skipped when length/`at` stay equal.
+    return k+':'+arr.length+':'+(last.at||'')+':'+(last.kind||'')+':'+(last.status||'')+':'+(last.toolName||'')+':'+(last.summary||'').length;
   }).join(';');
   return [d.taskId,d.status,d.updatedAt,d.finalResult||'',subs,ev,tr].join('~');
 }

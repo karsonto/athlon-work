@@ -134,7 +134,8 @@ public partial class TeamTraceWindow : Window
             return;
         }
 
-        _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
+        // Sub-second polling so Worker Tools appear while tools are still in flight.
+        _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _pollTimer.Tick += async (_, _) => await PollLiveAsync().ConfigureAwait(true);
     }
 

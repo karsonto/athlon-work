@@ -44,11 +44,27 @@ public sealed partial class AgentRuntime
             return (session, false);
         }
 
-        ToolResult result;
-        (session, result) = await _toolPipeline.InvokeAndPersistAsync(
+        // Persist a running placeholder and notify before the (possibly long) invoke so
+        // Team Trace / live UIs can show the in-flight tool immediately.
+        session = await _toolPipeline.PersistRunningToolPlaceholderAsync(
             session,
             parentMessageId,
             toolCall,
+            PersistMessageAsync,
+            cancellationToken).ConfigureAwait(false);
+        invocation.Session = session;
+        await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
+
+        var outcome = await _toolPipeline.InvokeCoreAsync(
+            session.Id,
+            toolCall,
+            callbacks,
+            cancellationToken).ConfigureAwait(false);
+        session = await _toolPipeline.PersistToolResultAsync(
+            session,
+            parentMessageId,
+            toolCall,
+            outcome.Result,
             streamAdapter,
             callbacks,
             PersistMessageAsync,
@@ -56,7 +72,7 @@ public sealed partial class AgentRuntime
         invocation.Session = session;
         await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
         await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
-        return (session, result is { Succeeded: true, EndsTurn: true });
+        return (session, outcome.Result is { Succeeded: true, EndsTurn: true });
     }
 
     private async Task<(AgentSession Session, bool EndsTurn)> InvokeParallelToolBatchAsync(
@@ -101,6 +117,8 @@ public sealed partial class AgentRuntime
         }
 
         invocation.Session = session;
+        // Surface running placeholders before the parallel batch blocks on tool I/O.
+        await NotifySessionUpdatedAsync(invocation.Callbacks, session).ConfigureAwait(false);
 
         if (pending.Count > 0)
         {
