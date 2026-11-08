@@ -1,7 +1,10 @@
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using Athlon.Agent.App.Behaviors;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.Core.Teams;
@@ -38,11 +41,14 @@ public partial class TeamTraceWindow : Window
         _taskStore = taskStore;
         _live = live;
         InitializeComponent();
+        MaximizedWindowWorkArea.Attach(this);
         ApplyChromeTitle(teamName, task);
         Loaded += OnLoaded;
         Closed += OnClosed;
+        StateChanged += (_, _) => UpdateMaximizeRestoreButton();
         AppThemeManager.ThemeChanged += OnAppThemeChanged;
         EnsurePollTimer();
+        UpdateMaximizeRestoreButton();
     }
 
     public static void ShowOrFocus(
@@ -61,6 +67,11 @@ public partial class TeamTraceWindow : Window
             if (owner is not null && existing.Owner is null)
             {
                 existing.Owner = owner;
+            }
+
+            if (existing.WindowState == WindowState.Minimized)
+            {
+                existing.WindowState = WindowState.Maximized;
             }
 
             existing.Show();
@@ -344,7 +355,46 @@ public partial class TeamTraceWindow : Window
         }
     }
 
-    private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
+    private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2)
+        {
+            ToggleWindowState();
+            return;
+        }
+
+        if (WindowState == WindowState.Maximized)
+        {
+            return;
+        }
+
+        DragMove();
+    }
+
+    private void MinimizeButton_OnClick(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState.Minimized;
+
+    private void MaximizeRestoreButton_OnClick(object sender, RoutedEventArgs e) =>
+        ToggleWindowState();
 
     private void CloseButton_OnClick(object sender, RoutedEventArgs e) => Close();
+
+    private void ToggleWindowState() =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void UpdateMaximizeRestoreButton()
+    {
+        if (MaximizeRestoreButton is null)
+        {
+            return;
+        }
+
+        var isMaximized = WindowState == WindowState.Maximized;
+        MaximizeRestoreButton.Content = null;
+        MaximizeRestoreButton.ContentTemplate = (DataTemplate)MaximizeRestoreButton.FindResource(
+            isMaximized ? "WindowCaptionRestoreIconTemplate" : "WindowCaptionMaximizeIconTemplate");
+        MaximizeRestoreButton.ToolTip = isMaximized
+            ? Strings.Get("Common_Restore")
+            : Strings.Get("Common_Maximize");
+    }
 }

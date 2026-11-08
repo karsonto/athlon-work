@@ -43,6 +43,22 @@ public sealed class TeamMemberResultParserTests
     }
 
     [Fact]
+    public void Parse_StartByInspectingPreamble_IsInvalid()
+    {
+        var parsed = TeamMemberResultParser.Parse(
+            "I'll start by inspecting the shared task state and workspace structure.");
+        Assert.Equal(TeamMemberResultStatus.Invalid, parsed.Status);
+        Assert.False(TeamMemberResultParser.IsSuccessful(parsed));
+    }
+
+    [Fact]
+    public void Parse_ShortProseWithoutStatus_IsInvalid()
+    {
+        var parsed = TeamMemberResultParser.Parse("Architecture looks fine overall.");
+        Assert.Equal(TeamMemberResultStatus.Invalid, parsed.Status);
+    }
+
+    [Fact]
     public void Parse_Empty_IsInvalid()
     {
         var parsed = TeamMemberResultParser.Parse("  ");

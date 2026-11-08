@@ -339,7 +339,9 @@ function statusUi(raw){
   if(s.includes('fail')||s.includes('error')||s==='cancelled') return {cls:'error', text: raw||'Error'};
   if(s.includes('queue')) return {cls:'waiting', text:'Queued'};
   if(s.includes('run')) return {cls:'running', text:'Running'};
-  if(s.includes('wait')||s.includes('ready')||s.includes('pending')||s.includes('await')) return {cls:'waiting', text: raw||'Waiting'};
+  if(s.includes('pending')) return {cls:'waiting', text:'Pending'};
+  if(s.includes('ready')) return {cls:'waiting', text:'Ready'};
+  if(s.includes('wait')||s.includes('await')) return {cls:'waiting', text: raw||'Waiting'};
   return {cls:'waiting', text: raw||'Waiting'};
 }
 function nodeStatus(sub){

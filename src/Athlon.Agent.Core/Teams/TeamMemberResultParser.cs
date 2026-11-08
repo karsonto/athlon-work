@@ -35,10 +35,18 @@ public static class TeamMemberResultParser
     private static readonly string[] PreambleOnly =
     [
         "let me open a terminal",
-        "i'll start by exploring",
+        "i'll start by",
         "i will start by",
+        "i'm going to start",
+        "i am going to start",
         "let me explore",
-        "let me check"
+        "let me check",
+        "let me inspect",
+        "let me begin",
+        "i'll begin",
+        "i'll inspect",
+        "first, i'll",
+        "first i'll"
     ];
 
     public static TeamMemberParsedResult Parse(string? responseText)
@@ -71,6 +79,7 @@ public static class TeamMemberResultParser
         var verdict = verdictMatch.Success ? verdictMatch.Groups[1].Value.Trim().ToLowerInvariant() : null;
         var fixTarget = fixTargetMatch.Success ? fixTargetMatch.Groups[1].Value.Trim() : null;
         var findings = ExtractFindings(text);
+        var hasResultHeading = text.Contains("## Result", StringComparison.OrdinalIgnoreCase);
 
         if (string.Equals(verdict, "fail", StringComparison.OrdinalIgnoreCase))
         {
@@ -94,10 +103,19 @@ public static class TeamMemberResultParser
 
         if (!statusMatch.Success)
         {
-            // No structured status: accept non-trivial prose as completed (compat),
-            // but still reject empty/preamble via checks above.
+            // Compat: allow substantial unstructured analysis, but never short planning chatter.
+            if (hasResultHeading || findings is not null || text.Length >= 400)
+            {
+                return new TeamMemberParsedResult(
+                    TeamMemberResultStatus.Completed,
+                    Verdict: null,
+                    FixTargetSubtaskId: fixTarget,
+                    RawText: text,
+                    FindingsSummary: findings);
+            }
+
             return new TeamMemberParsedResult(
-                TeamMemberResultStatus.Completed,
+                TeamMemberResultStatus.Invalid,
                 Verdict: null,
                 FixTargetSubtaskId: fixTarget,
                 RawText: text,

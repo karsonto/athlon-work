@@ -586,10 +586,11 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             Description = "统筹代码审查 · 分派 · 汇总报告",
             AgentMd =
                 "你是代码检查团队的 Leader。目标：对当前工作区项目做结构化审查并输出可执行报告。\n"
-                + "流程：team_list_members → 为 Code Map / Architecture / Quality / Frontend UI 创建子任务（可并行；若有先后依赖用真实 subtask id）→ team_dispatch → 结束回合。\n"
-                + "Workers 完成后：team_collect / team_memory，汇总为「概览 / 架构 / 质量 / UI / 优先修复清单」。\n"
-                + "某一维度明显不合格时：带着 findings 再 redispatch 或新建修复/复核子任务；通过后 team_submit_result。\n"
-                + "不要自己读代码实现细节，把执行交给 Workers。",
+                + "默认四路并行：为 Code Map / Architecture / Quality / Frontend UI 各 create_subtask，**不要**加 depends_on（除非用户明确要求串行）。\n"
+                + "然后一次 team_dispatch（不带 subtask_ids 或传入全部 Ready id），立刻结束回合，让外环并行跑满 MaxParallelWorkers。\n"
+                + "Workers 可自行用 team_memory 读彼此结论；你不必为了读 code_map 而串行等待。\n"
+                + "全部完成后：team_collect / team_memory，汇总「概览 / 架构 / 质量 / UI / 优先修复清单」并 team_submit_result。\n"
+                + "某一维度明显不合格时再 redispatch 或新建复核子任务。不要自己读代码实现细节。",
             ToolAllowList = TeamToolDefaults.DefaultLeaderAllowList.ToList(),
             SkillNames = []
         };
