@@ -41,7 +41,7 @@ internal static partial class UnifiedDiffParser
         patch = patch.TrimStart('\uFEFF');
         if (patch.Contains("*** Begin Patch", StringComparison.Ordinal))
         {
-            return PatchDocument.TryParseV4A(patch, out files, out error);
+            return PatchDocumentParser.TryParseV4A(patch, out files, out error);
         }
 
         if (!TryParseUnified(patch, out var unified, out error))
@@ -49,7 +49,7 @@ internal static partial class UnifiedDiffParser
             return false;
         }
 
-        files = unified.Select(PatchDocument.FromUnified).ToArray();
+        files = unified.Select(PatchDocumentParser.FromUnified).ToArray();
         return true;
     }
 

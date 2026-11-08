@@ -145,15 +145,31 @@ public partial class MainShellViewModel
         _userQuestions.Clear(captureSessionId);
         QuestionBar.RefreshFromActiveSession();
 
+        // Anchor file cards to the latest user bubble that started / resumed this Teams turn.
+        var resumeUser = captureUi.AppendLocalUserMessage(text);
+        var turnAnchorId = resumeUser.Id;
+        if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
+        {
+            _session = _session.WithMessage(resumeUser);
+            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
+        }
+
         ShowShellToast(_loc["Teams_RunningToast"], ShellToastKind.Info);
         SetComposerStatus("Teams · resume");
         IsBusy = true;
+        var progress = CreateTeamChatProgress(captureSessionId, captureUi, turnAnchorId);
         try
         {
             var (ok, message, task) = await TeamsPageVm
-                .ResumeTeamAskAsync(captureSessionId, text, openTrace: true)
+                .ResumeTeamAskAsync(captureSessionId, text, openTrace: true, progress: progress)
                 .ConfigureAwait(true);
-            await ApplyTeamRunOutcomeToChatAsync(captureSessionId, captureUi, ok, message, task)
+            await ApplyTeamRunOutcomeToChatAsync(
+                    captureSessionId,
+                    captureUi,
+                    ok,
+                    message,
+                    task,
+                    turnAnchorId)
                 .ConfigureAwait(true);
         }
         finally

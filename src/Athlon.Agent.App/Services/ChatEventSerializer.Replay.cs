@@ -18,7 +18,8 @@ internal static partial class ChatEventSerializer
         bool showToolCalls = false,
         bool includeReset = true,
         IReadOnlyList<ChatMessage>? activitySourceMessages = null,
-        PlanRun? planRun = null)
+        PlanRun? planRun = null,
+        string? rootSessionId = null)
     {
         var timeline = activitySourceMessages is { Count: > 0 }
             ? activitySourceMessages
@@ -29,13 +30,14 @@ internal static partial class ChatEventSerializer
                 .Select(message => new ChatMessageViewModel(message))
                 .ToList()
             : messages.ToList();
-        var segments = BuildReplaySegments(timeline, showToolCalls);
+        var segments = BuildReplaySegments(timeline, showToolCalls, rootSessionId);
         return BuildEventsFromSegments(segments, includeReset, planRun);
     }
 
     private static IReadOnlyList<ReplayTurnSegment> BuildReplaySegments(
         IReadOnlyList<ChatMessageViewModel> timeline,
-        bool showToolCalls)
+        bool showToolCalls,
+        string? rootSessionId = null)
     {
         var projected = ChatTimelineProjector.BuildSegments(timeline, showToolCalls);
         var segments = new List<ReplayTurnSegment>(projected.Count);
@@ -143,10 +145,13 @@ internal static partial class ChatEventSerializer
                 }
             }
 
-            if (segment.FileEdits.Count > 0)
+            var teamFiles = CollectTeamFilesForSegment(segment, rootSessionId);
+            if (segment.FileEdits.Count > 0 || teamFiles.Count > 0)
             {
                 var merged = SessionModifiedFilesTracker.MergeByPath(
-                    segment.FileEdits.SelectMany(SessionModifiedFilesTracker.BuildEditCardFiles));
+                    segment.FileEdits
+                        .SelectMany(SessionModifiedFilesTracker.BuildEditCardFiles)
+                        .Concat(teamFiles));
                 if (merged.Count > 0)
                 {
                     blockEvents.Add(SerializeFilesChanged(
@@ -174,6 +179,38 @@ internal static partial class ChatEventSerializer
         }
 
         return segments;
+    }
+
+    private static IReadOnlyList<ModifiedFileViewModel> CollectTeamFilesForSegment(
+        ChatTimelineProjector.TurnSegment segment,
+        string? rootSessionId)
+    {
+        if (string.IsNullOrWhiteSpace(rootSessionId))
+        {
+            return Array.Empty<ModifiedFileViewModel>();
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var files = new List<ModifiedFileViewModel>();
+        foreach (var block in segment.Blocks)
+        {
+            if (block is not ChatTimelineProjector.ContentBlock content
+                || content.Message.IsTool
+                || string.IsNullOrWhiteSpace(content.Message.Content))
+            {
+                continue;
+            }
+
+            if (!TeamChatArtifacts.TryParseTeamTaskIdFromContent(content.Message.Content, out var taskId)
+                || !seen.Add(taskId))
+            {
+                continue;
+            }
+
+            files.AddRange(TeamChatArtifacts.TryCollectTaskFilesForReplay(rootSessionId, taskId));
+        }
+
+        return files;
     }
 
     /// <summary>

@@ -219,6 +219,27 @@ public sealed class TeamMemberRunExecutor(
             }
 
             var parsed = TeamMemberResultParser.Parse(responseText);
+
+            // Workers often end on a mid-turn progress note after tools succeed. Nudge once for a
+            // structured ## Result instead of counting that as a hard failure / burning a redispatch.
+            if (parsed.Status == TeamMemberResultStatus.Invalid && !isLeader)
+            {
+                _logger.Warning(
+                    "Worker result format invalid; nudging once for ## Result task={TaskId} member={MemberId} preview={Preview}",
+                    task.TaskId,
+                    memberSessionId,
+                    TeamWorkerHelpers.Truncate(responseText, 160));
+
+                session = await orchestrator
+                    .SendAsync(session, BuildResultFormatNudge(), null, callbacks, cancellationToken)
+                    .ConfigureAwait(false);
+                await PersistMemberTranscriptAsync(memberDir, sessionPath, session, cancellationToken)
+                    .ConfigureAwait(false);
+
+                responseText = SubAgentResultFormatter.ExtractLastAssistantText(session) ?? responseText;
+                parsed = TeamMemberResultParser.Parse(responseText);
+            }
+
             if (parsed.Status == TeamMemberResultStatus.Invalid)
             {
                 return TeamMemberRunOutcome.Fail(
@@ -400,7 +421,9 @@ public sealed class TeamMemberRunExecutor(
         {
             sb.AppendLine(
                 "You are a Worker with an independent context. Do not call team_dispatch, team_submit_result, team_create_subtask, or sessions_*. "
-                + "You may call team_progress and team_memory. Deliver a complete result — do not end with a preamble-only plan.");
+                + "You may call team_progress and team_memory. "
+                + "Your FINAL assistant message must be the ## Result block below (not a progress note like \"build green, next…\"). "
+                + "Do not end with a preamble-only plan.");
         }
 
         sb.AppendLine();
@@ -414,4 +437,19 @@ public sealed class TeamMemberRunExecutor(
         sb.AppendLine("- ...");
         return sb.ToString();
     }
+
+    private static string BuildResultFormatNudge() =>
+        """
+        Your previous final message was rejected as empty / preamble-only / invalid.
+        Do not continue mid-task chatter. Reply NOW with ONLY a structured handoff (no tool calls unless absolutely required to finish):
+
+        ## Result
+        status: completed
+        accomplished:
+        - <what you finished>
+        findings:
+        - <risks or leftovers>
+
+        Use status: failed | blocked | needs_leader when appropriate. Keep status on its own line.
+        """;
 }

@@ -126,16 +126,7 @@ public static class ServiceCollectionExtensions
                 credentialStore: sp.GetService<ICredentialStore>());
             return BehaviorEventManager.Instance;
         });
-        services.AddSingleton<SessionDirectoryService>();
-        services.AddSingleton<SessionIndexCoordinator>();
-        services.AddSingleton<ISessionStorageRepository, SessionStorageFileRepository>();
-        services.AddSingleton<IConversationDisplayRepository, ConversationDisplayFileRepository>();
-        services.AddSingleton<ISessionArtifactRepository, SessionArtifactFileRepository>();
-        services.AddSingleton<IAppSettingsRepository, AppSettingsFileRepository>();
-        services.AddSingleton<IAttemptEventRecorder, AttemptEventRecorder>();
-        services.AddSingleton<IFileStorageService, FileStorageService>();
-        services.AddSingleton<IConversationTranscriptWriter, ImmediateConversationTranscriptWriter>();
-        services.AddSingleton<IDesktopSessionRunProbe>(_ => NullDesktopSessionRunProbe.Instance);
+        RegisterSessionStorageAndRepositories(services);
         services.AddSingleton<CliSessionMap>();
         services.AddSingleton<CliIpcServer>();
         services.AddHttpClient<IAgentModelClient, OpenAiCompatibleChatModelClient>(
@@ -182,6 +173,50 @@ public static class ServiceCollectionExtensions
             return runtime;
         });
         services.AddSingleton<IAgentRuntime>(sp => sp.GetRequiredService<AgentRuntime>());
+        RegisterToolsAndWorkspaces(services);
+        services.AddSingleton<SubAgentSystemPromptOrchestrator>();
+        services.AddSingleton<ISubAgentSessionStore, FileSubAgentSessionStore>();
+        services.AddSingleton<ISubAgentRegistry, FileSubAgentRegistry>();
+        services.AddSingleton<ISubAgentTaskStore, FileSubAgentTaskStore>();
+        services.AddSingleton<ISubAgentCompletionStore, FileSubAgentCompletionStore>();
+        services.AddSingleton<SubAgentRunExecutor>();
+        services.AddSingleton<SubAgentBackgroundExecutor>();
+        services.AddSingleton<ISubAgentSessionManager, SubAgentSessionManager>();
+        services.AddSingleton<Lazy<ISubAgentSessionManager>>(static sp =>
+            new Lazy<ISubAgentSessionManager>(() => sp.GetRequiredService<ISubAgentSessionManager>()));
+        if (settings.SubAgent.Enabled)
+        {
+            services.AddSingleton<IAgentTool, SessionsSpawnTool>();
+            services.AddSingleton<IAgentTool, SessionsSendTool>();
+            services.AddSingleton<IAgentTool, SessionsListTool>();
+            services.AddSingleton<IAgentTool, SessionsHistoryTool>();
+            services.AddSingleton<IAgentTool, SessionsPendingCompletionsTool>();
+            services.AddSingleton<IAgentTool, SubAgentTaskOutputTool>();
+            services.AddSingleton<IRuntimeContextContributor, SubAgentCompletionPromptContributor>();
+        }
+
+        RegisterTeams(services);
+
+        RegisterCompactionMemoryAndMiddleware(services);
+        return services;
+    }
+
+    private static void RegisterSessionStorageAndRepositories(IServiceCollection services)
+    {
+        services.AddSingleton<SessionDirectoryService>();
+        services.AddSingleton<SessionIndexCoordinator>();
+        services.AddSingleton<ISessionStorageRepository, SessionStorageFileRepository>();
+        services.AddSingleton<IConversationDisplayRepository, ConversationDisplayFileRepository>();
+        services.AddSingleton<ISessionArtifactRepository, SessionArtifactFileRepository>();
+        services.AddSingleton<IAppSettingsRepository, AppSettingsFileRepository>();
+        services.AddSingleton<IAttemptEventRecorder, AttemptEventRecorder>();
+        services.AddSingleton<IFileStorageService, FileStorageService>();
+        services.AddSingleton<IConversationTranscriptWriter, ImmediateConversationTranscriptWriter>();
+        services.AddSingleton<IDesktopSessionRunProbe>(_ => NullDesktopSessionRunProbe.Instance);
+    }
+
+    private static void RegisterToolsAndWorkspaces(IServiceCollection services)
+    {
         services.AddSingleton<IImageAttachmentReader, ImageAttachmentReader>();
         services.AddSingleton<IImageAttachmentStore, ImageAttachmentStore>();
         services.AddSingleton<IChatDocumentAttachmentExtractor, ChatDocumentAttachmentExtractor>();
@@ -297,27 +332,10 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<Athlon.Agent.Infrastructure.Tools.McpAdvertisementPolicy>(),
                 sp.GetService<IRuntimeDiagnosticEventSink>(),
                 sp.GetService<IAppLogger>())));
-        services.AddSingleton<SubAgentSystemPromptOrchestrator>();
-        services.AddSingleton<ISubAgentSessionStore, FileSubAgentSessionStore>();
-        services.AddSingleton<ISubAgentRegistry, FileSubAgentRegistry>();
-        services.AddSingleton<ISubAgentTaskStore, FileSubAgentTaskStore>();
-        services.AddSingleton<ISubAgentCompletionStore, FileSubAgentCompletionStore>();
-        services.AddSingleton<SubAgentRunExecutor>();
-        services.AddSingleton<SubAgentBackgroundExecutor>();
-        services.AddSingleton<ISubAgentSessionManager, SubAgentSessionManager>();
-        services.AddSingleton<Lazy<ISubAgentSessionManager>>(static sp =>
-            new Lazy<ISubAgentSessionManager>(() => sp.GetRequiredService<ISubAgentSessionManager>()));
-        if (settings.SubAgent.Enabled)
-        {
-            services.AddSingleton<IAgentTool, SessionsSpawnTool>();
-            services.AddSingleton<IAgentTool, SessionsSendTool>();
-            services.AddSingleton<IAgentTool, SessionsListTool>();
-            services.AddSingleton<IAgentTool, SessionsHistoryTool>();
-            services.AddSingleton<IAgentTool, SessionsPendingCompletionsTool>();
-            services.AddSingleton<IAgentTool, SubAgentTaskOutputTool>();
-            services.AddSingleton<IRuntimeContextContributor, SubAgentCompletionPromptContributor>();
-        }
+    }
 
+    private static void RegisterTeams(IServiceCollection services)
+    {
         // Agent Teams — stores always registered; tools only when Teams.Enabled
         services.AddSingleton<IAgentProfileStore, Athlon.Agent.Infrastructure.Teams.FileAgentProfileStore>();
         services.AddSingleton<ITeamDefinitionStore, Athlon.Agent.Infrastructure.Teams.FileTeamDefinitionStore>();
@@ -338,7 +356,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamCollectTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamSubmitResultTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamAskUserTool>();
+    }
 
+    private static void RegisterCompactionMemoryAndMiddleware(IServiceCollection services)
+    {
         services.AddSingleton<ITokenEstimatorCalibrator, TokenEstimatorCalibrator>();
         services.AddSingleton<ISessionUsageAccumulator, SessionUsageAccumulator>();
         services.AddSingleton<IPromptPressureStore, PromptPressureStore>();
@@ -379,7 +400,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTurnMiddleware, PostTurnMemoryMiddleware>();
         services.AddSingleton<IAgentTurnMiddleware, ToolStormTurnMiddleware>();
         services.AddSingleton<AgentTurnMiddlewarePipeline>();
-        return services;
     }
 
     private static AppSettings? LoadSettings(string settingsPath)

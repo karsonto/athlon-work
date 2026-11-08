@@ -674,6 +674,33 @@ public sealed partial class SessionTurnUiController
         return assistant!;
     }
 
+    /// <summary>
+    /// Publishes (or seals) a FilesChanged card for a local Teams turn that never ran a live agent stream.
+    /// </summary>
+    public void PublishLocalFilesChanged(
+        string? turnAnchorId,
+        IReadOnlyList<ModifiedFileViewModel> files,
+        bool upsert)
+    {
+        RunOnUiSync(() =>
+        {
+            if (!CanTouchChatView)
+            {
+                return;
+            }
+
+            if (files.Count == 0 && upsert)
+            {
+                return;
+            }
+
+            _ = ChatView!.DispatchFilesChangedAsync(
+                files,
+                upsert: upsert,
+                turnAnchorId: turnAnchorId);
+        });
+    }
+
     /// <summary>Appends a single user bubble without starting a live agent turn.</summary>
     public ChatMessage AppendLocalUserMessage(string userText)
     {

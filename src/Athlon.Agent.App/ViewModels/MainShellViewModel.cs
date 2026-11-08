@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -315,50 +315,52 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             OnPropertyChanged(nameof(HasPendingDocuments));
             OnPropertyChanged(nameof(HasPendingAttachments));
         };
-        ChatPage.PropertyChanged += (_, e) =>
-        {
-            switch (e.PropertyName)
-            {
-                case nameof(ChatPageViewModel.ComposerText):
-                    OnPropertyChanged(nameof(ComposerText));
-                    OnPropertyChanged(nameof(IsComposerEmpty));
-                    break;
-                case nameof(ChatPageViewModel.IsComposerEmpty):
-                    OnPropertyChanged(nameof(IsComposerEmpty));
-                    break;
-                case nameof(ChatPageViewModel.IsAtCompletionOpen):
-                    OnPropertyChanged(nameof(IsAtCompletionOpen));
-                    break;
-                case nameof(ChatPageViewModel.SelectedAtCompletionIndex):
-                    OnPropertyChanged(nameof(SelectedAtCompletionIndex));
-                    break;
-                case nameof(ChatPageViewModel.IsReadingAttachments):
-                    OnPropertyChanged(nameof(IsReadingAttachments));
-                    break;
-                case nameof(ChatPageViewModel.HasPendingAttachments):
-                    OnPropertyChanged(nameof(HasPendingAttachments));
-                    break;
-                case nameof(ChatPageViewModel.HasPendingDocuments):
-                    OnPropertyChanged(nameof(HasPendingDocuments));
-                    break;
-                case nameof(ChatPageViewModel.IsSpeechInputAvailable):
-                    OnPropertyChanged(nameof(IsSpeechInputAvailable));
-                    OnPropertyChanged(nameof(SendButtonToolTip));
-                    break;
-                case nameof(ChatPageViewModel.IsSpeechListening):
-                    OnPropertyChanged(nameof(IsSpeechListening));
-                    OnPropertyChanged(nameof(SendButtonToolTip));
-                    break;
-                case nameof(ChatPageViewModel.SendButtonToolTip):
-                    OnPropertyChanged(nameof(SendButtonToolTip));
-                    break;
-            }
-        };
+        ChatPage.PropertyChanged += OnChatPagePropertyChanged;
         AppThemeManager.ThemeChanged += OnAppThemeChanged;
         AppCultureManager.CultureChanged += OnCultureChanged;
         RefreshLocalizedStrings();
         CurrentPageView = _pageViewFactory.GetOrCreate(CurrentPage);
         _ = InitializeAsync();
+    }
+
+    private void OnChatPagePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(ChatPageViewModel.ComposerText):
+                OnPropertyChanged(nameof(ComposerText));
+                OnPropertyChanged(nameof(IsComposerEmpty));
+                break;
+            case nameof(ChatPageViewModel.IsComposerEmpty):
+                OnPropertyChanged(nameof(IsComposerEmpty));
+                break;
+            case nameof(ChatPageViewModel.IsAtCompletionOpen):
+                OnPropertyChanged(nameof(IsAtCompletionOpen));
+                break;
+            case nameof(ChatPageViewModel.SelectedAtCompletionIndex):
+                OnPropertyChanged(nameof(SelectedAtCompletionIndex));
+                break;
+            case nameof(ChatPageViewModel.IsReadingAttachments):
+                OnPropertyChanged(nameof(IsReadingAttachments));
+                break;
+            case nameof(ChatPageViewModel.HasPendingAttachments):
+                OnPropertyChanged(nameof(HasPendingAttachments));
+                break;
+            case nameof(ChatPageViewModel.HasPendingDocuments):
+                OnPropertyChanged(nameof(HasPendingDocuments));
+                break;
+            case nameof(ChatPageViewModel.IsSpeechInputAvailable):
+                OnPropertyChanged(nameof(IsSpeechInputAvailable));
+                OnPropertyChanged(nameof(SendButtonToolTip));
+                break;
+            case nameof(ChatPageViewModel.IsSpeechListening):
+                OnPropertyChanged(nameof(IsSpeechListening));
+                OnPropertyChanged(nameof(SendButtonToolTip));
+                break;
+            case nameof(ChatPageViewModel.SendButtonToolTip):
+                OnPropertyChanged(nameof(SendButtonToolTip));
+                break;
+        }
     }
 
     public bool IsLightTheme => AppThemeManager.CurrentKind == AppThemeKind.Light;

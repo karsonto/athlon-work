@@ -20,16 +20,17 @@ public sealed record TeamMemberParsedResult(
 
 public static class TeamMemberResultParser
 {
+    // Allow markdown bold, fullwidth colon, and a trailing period — models often wrap fields.
     private static readonly Regex StatusLine = new(
-        @"^\s*status\s*:\s*(completed|failed|blocked|needs_leader)\s*$",
+        @"^\s*(?:\*\*)?status(?:\*\*)?\s*[:：]\s*(?:\*\*)?(completed|failed|blocked|needs_leader)(?:\*\*)?\s*\.?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
     private static readonly Regex VerdictLine = new(
-        @"^\s*verdict\s*:\s*(pass|fail)\s*$",
+        @"^\s*(?:\*\*)?verdict(?:\*\*)?\s*[:：]\s*(?:\*\*)?(pass|fail)(?:\*\*)?\s*\.?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
     private static readonly Regex FixTargetLine = new(
-        @"^\s*fix_target_subtask_id\s*:\s*(\S+)\s*$",
+        @"^\s*(?:\*\*)?fix_target_subtask_id(?:\*\*)?\s*[:：]\s*(\S+)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
     private static readonly string[] PreambleOnly =
@@ -103,8 +104,12 @@ public static class TeamMemberResultParser
 
         if (!statusMatch.Success)
         {
-            // Compat: allow substantial unstructured analysis, but never short planning chatter.
-            if (hasResultHeading || findings is not null || text.Length >= 400)
+            // Compat: ## Result heading, findings, or a long substantive write-up counts as done.
+            // Also accept common Chinese completion markers that models emit without the English enum.
+            if (hasResultHeading
+                || findings is not null
+                || text.Length >= 320
+                || LooksLikeCompletedProse(text))
             {
                 return new TeamMemberParsedResult(
                     TeamMemberResultStatus.Completed,
@@ -148,6 +153,37 @@ public static class TeamMemberResultParser
 
         var lower = compact.ToLowerInvariant();
         return PreambleOnly.Any(p => lower.StartsWith(p, StringComparison.Ordinal) || lower.Contains(p, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Heuristic for models that summarize completion without the English status enum
+    /// (still reject short mid-turn "build green, next…" chatter).
+    /// </summary>
+    private static bool LooksLikeCompletedProse(string text)
+    {
+        var compact = text.ReplaceLineEndings(" ").Trim();
+        if (compact.Length < 180)
+        {
+            return false;
+        }
+
+        var lower = compact.ToLowerInvariant();
+        if (lower.Contains("moving to", StringComparison.Ordinal)
+            || lower.Contains("next i'll", StringComparison.Ordinal)
+            || lower.Contains("next i will", StringComparison.Ordinal)
+            || lower.Contains("让我", StringComparison.Ordinal)
+            || lower.Contains("接下来", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return lower.Contains("status: completed", StringComparison.Ordinal)
+               || lower.Contains("status：completed", StringComparison.Ordinal)
+               || lower.Contains("已完成", StringComparison.Ordinal)
+               || lower.Contains("全部完成", StringComparison.Ordinal)
+               || lower.Contains("配方已应用", StringComparison.Ordinal)
+               || (lower.Contains("applied", StringComparison.Ordinal)
+                   && lower.Contains("changed_files", StringComparison.Ordinal));
     }
 
     private static string? ExtractFindings(string text)

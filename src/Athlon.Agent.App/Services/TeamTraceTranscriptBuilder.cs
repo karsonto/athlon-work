@@ -72,6 +72,28 @@ internal static class TeamTraceTranscriptBuilder
         }
     }
 
+    /// <summary>Reads member conversation / session messages for Trace and Chat file cards.</summary>
+    public static IReadOnlyList<ChatMessage> ReadMemberMessages(
+        TeamTask task,
+        ITeamTaskStore taskStore,
+        string memberSessionId)
+    {
+        if (string.IsNullOrWhiteSpace(memberSessionId))
+        {
+            return Array.Empty<ChatMessage>();
+        }
+
+        try
+        {
+            var dir = taskStore.ResolveMemberDirectory(task.RootSessionId, task.TaskId, memberSessionId);
+            return ReadMessages(dir);
+        }
+        catch
+        {
+            return Array.Empty<ChatMessage>();
+        }
+    }
+
     private static List<ChatMessage> ReadMessages(string memberDir)
     {
         var list = new List<ChatMessage>();

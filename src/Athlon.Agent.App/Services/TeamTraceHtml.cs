@@ -179,9 +179,10 @@ svg.wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .wire.loop{stroke:var(--loop);stroke-width:2.5;stroke-dasharray:2 6;marker-end:url(#arrowLoop)}
 .wire.loop.active{animation:dash .7s linear infinite}
 @keyframes dash{to{stroke-dashoffset:-12}}
-.edge-label{position:absolute;transform:translate(-50%,-50%);font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--shell);border:1px solid var(--border);color:var(--muted);pointer-events:none;white-space:nowrap;z-index:2}
-.edge-label.loop{color:var(--loop);border-color:var(--loop-border);background:var(--loop-soft)}
+.edge-label{position:absolute;transform:translate(-50%,-50%);font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--shell);border:1px solid var(--border);color:var(--muted);pointer-events:none;white-space:nowrap;max-width:132px;overflow:hidden;text-overflow:ellipsis;z-index:2}
+.edge-label.loop{color:var(--loop);border-color:var(--loop-border);background:var(--loop-soft);max-width:120px}
 .node{position:absolute;width:220px;background:var(--panel);border:2px solid var(--border);border-radius:12px;box-shadow:var(--shadow);cursor:grab;user-select:none;z-index:3;touch-action:none}
+.node-meta.fail{color:var(--error);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;line-height:1.35;max-height:2.7em}
 .node.dragging{cursor:grabbing;z-index:10;opacity:.96}
 .node.selected{box-shadow:0 0 0 3px var(--accent-ring),var(--shadow);border-color:var(--accent)}
 .node.success{border-color:var(--success-border);background:color-mix(in srgb,var(--success-soft) 70%,var(--panel))}
@@ -458,24 +459,47 @@ function curve(a,b,loop){
   const dy=Math.max(40, Math.abs(b.y-a.y)*.45);
   return `M ${a.x} ${a.y} C ${a.x} ${a.y+dy}, ${b.x} ${b.y-dy}, ${b.x} ${b.y}`;
 }
+function shortLabel(text, max){
+  const t=String(text||'').replace(/\s+/g,' ').trim();
+  if(!t) return '';
+  const n=Math.max(8, max||28);
+  return t.length<=n?t:t.slice(0,n-1)+'…';
+}
 function buildEdges(){
   const edges=[];
+  const loopTargets=new Set();
   (data.subtasks||[]).forEach(s=>{
     const u=nodeStatus(s);
     const wire=u.cls==='success'?'done':(u.cls==='running'||u.cls==='looping'?'active':'');
     edges.push({from:'leader', to:s.id, type:wire, label:(s.iteration||1)>1?`dispatch #${s.iteration}`:'dispatch', loop:false});
     if((s.iteration||1)>1){
-      edges.push({from:'leader', to:s.id, type:'loop'+( /run/i.test(s.status||'')?' active':''), label:`loop iter ${s.iteration}/${s.maxIterations||1}`, loop:true});
+      const full=s.reason||`loop iter ${s.iteration}/${s.maxIterations||1}`;
+      edges.push({
+        from:'leader', to:s.id,
+        type:'loop'+( /run/i.test(s.status||'')?' active':''),
+        label:`re-dispatch #${s.iteration}`,
+        title:full,
+        loop:true
+      });
+      loopTargets.add(s.id);
     }
-    edges.push({from:s.id, to:'agg', type:wire, label:u.cls==='success'?'result':'partial', loop:false});
+    edges.push({from:s.id, to:'agg', type:wire, label:u.cls==='success'?'result':(u.cls==='error'?'failed':'partial'), loop:false});
   });
   edges.push({from:'agg', to:'submit', type:statusUi(data.status).cls==='success'?'done':'', label:'final', loop:false});
+  // Events only fill missing loop wires; never put the full repair message on the canvas.
   (data.events||[]).forEach(ev=>{
     const t=(ev.type||'').toLowerCase();
-    if(t.includes('loop') || t.includes('redispatch')){
-      const to=ev.toNodeId||ev.subTaskId||ev.nodeId;
-      if(to && layout[to]) edges.push({from:'leader', to, type:'loop active', label:ev.message||'loop', loop:true});
-    }
+    if(!(t.includes('loop') || t.includes('redispatch'))) return;
+    const to=ev.toNodeId||ev.subTaskId||ev.nodeId;
+    if(!to || !layout[to] || loopTargets.has(to)) return;
+    edges.push({
+      from:'leader', to,
+      type:'loop active',
+      label:'re-dispatch',
+      title:ev.message||'loop',
+      loop:true
+    });
+    loopTargets.add(to);
   });
   return edges;
 }
@@ -494,9 +518,12 @@ function redrawWires(){
     if(e.label){
       const label=document.createElement('div');
       label.className='edge-label'+(e.loop?' loop':'');
-      if(e.loop){ label.style.left=(Math.max(a.x,b.x)+120)+'px'; label.style.top=((a.y+b.y)/2)+'px'; }
+      // Loop labels sit beside the target worker so multiple repairs do not stack into one blob.
+      if(e.loop){ label.style.left=(b.x+56)+'px'; label.style.top=b.y+'px'; }
       else { label.style.left=((a.x+b.x)/2)+'px'; label.style.top=((a.y+b.y)/2)+'px'; }
-      label.textContent=e.label; labelsEl.appendChild(label);
+      label.textContent=e.label;
+      if(e.title) label.title=e.title;
+      labelsEl.appendChild(label);
     }
   });
 }
@@ -617,9 +644,12 @@ function selectNode(id, opts){
   else if(id==='submit'){ title='Submit Final'; meta='leader · team_submit_result'; input='提交最终包'; output=data.finalResult||'尚未开始'; }
   else if(sub){
     const u=nodeStatus(sub);
+    const failed=/fail|cancel|error/i.test(sub.status||'');
     title=sub.title||sub.id; meta=`member · ${sub.profileId||''} · iter ${sub.iteration}/${sub.maxIterations}`;
-    profile=sub.profileId||'—'; iter=`${sub.iteration} / ${sub.maxIterations}`; reason=sub.reason||'—';
-    input=sub.handoff||'(none)'; output=sub.result||sub.error||'(none)';
+    profile=sub.profileId||'—'; iter=`${sub.iteration} / ${sub.maxIterations}`;
+    reason=sub.reason||sub.error||'—';
+    input=sub.handoff||'(none)';
+    output=failed?(sub.error||sub.result||'(none)'):(sub.result||sub.error||'(none)');
     depends=(sub.dependsOn&&sub.dependsOn.length)?sub.dependsOn.join(', '):'—';
     prev=sub.prevResultSummary||'(none)'; max=String(sub.maxIterations||1); cur=String(sub.iteration||1);
     statusText={cls:u.pill||u.cls, text:u.text};
@@ -656,7 +686,13 @@ function renderNodes(){
   const leaderUi=statusUi(data.status);
   const defs=[
     {id:'leader', name:'Leader', kind:'Leader', kindClass:'leader', ui:leaderUi, meta:'plan + dispatch', foot:[`${(data.subtasks||[]).length} workers`, elapsed()]},
-    ...(data.subtasks||[]).map(s=>{ const u=nodeStatus(s); return {id:s.id, name:s.title||s.id, kind:'Worker', kindClass:'', ui:u, meta:`${s.profileId||''} · ${s.status}`, foot:[`iter ${s.iteration}/${s.maxIterations}`, s.completedAt?'done':'—']}; }),
+    ...(data.subtasks||[]).map(s=>{
+      const u=nodeStatus(s);
+      const failed=/fail|cancel|error/i.test(s.status||'');
+      const failText=shortLabel(s.error||s.reason||'', 72);
+      const meta=failed && failText ? failText : `${s.profileId||''} · ${s.status}`;
+      return {id:s.id, name:s.title||s.id, kind:'Worker', kindClass:'', ui:u, meta, metaFail:failed && !!failText, foot:[`iter ${s.iteration}/${s.maxIterations}`, s.completedAt?'done':'—'], tip:failed?(s.error||s.reason||''):''};
+    }),
     {id:'agg', name:'Aggregate Results', kind:'Leader', kindClass:'leader', ui:{cls:'waiting',text:'Waiting',pill:'waiting'}, meta:'collect + review', foot:[`${(data.subtasks||[]).filter(s=>/success/i.test(s.status||'')).length}/${(data.subtasks||[]).length} ready`,'—']},
     {id:'submit', name:'Submit Final', kind:'Leader', kindClass:'leader', ui:statusUi(data.status), meta:'team_submit_result', foot:['artifact','—']}
   ];
@@ -668,8 +704,9 @@ function renderNodes(){
     el.dataset.id=n.id; el.style.left=layout[n.id].x+'px'; el.style.top=layout[n.id].y+'px';
     const pill=n.ui.pill||n.ui.cls;
     el.innerHTML=`<div class="node-h"><span class="node-kind ${n.kindClass}">${esc(n.kind)}</span><span class="pill ${pill}"><i class="dot"></i> ${esc(n.ui.text)}</span></div>
-      <div class="node-b"><div class="node-name">${esc(n.name)}</div><div class="node-meta">${esc(n.meta)}</div><div class="progress"><i></i></div>
+      <div class="node-b"><div class="node-name">${esc(n.name)}</div><div class="node-meta${n.metaFail?' fail':''}">${esc(n.meta)}</div><div class="progress"><i></i></div>
       <div class="node-foot"><span>${esc(n.foot[0])}</span><span>${esc(n.foot[1])}</span></div></div>`;
+    if(n.tip) el.title=n.tip;
     enableDrag(el);
     el.addEventListener('click',()=>{ if(el.dataset.didDrag==='1'){el.dataset.didDrag='0'; return;} selectNode(n.id); });
     nodesEl.appendChild(el);

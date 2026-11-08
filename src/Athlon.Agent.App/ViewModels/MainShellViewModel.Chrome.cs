@@ -114,17 +114,25 @@ public partial class MainShellViewModel
         IsBusy = true;
 
         var userMessage = captureUi.AppendLocalUserMessage(goal);
+        var turnAnchorId = userMessage.Id;
         if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
         {
             _session = _session.WithMessage(userMessage);
             await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
         }
 
+        var progress = CreateTeamChatProgress(captureSessionId, captureUi, turnAnchorId);
+
         try
         {
             // Run via orchestrator path without mutating Teams config page (no new Team / no list refresh).
             var (ok, message, task) = await TeamsPageVm
-                .RunTeamGoalAsync(captureSessionId, goal, team.Id, openTrace: true)
+                .RunTeamGoalAsync(
+                    captureSessionId,
+                    goal,
+                    team.Id,
+                    openTrace: true,
+                    progress: progress)
                 .ConfigureAwait(true);
 
             await ApplyTeamRunOutcomeToChatAsync(
@@ -132,7 +140,8 @@ public partial class MainShellViewModel
                     captureUi,
                     ok,
                     message,
-                    task)
+                    task,
+                    turnAnchorId)
                 .ConfigureAwait(true);
         }
         finally
@@ -149,12 +158,93 @@ public partial class MainShellViewModel
         return true;
     }
 
+    private IProgress<Athlon.Agent.Core.Teams.TeamRunProgress> CreateTeamChatProgress(
+        string captureSessionId,
+        SessionTurnUiController captureUi,
+        string turnAnchorId) =>
+        new Progress<Athlon.Agent.Core.Teams.TeamRunProgress>(step =>
+        {
+            _ = Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                try
+                {
+                    await ApplyTeamStepProgressToChatAsync(captureSessionId, captureUi, turnAnchorId, step)
+                        .ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning("Failed to apply Team step progress to chat: {Error}", ex.Message);
+                }
+            });
+        });
+
+    private async Task ApplyTeamStepProgressToChatAsync(
+        string captureSessionId,
+        SessionTurnUiController captureUi,
+        string turnAnchorId,
+        Athlon.Agent.Core.Teams.TeamRunProgress step)
+    {
+        var markdown = TeamChatArtifacts.FormatStepMarkdown(step);
+        var assistantMessage = captureUi.AppendLocalAssistantMessage(markdown);
+        if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
+        {
+            _session = _session.WithMessage(assistantMessage);
+            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
+        }
+
+        await PublishTeamFilesChangedAsync(
+                captureSessionId,
+                captureUi,
+                turnAnchorId,
+                step.RootSessionId,
+                step.TaskId,
+                seal: false)
+            .ConfigureAwait(true);
+    }
+
+    private async Task PublishTeamFilesChangedAsync(
+        string captureSessionId,
+        SessionTurnUiController captureUi,
+        string? turnAnchorId,
+        string rootSessionId,
+        string taskId,
+        bool seal)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+        {
+            return;
+        }
+
+        var task = await TeamsPageVm
+            .GetTaskSnapshotAsync(rootSessionId, taskId)
+            .ConfigureAwait(true);
+        if (task is null)
+        {
+            return;
+        }
+
+        var files = TeamsPageVm.CollectChatFiles(task);
+        if (files.Count == 0 && !seal)
+        {
+            return;
+        }
+
+        FillMissingWriteDiffsFromWorkspace(files);
+        if (!string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        captureUi.PublishLocalFilesChanged(turnAnchorId, files, upsert: !seal);
+    }
+
     private async Task ApplyTeamRunOutcomeToChatAsync(
         string captureSessionId,
         SessionTurnUiController captureUi,
         bool ok,
         string message,
-        Athlon.Agent.Core.Teams.TeamTask? task)
+        Athlon.Agent.Core.Teams.TeamTask? task,
+        string? turnAnchorId = null)
     {
         string summaryMarkdown;
         if (string.Equals(message, "cancelled", StringComparison.OrdinalIgnoreCase)
@@ -178,7 +268,11 @@ public partial class MainShellViewModel
         else if (ok && task is not null)
         {
             var resultText = ResolveTeamsFinalResultText(task, message);
-            summaryMarkdown = FormatTeamsChatSummary(resultText, task.TaskId, failed: false);
+            // Steps already streamed full Worker/Leader replies; keep final bubble focused.
+            var finalBody = string.IsNullOrWhiteSpace(resultText)
+                ? "Teams run finished. See steps above for details."
+                : resultText;
+            summaryMarkdown = FormatTeamsChatSummary(finalBody, task.TaskId, failed: false);
             ShowShellToast(
                 _loc.Format("Teams_CompletedToast", task.Status.ToString()),
                 ShellToastKind.Success);
@@ -200,6 +294,18 @@ public partial class MainShellViewModel
             _session = _session.WithMessage(assistantMessage);
             await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
             QuestionBar.RefreshFromActiveSession();
+        }
+
+        if (task is not null && !string.IsNullOrWhiteSpace(turnAnchorId))
+        {
+            await PublishTeamFilesChangedAsync(
+                    captureSessionId,
+                    captureUi,
+                    turnAnchorId,
+                    task.RootSessionId,
+                    task.TaskId,
+                    seal: true)
+                .ConfigureAwait(true);
         }
     }
 

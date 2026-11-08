@@ -77,4 +77,49 @@ public sealed class TeamMemberResultParserTests
         Assert.Equal(TeamMemberResultStatus.Blocked, parsed.Status);
         Assert.False(TeamMemberResultParser.IsSuccessful(parsed));
     }
+
+    [Fact]
+    public void Parse_BoldStatusLine_Succeeds()
+    {
+        var parsed = TeamMemberResultParser.Parse("""
+            ## Result
+            **status:** completed
+            accomplished:
+            - extracted ToolResultDiffExtractor
+            """);
+        Assert.Equal(TeamMemberResultStatus.Completed, parsed.Status);
+        Assert.True(TeamMemberResultParser.IsSuccessful(parsed));
+    }
+
+    [Fact]
+    public void Parse_FullwidthColonStatus_Succeeds()
+    {
+        var parsed = TeamMemberResultParser.Parse("""
+            ## Result
+            status：completed
+            findings:
+            - none
+            """);
+        Assert.Equal(TeamMemberResultStatus.Completed, parsed.Status);
+    }
+
+    [Fact]
+    public void Parse_MidTurnBuildProgress_IsInvalid()
+    {
+        var parsed = TeamMemberResultParser.Parse(
+            "Targeted tests: **18 passed / 0 failed** → R1-01 done. Recording and moving to R1-02 (reading source regions).");
+        Assert.Equal(TeamMemberResultStatus.Invalid, parsed.Status);
+    }
+
+    [Fact]
+    public void Parse_LongCompletedProseWithoutEnglishStatus_Succeeds()
+    {
+        var body = string.Concat(
+            "本轮配方已应用完毕，已完成两处 ExtractClass。",
+            " changed_files: A.cs, B.cs。",
+            new string('x', 120),
+            " applied: R1-01, R1-02。验收：编译 0 errors。");
+        var parsed = TeamMemberResultParser.Parse(body);
+        Assert.Equal(TeamMemberResultStatus.Completed, parsed.Status);
+    }
 }

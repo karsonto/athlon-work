@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
+using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Knowledge;
@@ -77,6 +78,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         _knowledgeStore = knowledgeStore;
         _logger = logger.ForContext("TeamsPage");
         TeamsEnabled = settings.Teams.Enabled;
+        TeamChatArtifacts.ConfigureTaskStore(taskStore);
     }
 
     public ObservableCollection<TeamListItemViewModel> TeamItems { get; } = new();
@@ -664,7 +666,8 @@ public sealed partial class TeamsPageViewModel : ObservableObject
                 + "4) 行为等价：不改算法语义；不删测试；不「为了绿而删断言」。\n"
                 + "5) 每完成一条配方：execute_command 跑最窄构建（单项目/解决方案）；失败则就地修到该配方 precondition/acceptance 可过，再下一条。\n"
                 + "6) 某条无法安全应用：跳过并记录 skipped_reason，不要用大重写硬上。\n"
-                + "输出 ## Result：status、applied[]、skipped[]、changed_files、build_commands。put team_memory 键 recipe_results。",
+                + "7) 全部做完后，最后一条助手消息必须是独立的 ## Result（含单独一行 status: completed|failed|…），"
+                + "不要停在「编译绿了 / 下一步…」这类进度句；同时 put team_memory 键 recipe_results（applied/skipped/changed_files/build_commands）。",
             ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(writeTools, skillNames: null).ToList(),
             SkillNames = [],
             KnowledgeModuleIds = []
@@ -683,7 +686,8 @@ public sealed partial class TeamsPageViewModel : ObservableObject
                 + "- 核对是否引入新的循环依赖或跨层泄漏\n"
                 + "用 execute_command 跑构建；有测试则跑相关测试。失败：status:failed、verdict:fail，附命令与关键日志。\n"
                 + "全部通过：verdict:pass，列出 residual_opportunities（未做的高价值机会，供下轮）。\n"
-                + "输出 ## Result：status、verdict、per_recipe_checks、build、tests、residual_opportunities。put team_memory 键 verify_report。",
+                + "最后一条助手消息必须是 ## Result（单独一行 status: + verdict:），不要停在进度句。"
+                + "put team_memory 键 verify_report（per_recipe_checks/build/tests/residual_opportunities）。",
             ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(
                 ["file_list", "file_read", "grep_files", "glob_files", "execute_command"],
                 skillNames: null).ToList(),
@@ -781,7 +785,8 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         string rootSessionId,
         string humanAnswer,
         bool openTrace = true,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<TeamRunProgress>? progress = null)
     {
         if (!_pendingAsksBySession.TryGetValue(rootSessionId, out var pending))
         {
@@ -815,7 +820,8 @@ public sealed partial class TeamsPageViewModel : ObservableObject
                     pending.RootSessionId,
                     pending.TaskId,
                     runCts.Token,
-                    humanAnswer.Trim())
+                    humanAnswer.Trim(),
+                    progress)
                 .ConfigureAwait(true);
 
             return FinalizeTeamRunResult(rootSessionId, completed);
@@ -845,7 +851,8 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         string goal,
         string? teamId = null,
         bool openTrace = true,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<TeamRunProgress>? progress = null)
     {
         if (!_settings.Teams.Enabled)
         {
@@ -896,7 +903,12 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             }
 
             var completed = await _orchestrator
-                .RunToCompletionAsync(began.Task.RootSessionId, began.Task.TaskId, runCts.Token)
+                .RunToCompletionAsync(
+                    began.Task.RootSessionId,
+                    began.Task.TaskId,
+                    runCts.Token,
+                    humanAnswer: null,
+                    progress)
                 .ConfigureAwait(true);
 
             return FinalizeTeamRunResult(rootSessionId, completed);
@@ -1026,6 +1038,15 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             _taskStore,
             shouldLive);
     }
+
+    public IReadOnlyList<ModifiedFileViewModel> CollectChatFiles(TeamTask task) =>
+        TeamChatArtifacts.CollectTaskFiles(task, _taskStore);
+
+    public Task<TeamTask?> GetTaskSnapshotAsync(
+        string rootSessionId,
+        string taskId,
+        CancellationToken cancellationToken = default) =>
+        _taskStore.GetAsync(rootSessionId, taskId, cancellationToken);
 
     public async Task OpenTraceByTaskIdAsync(string rootSessionId, string taskId)
     {

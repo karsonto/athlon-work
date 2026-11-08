@@ -49,11 +49,13 @@ public interface ITeamTaskOrchestrator
     /// MaxParallelWorkers; after workers finish the Leader is re-invoked until submit / ask_user / fail.
     /// </summary>
     /// <param name="humanAnswer">When resuming from <see cref="TeamTaskStatus.AwaitingHuman"/>.</param>
+    /// <param name="progress">Optional live step reporter for Chat (Leader/Worker completions).</param>
     Task<TeamTask> RunToCompletionAsync(
         string rootSessionId,
         string taskId,
         CancellationToken cancellationToken = default,
-        string? humanAnswer = null);
+        string? humanAnswer = null,
+        IProgress<TeamRunProgress>? progress = null);
 }
 
 public interface ITeamMemberRunExecutor

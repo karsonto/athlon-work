@@ -74,7 +74,9 @@ public sealed class TeamTaskOrchestrator(
         var completed = await RunToCompletionAsync(
                 began.Task.RootSessionId,
                 began.Task.TaskId,
-                cancellationToken)
+                cancellationToken,
+                humanAnswer: null,
+                progress: null)
             .ConfigureAwait(false);
         return TeamTaskStartResult.Success(
             completed,
@@ -88,7 +90,8 @@ public sealed class TeamTaskOrchestrator(
         string rootSessionId,
         string taskId,
         CancellationToken cancellationToken = default,
-        string? humanAnswer = null)
+        string? humanAnswer = null,
+        IProgress<TeamRunProgress>? progress = null)
     {
         var team = await LoadTeamForTaskAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false);
         var maxParallel = ResolveMaxParallel(team);
@@ -177,7 +180,7 @@ public sealed class TeamTaskOrchestrator(
                     var finished = await Task.WhenAny(inFlight.Values).ConfigureAwait(false);
                     var result = await finished.ConfigureAwait(false);
                     inFlight.Remove(result.SubTaskId);
-                    await ApplyWorkerResultAsync(rootSessionId, taskId, result).ConfigureAwait(false);
+                    await ApplyWorkerResultAsync(rootSessionId, taskId, result, progress).ConfigureAwait(false);
                     needsLeader = true;
                     continue;
                 }
@@ -232,7 +235,8 @@ public sealed class TeamTaskOrchestrator(
                         leader,
                         leaderSessionId,
                         leaderKickoff,
-                        cancellationToken)
+                        cancellationToken,
+                        progress)
                     .ConfigureAwait(false);
 
                 useInitialKickoff = false;
@@ -281,7 +285,8 @@ public sealed class TeamTaskOrchestrator(
         AgentProfile leader,
         string leaderSessionId,
         string kickoff,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IProgress<TeamRunProgress>? progress)
     {
         TeamTask task;
         using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false))
@@ -313,6 +318,16 @@ public sealed class TeamTaskOrchestrator(
                         && !string.IsNullOrWhiteSpace(latest.FinalResult))
                     {
                         await taskStore.SaveAsync(latest, CancellationToken.None).ConfigureAwait(false);
+                        ReportProgress(progress, new TeamRunProgress
+                        {
+                            Kind = TeamRunProgressKind.LeaderTurnCompleted,
+                            RootSessionId = rootSessionId,
+                            TaskId = taskId,
+                            Title = "Leader",
+                            ProfileId = leader.Id,
+                            StatusLabel = "Succeeded",
+                            ResponseText = latest.FinalResult ?? outcome.ResponseText
+                        });
                         return;
                     }
 
@@ -325,10 +340,35 @@ public sealed class TeamTaskOrchestrator(
                         latest.TaskId,
                         new TeamTraceEvent { Type = "task.failed", Message = latest.Error },
                         CancellationToken.None).ConfigureAwait(false);
+                    ReportProgress(progress, new TeamRunProgress
+                    {
+                        Kind = TeamRunProgressKind.LeaderTurnCompleted,
+                        RootSessionId = rootSessionId,
+                        TaskId = taskId,
+                        Title = "Leader",
+                        ProfileId = leader.Id,
+                        StatusLabel = "Failed",
+                        ResponseText = outcome.ResponseText,
+                        Error = latest.Error
+                    });
                     return;
                 }
 
                 await taskStore.SaveAsync(latest, CancellationToken.None).ConfigureAwait(false);
+                ReportProgress(progress, new TeamRunProgress
+                {
+                    Kind = TeamRunProgressKind.LeaderTurnCompleted,
+                    RootSessionId = rootSessionId,
+                    TaskId = taskId,
+                    Title = "Leader",
+                    ProfileId = leader.Id,
+                    StatusLabel = latest.Status == TeamTaskStatus.AwaitingHuman
+                        ? "AwaitingHuman"
+                        : latest.Status == TeamTaskStatus.Succeeded ? "Succeeded" : "Running",
+                    ResponseText = string.IsNullOrWhiteSpace(latest.FinalResult)
+                        ? outcome.ResponseText
+                        : latest.FinalResult!
+                });
             }
         }
     }
@@ -567,7 +607,11 @@ public sealed class TeamTaskOrchestrator(
         }, CancellationToken.None);
     }
 
-    private async Task ApplyWorkerResultAsync(string rootSessionId, string taskId, WorkerRunResult result)
+    private async Task ApplyWorkerResultAsync(
+        string rootSessionId,
+        string taskId,
+        WorkerRunResult result,
+        IProgress<TeamRunProgress>? progress)
     {
         using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false))
         {
@@ -581,10 +625,12 @@ public sealed class TeamTaskOrchestrator(
             }
 
             sub.CompletedAt = DateTimeOffset.UtcNow;
+            TeamRunProgressKind kind;
             if (result.Cancelled)
             {
                 sub.Status = TeamSubTaskStatus.Cancelled;
                 sub.Error = "cancelled";
+                kind = TeamRunProgressKind.WorkerCancelled;
             }
             else if (result.Outcome.Ok)
             {
@@ -592,10 +638,12 @@ public sealed class TeamTaskOrchestrator(
                 sub.Result = result.Outcome.ResponseText;
                 sub.PrevResultSummary = TeamWorkerHelpers.Truncate(result.Outcome.ResponseText, 1200);
                 sub.Error = null;
+                kind = TeamRunProgressKind.WorkerCompleted;
             }
             else
             {
                 sub.Status = TeamSubTaskStatus.Failed;
+                kind = TeamRunProgressKind.WorkerFailed;
                 // Keep full worker text when present so Leader can collect verification findings.
                 if (!string.IsNullOrWhiteSpace(result.Outcome.ResponseText)
                     && !string.Equals(
@@ -665,6 +713,40 @@ public sealed class TeamTaskOrchestrator(
 
             TeamWorkerHelpers.RefreshReady(task);
             await taskStore.SaveAsync(task, CancellationToken.None).ConfigureAwait(false);
+
+            var responseText = !string.IsNullOrWhiteSpace(sub.Result)
+                ? sub.Result!
+                : result.Outcome.ResponseText;
+            if (string.IsNullOrWhiteSpace(responseText) && !string.IsNullOrWhiteSpace(sub.Error))
+            {
+                responseText = sub.Error!;
+            }
+
+            ReportProgress(progress, new TeamRunProgress
+            {
+                Kind = kind,
+                RootSessionId = rootSessionId,
+                TaskId = taskId,
+                SubTaskId = sub.Id,
+                Title = string.IsNullOrWhiteSpace(sub.Title) ? sub.Id : sub.Title,
+                ProfileId = result.ProfileId ?? sub.AssigneeProfileId,
+                Iteration = result.Iteration > 0 ? result.Iteration : sub.Iteration,
+                StatusLabel = sub.Status.ToString(),
+                ResponseText = responseText ?? "",
+                Error = sub.Error
+            });
+        }
+    }
+
+    private static void ReportProgress(IProgress<TeamRunProgress>? progress, TeamRunProgress update)
+    {
+        try
+        {
+            progress?.Report(update);
+        }
+        catch
+        {
+            // Chat UI progress must never fail the Team run.
         }
     }
 

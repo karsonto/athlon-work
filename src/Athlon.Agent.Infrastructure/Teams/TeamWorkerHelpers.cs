@@ -58,6 +58,9 @@ internal static class TeamWorkerHelpers
         sb.AppendLine();
         sb.AppendLine("You may call team_progress / team_memory to inspect shared task state.");
         sb.AppendLine("Do not call team_dispatch / team_submit_result / sessions_*.");
+        sb.AppendLine(
+            "When finished, your last assistant message MUST be a ## Result block with a status: line "
+            + "(completed|failed|blocked|needs_leader). Do not stop on a progress note.");
         return sb.ToString();
     }
 

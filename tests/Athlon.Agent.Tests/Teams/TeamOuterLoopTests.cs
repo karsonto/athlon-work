@@ -79,6 +79,54 @@ public sealed class TeamOuterLoopTests : IDisposable
     }
 
     [Fact]
+    public async Task OuterLoop_ReportsProgress_ForLeaderAndWorkers()
+    {
+        await SeedTeamAsync(maxParallel: 2);
+        var executor = new ScriptedMemberExecutor();
+        executor.OnLeader = (task, turn) =>
+        {
+            if (turn == 1)
+            {
+                task.SubTasks.Add(MakeQueued("sub_a", "worker"));
+                return TeamMemberRunOutcome.Success("## Result\nstatus: completed\ndispatched", AgentSession.Create("ldr"));
+            }
+
+            task.FinalResult = "all done";
+            task.Status = TeamTaskStatus.Succeeded;
+            task.CompletedAt = DateTimeOffset.UtcNow;
+            return TeamMemberRunOutcome.Success("## Result\nstatus: completed\nsubmitted", AgentSession.Create("ldr"));
+        };
+        executor.OnWorker = (_, _) =>
+            Task.FromResult(TeamMemberRunOutcome.Success(
+                "## Result\nstatus: completed\naccomplished:\n- work",
+                AgentSession.Create("mbr")));
+
+        var reports = new List<TeamRunProgress>();
+        var progress = new Progress<TeamRunProgress>(reports.Add);
+        var orch = CreateOrchestrator(executor);
+        var began = await orch.BeginAsync(new TeamTaskStartRequest
+        {
+            TeamId = "t1",
+            RootSessionId = "sess-progress",
+            Goal = "ship it"
+        });
+        Assert.True(began.Ok);
+
+        var completed = await orch.RunToCompletionAsync(
+            began.Task.RootSessionId,
+            began.Task.TaskId,
+            progress: progress);
+        Assert.Equal(TeamTaskStatus.Succeeded, completed.Status);
+
+        Assert.Contains(reports, r => r.Kind == TeamRunProgressKind.LeaderTurnCompleted);
+        Assert.Contains(reports, r =>
+            r.Kind == TeamRunProgressKind.WorkerCompleted
+            && r.ResponseText.Contains("status: completed", StringComparison.Ordinal));
+        Assert.Contains(reports, r => r.Kind == TeamRunProgressKind.LeaderTurnCompleted
+            && r.ResponseText.Contains("all done", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task OuterLoop_RespectsMaxParallelWorkers()
     {
         await SeedTeamAsync(maxParallel: 1);

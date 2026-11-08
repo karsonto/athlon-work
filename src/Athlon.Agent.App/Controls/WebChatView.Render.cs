@@ -290,7 +290,8 @@ public partial class WebChatView
                         showToolCalls,
                         includeReset: true,
                         activitySourceMessages: activitySource,
-                        planRun: planRun))
+                        planRun: planRun,
+                        rootSessionId: sessionId))
                 .ConfigureAwait(true);
         }
 
