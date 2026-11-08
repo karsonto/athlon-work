@@ -84,7 +84,10 @@ public sealed partial class TeamMemberItemViewModel : ObservableObject
     {
         Caps.Clear();
         var allow = TeamToolDefaults.ResolveAllowList(Profile, isLeader);
-        var hasTeam = allow.Any(t => t.StartsWith("team_", StringComparison.OrdinalIgnoreCase) || t.StartsWith("team*", StringComparison.OrdinalIgnoreCase));
+        var hasLeaderTeam = allow.Any(t =>
+            t.StartsWith("team_create", StringComparison.OrdinalIgnoreCase)
+            || t.StartsWith("team_dispatch", StringComparison.OrdinalIgnoreCase)
+            || t.Equals("team_*", StringComparison.OrdinalIgnoreCase));
         var hasFile = allow.Any(t => t.StartsWith("file_", StringComparison.OrdinalIgnoreCase) || t.StartsWith("file*", StringComparison.OrdinalIgnoreCase));
         var hasSearch = allow.Any(t =>
             t.Contains("grep", StringComparison.OrdinalIgnoreCase) ||
@@ -93,11 +96,18 @@ public sealed partial class TeamMemberItemViewModel : ObservableObject
 
         if (isLeader)
         {
-            Caps.Add(new CapChipViewModel("team_*", hasTeam || Profile.ToolAllowList.Count == 0));
+            Caps.Add(new CapChipViewModel("team_*", hasLeaderTeam));
         }
 
-        Caps.Add(new CapChipViewModel(hasFile ? "file_*" : "file_read", hasFile || Profile.ToolAllowList.Count == 0));
-        if (hasSearch || Profile.ToolAllowList.Count == 0)
+        // Shared team tools are mandatory for every member.
+        Caps.Add(new CapChipViewModel("progress/memory", true));
+
+        if (hasFile)
+        {
+            Caps.Add(new CapChipViewModel("file_*", true));
+        }
+
+        if (hasSearch)
         {
             Caps.Add(new CapChipViewModel("grep/glob", true));
         }
@@ -145,7 +155,7 @@ public sealed partial class CapabilityOptionViewModel : ObservableObject
 
     public string Label { get; }
 
-    public bool IsEnabled { get; }
+    [ObservableProperty] private bool _isEnabled;
 
     [ObservableProperty] private bool _isChecked;
 }

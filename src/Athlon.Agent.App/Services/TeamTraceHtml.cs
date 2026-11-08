@@ -34,6 +34,7 @@ public static class TeamTraceHtml
                 kv => kv.Key,
                 kv => new { x = kv.Value.X, y = kv.Value.Y },
                 StringComparer.OrdinalIgnoreCase),
+#pragma warning disable CS0618 // MaxIterations retained for Trace UI compat with older task.json
             subtasks = task.SubTasks.Select(s => new
             {
                 id = s.Id,
@@ -52,6 +53,7 @@ public static class TeamTraceHtml
                 startedAt = s.StartedAt,
                 completedAt = s.CompletedAt
             }),
+#pragma warning restore CS0618
             events = events.Select(e => new
             {
                 id = e.Id,
@@ -311,8 +313,8 @@ svg.wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
             <dt>context</dt><dd>每轮新 Turn；注入 prev_result_summary</dd>
           </dl>
           <details class="block" open><summary>循环安全约束</summary><pre>1. 同一 Worker 并发实例 ≤ 1
-2. 达到 MaxIterations 后禁止再 dispatch
-3. 每轮 handoff 必须带 iteration + reason
+2. 达到全局 MaxRepairRounds 后禁止再 redispatch（需 ask_user / partial submit）
+3. 每轮 handoff 必须带 attempt + reason
 4. Trace 必须画出 loop 边</pre></details>
           <details class="block" open><summary>Prev result summary</summary><pre id="dPrev"></pre></details>
         </div>
@@ -549,6 +551,7 @@ function renderTools(id){
     } else if(kind==='user'){
       details.innerHTML=`<summary><span>Handoff / User</span><span class="pill waiting">user</span></summary><pre>${esc(item.text||'')}</pre>`;
     } else if(kind==='tool_call' || kind==='tool'){
+      // Prefer a single status per invocation (builder merges call+result into kind=tool).
       const st=pillForToolStatus(item.status||(kind==='tool_call'?'running':'succeeded'));
       const name=item.toolName||'tool';
       const parts=[];
@@ -576,11 +579,16 @@ function renderTimeline(id){
     if(kind==='assistant'){
       const preview=(item.text||item.reasoning||'').slice(0,160);
       steps.push({at:item.at, cls:'run', what:'model.response', detail:preview});
-    } else if(kind==='tool_call'){
-      steps.push({at:item.at, cls:'run', what:`tool.call · ${item.toolName||''}`, detail:(item.arguments||'').slice(0,160)});
-    } else if(kind==='tool'){
-      const failed=/fail/i.test(item.status||'');
-      steps.push({at:item.at, cls:failed?'run':'ok', what:`tool.result · ${item.toolName||''}`, detail:(item.summary||item.detail||'').slice(0,160)});
+    } else if(kind==='tool_call' || kind==='tool'){
+      const st=String(item.status||'').toLowerCase();
+      const failed=st.includes('fail');
+      const running=st.includes('run');
+      steps.push({
+        at:item.at,
+        cls:failed?'run':(running?'run':'ok'),
+        what:`tool · ${item.toolName||''} · ${st||'ok'}`,
+        detail:(item.summary||item.detail||item.arguments||'').slice(0,160)
+      });
     } else if(kind==='user'){
       steps.push({at:item.at, cls:'ok', what:'handoff', detail:(item.text||'').slice(0,160)});
     }

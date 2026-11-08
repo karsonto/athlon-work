@@ -250,9 +250,43 @@ internal static class TeamTraceTranscriptBuilder
         }
     }
 
+    /// <summary>Test seam: merge call+result into one Tools row per toolCallId.</summary>
+    internal static IReadOnlyList<object> FlattenForTests(IReadOnlyList<ChatMessage> messages) =>
+        Flatten(messages);
+
     private static IReadOnlyList<object> Flatten(IReadOnlyList<ChatMessage> messages)
     {
-        var items = new List<object>(messages.Count * 2);
+        // Index Tool role results by call id so each invocation renders as one row
+        // (call + result merged) instead of a permanent "running" twin.
+        var resultsByCallId = new Dictionary<string, ParsedToolResult>(StringComparer.OrdinalIgnoreCase);
+        var assistantCallIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var message in messages)
+        {
+            if (message.Role == MessageRole.Assistant)
+            {
+                var pending = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
+                if (pending is { Count: > 0 })
+                {
+                    foreach (var call in pending)
+                    {
+                        if (!string.IsNullOrWhiteSpace(call.Id))
+                        {
+                            assistantCallIds.Add(call.Id);
+                        }
+                    }
+                }
+            }
+            else if (message.Role == MessageRole.Tool)
+            {
+                var parsed = ParseToolResult(message);
+                if (!string.IsNullOrWhiteSpace(parsed.ToolCallId))
+                {
+                    resultsByCallId[parsed.ToolCallId] = parsed;
+                }
+            }
+        }
+
+        var items = new List<object>(messages.Count);
         foreach (var message in messages)
         {
             switch (message.Role)
@@ -288,49 +322,64 @@ internal static class TeamTraceTranscriptBuilder
                     {
                         foreach (var call in calls)
                         {
-                            items.Add(new
+                            var callArgs = Truncate(
+                                ToolMessageDisplayParser.FormatArgumentsFull(call.Arguments, call.Name),
+                                MaxToolDetailChars);
+                            if (!string.IsNullOrWhiteSpace(call.Id)
+                                && resultsByCallId.TryGetValue(call.Id, out var result))
                             {
-                                kind = "tool_call",
-                                at = message.CreatedAt,
-                                toolCallId = call.Id,
-                                toolName = call.Name,
-                                status = "running",
-                                arguments = Truncate(
-                                    ToolMessageDisplayParser.FormatArgumentsFull(call.Arguments, call.Name),
-                                    MaxToolDetailChars)
-                            });
+                                items.Add(new
+                                {
+                                    kind = "tool",
+                                    at = result.At,
+                                    toolCallId = call.Id,
+                                    toolName = string.IsNullOrWhiteSpace(result.ToolName)
+                                        ? call.Name
+                                        : result.ToolName,
+                                    status = result.Status,
+                                    arguments = string.IsNullOrWhiteSpace(result.Arguments)
+                                        ? callArgs
+                                        : result.Arguments,
+                                    summary = result.Summary,
+                                    detail = result.Detail
+                                });
+                            }
+                            else
+                            {
+                                items.Add(new
+                                {
+                                    kind = "tool",
+                                    at = message.CreatedAt,
+                                    toolCallId = call.Id,
+                                    toolName = call.Name,
+                                    status = "running",
+                                    arguments = callArgs
+                                });
+                            }
                         }
                     }
 
                     break;
 
                 case MessageRole.Tool:
-                    ToolMessageDisplayParser.ParseToolContent(
-                        message.Content,
-                        out var toolCallId,
-                        out var toolName,
-                        out _,
-                        out var summary,
-                        out var detail,
-                        out var argumentsText,
-                        out var status);
+                    var orphan = ParseToolResult(message);
+                    // Already merged into the assistant tool_call row.
+                    if (!string.IsNullOrWhiteSpace(orphan.ToolCallId)
+                        && assistantCallIds.Contains(orphan.ToolCallId))
+                    {
+                        break;
+                    }
+
                     items.Add(new
                     {
                         kind = "tool",
-                        at = message.CreatedAt,
-                        toolCallId,
-                        toolName = string.IsNullOrWhiteSpace(toolName) ? "tool" : toolName,
-                        status = status switch
-                        {
-                            ToolCallDisplayStatus.Failed => "failed",
-                            ToolCallDisplayStatus.Running => "running",
-                            _ => "succeeded"
-                        },
-                        arguments = Truncate(argumentsText, MaxToolDetailChars),
-                        summary = Truncate(summary, MaxTextChars),
-                        detail = Truncate(
-                            string.IsNullOrWhiteSpace(detail) ? message.Content : detail,
-                            MaxToolDetailChars)
+                        at = orphan.At,
+                        toolCallId = orphan.ToolCallId,
+                        toolName = string.IsNullOrWhiteSpace(orphan.ToolName) ? "tool" : orphan.ToolName,
+                        status = orphan.Status,
+                        arguments = orphan.Arguments,
+                        summary = orphan.Summary,
+                        detail = orphan.Detail
                     });
                     break;
 
@@ -344,6 +393,41 @@ internal static class TeamTraceTranscriptBuilder
 
         return items;
     }
+
+    private static ParsedToolResult ParseToolResult(ChatMessage message)
+    {
+        ToolMessageDisplayParser.ParseToolContent(
+            message.Content,
+            out var toolCallId,
+            out var toolName,
+            out _,
+            out var summary,
+            out var detail,
+            out var argumentsText,
+            out var status);
+        return new ParsedToolResult(
+            message.CreatedAt,
+            toolCallId,
+            string.IsNullOrWhiteSpace(toolName) ? "tool" : toolName,
+            status switch
+            {
+                ToolCallDisplayStatus.Failed => "failed",
+                ToolCallDisplayStatus.Running => "running",
+                _ => "succeeded"
+            },
+            Truncate(argumentsText, MaxToolDetailChars),
+            Truncate(summary, MaxTextChars),
+            Truncate(string.IsNullOrWhiteSpace(detail) ? message.Content : detail, MaxToolDetailChars));
+    }
+
+    private sealed record ParsedToolResult(
+        DateTimeOffset At,
+        string? ToolCallId,
+        string ToolName,
+        string Status,
+        string? Arguments,
+        string? Summary,
+        string? Detail);
 
     private static string? Truncate(string? value, int maxChars)
     {

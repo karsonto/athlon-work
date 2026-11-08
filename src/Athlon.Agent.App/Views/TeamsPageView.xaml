@@ -386,48 +386,28 @@
                                         <TextBlock Text="一句话职责（卡片副标题）" Style="{StaticResource TeamsFieldLabelStyle}" />
                                         <TextBox Text="{Binding EditingMemberDescription, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12" />
 
-                                        <Grid Margin="0,0,0,8">
-                                            <Grid.Style>
-                                                <Style TargetType="Grid">
-                                                    <Setter Property="Opacity" Value="1" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsLoopPolicyEnabled}" Value="False">
-                                                            <Setter Property="Opacity" Value="0.45" />
-                                                            <Setter Property="IsEnabled" Value="False" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Grid.Style>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Margin="0,0,8,0">
-                                                <TextBlock Text="允许被循环重派" Style="{StaticResource TeamsFieldLabelStyle}" />
-                                                <CheckBox Content="是 · Leader 可多次 dispatch"
-                                                          IsChecked="{Binding EditingAllowRedispatch}"
-                                                          VerticalAlignment="Center"
-                                                          Style="{StaticResource TeamsCheckBoxStyle}" />
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                                <TextBlock Text="MaxIterations（防死循环）" Style="{StaticResource TeamsFieldLabelStyle}" />
-                                                <TextBox Text="{Binding EditingMaxIterations, UpdateSourceTrigger=PropertyChanged}" />
-                                            </StackPanel>
-                                        </Grid>
-
-                                        <Border Style="{StaticResource TeamsHintStyle}" Margin="0,0,0,12">
+                                        <Border Style="{StaticResource TeamsHintStyle}" Margin="0,0,0,12"
+                                                Visibility="{Binding IsWorkerCapabilitiesEditable, Converter={StaticResource BoolToVis}}">
                                             <TextBlock TextWrapping="Wrap" FontSize="12"
                                                        Foreground="{DynamicResource Brush.SubtleText}"
-                                                       Text="循环由 Leader 发起（非 Worker 自循环）。达到上限后必须汇总或 ask_user。Trace 用橙色 loop 边展示。" />
+                                                       Text="Worker 配置职责与执行能力即可；team_progress / team_memory 固定附带；勾选 Skills / 知识库时分别自动附带 load_skill_through_path / knowledge_search，均无需在工具列表勾选。知识库只列出真实知识空间。不设重派次数：检查不通过时由 Leader 再 dispatch / redispatch 或新建子任务。" />
                                         </Border>
 
-                                        <!-- Tabs -->
+                                        <Border Style="{StaticResource TeamsHintStyle}" Margin="0,0,0,12"
+                                                Visibility="{Binding IsLeaderCapabilitiesLocked, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock TextWrapping="Wrap" FontSize="12"
+                                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                                       Text="Leader 使用固定 team 编排工具（list / create / dispatch / collect / submit / ask_user + progress / memory），不可配置 Skills、MCP、知识库或其它执行工具。" />
+                                        </Border>
+
+                                        <!-- Tabs (Workers only) -->
                                         <Border Background="{DynamicResource Brush.ChatBackground}"
                                                 BorderBrush="{DynamicResource Brush.Border}"
                                                 BorderThickness="1"
                                                 CornerRadius="8"
                                                 Padding="4"
-                                                Margin="0,0,0,12">
+                                                Margin="0,0,0,12"
+                                                Visibility="{Binding IsWorkerCapabilitiesEditable, Converter={StaticResource BoolToVis}}">
                                             <UniformGrid Columns="4">
                                                 <RadioButton Content="工具" GroupName="TeamsCaps"
                                                              IsChecked="{Binding IsToolsTab, Mode=OneWay}"
@@ -452,7 +432,7 @@
                                             </UniformGrid>
                                         </Border>
 
-                                        <ItemsControl Visibility="{Binding IsToolsTab, Converter={StaticResource BoolToVis}}"
+                                        <ItemsControl Visibility="{Binding ShowWorkerToolsTab, Converter={StaticResource BoolToVis}}"
                                                       ItemsSource="{Binding ToolOptions}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
@@ -480,7 +460,7 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
 
-                                        <ItemsControl Visibility="{Binding IsSkillsTab, Converter={StaticResource BoolToVis}}"
+                                        <ItemsControl Visibility="{Binding ShowWorkerSkillsTab, Converter={StaticResource BoolToVis}}"
                                                       ItemsSource="{Binding SkillOptions}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
@@ -498,7 +478,7 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
 
-                                        <ItemsControl Visibility="{Binding IsMcpTab, Converter={StaticResource BoolToVis}}"
+                                        <ItemsControl Visibility="{Binding ShowWorkerMcpTab, Converter={StaticResource BoolToVis}}"
                                                       ItemsSource="{Binding McpOptions}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
@@ -516,7 +496,7 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
 
-                                        <ItemsControl Visibility="{Binding IsKnowledgeTab, Converter={StaticResource BoolToVis}}"
+                                        <ItemsControl Visibility="{Binding ShowWorkerKnowledgeTab, Converter={StaticResource BoolToVis}}"
                                                       ItemsSource="{Binding KnowledgeOptions}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>

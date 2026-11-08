@@ -29,7 +29,7 @@ public sealed class TeamListMembersTool(
 {
     public ToolDefinition Definition => new(
         "team_list_members",
-        "List Team members with roles, AllowRedispatch, MaxIterations, and capability summaries.",
+        "List Team members with roles and capability summaries (skills / MCP / knowledge).",
         ToolSchema.Object().Build(),
         Group: ToolGroup.Builtin);
 
@@ -73,7 +73,7 @@ public sealed class TeamListMembersTool(
         }
 
         sb.AppendLine(
-            $"- [{role}] {profile.Name} id={profile.Id} redispatch={profile.AllowRedispatch} max_iter={profile.MaxIterations} " +
+            $"- [{role}] {profile.Name} id={profile.Id} " +
             $"skills={profile.SkillNames.Count} mcp={profile.McpServerNames.Count} kb={profile.KnowledgeModuleIds.Count}");
         if (!string.IsNullOrWhiteSpace(profile.Description))
         {
@@ -145,10 +145,22 @@ public sealed class TeamCreateSubtaskTool(
             ? new List<string>()
             : dependsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
-        var maxIter = profile.AllowRedispatch
-            ? Math.Clamp(profile.MaxIterations <= 0 ? settings.Teams.DefaultMaxIterations : profile.MaxIterations, 1, settings.Teams.AbsoluteMaxIterations)
-            : 1;
+        if (depends.Count > 0)
+        {
+            var known = new HashSet<string>(
+                task.SubTasks.Select(s => s.Id),
+                StringComparer.OrdinalIgnoreCase);
+            var missing = depends.Where(d => !known.Contains(d)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (missing.Count > 0)
+            {
+                return ToolResult.Failure(
+                    "Invalid depends_on",
+                    $"Unknown dependency id(s): {string.Join(", ", missing)}. "
+                    + "depends_on must reference existing subtask ids on this task.");
+            }
+        }
 
+#pragma warning disable CS0618 // MaxIterations retained for older task.json / Trace display compat
         var sub = new TeamSubTask
         {
             Id = "sub_" + IdGen.NewId()[..8],
@@ -158,8 +170,9 @@ public sealed class TeamCreateSubtaskTool(
             Handoff = handoff?.Trim() ?? "",
             Status = depends.Count == 0 ? TeamSubTaskStatus.Ready : TeamSubTaskStatus.Pending,
             Iteration = 1,
-            MaxIterations = maxIter
+            MaxIterations = Math.Max(1, settings.Teams.MaxRepairRounds)
         };
+#pragma warning restore CS0618
 
         task.SubTasks.Add(sub);
         TeamTaskExecutionScope.Current?.ReplaceTask(task);
@@ -179,7 +192,7 @@ public sealed class TeamCreateSubtaskTool(
 
         return ToolResult.Success(
             "subtask created",
-            JsonSerializer.Serialize(new { sub.Id, sub.Title, sub.AssigneeProfileId, sub.Status, sub.MaxIterations }));
+            JsonSerializer.Serialize(new { sub.Id, sub.Title, sub.AssigneeProfileId, sub.Status, attempt = sub.Iteration }));
     }
 }
 
@@ -265,11 +278,11 @@ public sealed class TeamRedispatchTool(
 {
     public ToolDefinition Definition => new(
         "team_redispatch",
-        "Queue another iteration of a completed Worker (loop). Honors AllowRedispatch and MaxIterations. Returns immediately.",
+        "Queue another attempt of a finished Worker (Failed or repair of Succeeded). Gated only by global MaxRepairRounds. Returns immediately.",
         ToolSchema.Object()
             .String("subtask_id", "Subtask id", required: true, minLength: 1)
-            .String("reason", "Why another iteration is needed", required: true, minLength: 1)
-            .String("handoff", "Optional updated handoff text")
+            .String("reason", "Why another attempt is needed", required: true, minLength: 1)
+            .String("handoff", "Updated handoff with verification findings / repair instructions", required: true, minLength: 1)
             .Build(),
         Group: ToolGroup.Builtin);
 
@@ -310,28 +323,44 @@ public sealed class TeamRedispatchTool(
             return ToolResult.Failure("Unknown profile", "Assignee profile missing.");
         }
 
-        if (!profile.AllowRedispatch)
-        {
-            return ToolResult.Failure("Redispatch denied", $"Profile '{profile.Name}' has AllowRedispatch=false.");
-        }
-
-        if (sub.Iteration >= sub.MaxIterations)
+        // Blind redispatch of a clean Succeeded worker is discouraged; allow Failed / explicit repair.
+        if (sub.Status == TeamSubTaskStatus.Succeeded
+            && !reason.Contains("verif", StringComparison.OrdinalIgnoreCase)
+            && !reason.Contains("fail", StringComparison.OrdinalIgnoreCase)
+            && !reason.Contains("repair", StringComparison.OrdinalIgnoreCase)
+            && !reason.Contains("fix", StringComparison.OrdinalIgnoreCase))
         {
             return ToolResult.Failure(
-                "Max iterations",
-                $"Subtask reached MaxIterations={sub.MaxIterations}. Summarize or ask the user.");
+                "Redispatch denied",
+                "Succeeded subtasks may only be redispatched for verification failure / repair. "
+                + "Include verify/fail/repair/fix in reason, or create a new fix subtask.");
+        }
+
+        if (string.IsNullOrWhiteSpace(handoff))
+        {
+            return ToolResult.Failure(
+                "Invalid args",
+                "handoff is required on redispatch so the worker receives verification findings / repair instructions.");
+        }
+
+        var maxRepair = Math.Max(1, settings.Teams.MaxRepairRounds);
+        if (task.RepairRoundsUsed >= maxRepair)
+        {
+            return ToolResult.Failure(
+                "Max repair rounds",
+                $"Team reached MaxRepairRounds={maxRepair}. Collect findings, ask the user, or submit a partial/failed result.");
         }
 
         sub.Iteration += 1;
-        if (!string.IsNullOrWhiteSpace(handoff))
-        {
-            sub.Handoff = handoff.Trim();
-        }
-
+        sub.Handoff = handoff.Trim();
         sub.Status = TeamSubTaskStatus.Queued;
         sub.RedispatchReason = reason.Trim();
-        sub.MemberSessionId ??= "mbr_" + IdGen.NewId()[..10];
+        // Fresh member session avoids context bloat across repair attempts.
+        sub.MemberSessionId = "mbr_" + IdGen.NewId()[..10];
         sub.CompletedAt = null;
+        sub.Result = null;
+        sub.Error = null;
+        task.RepairRoundsUsed += 1;
 
         await traceStore.AppendAsync(
             task.RootSessionId,
@@ -344,7 +373,7 @@ public sealed class TeamRedispatchTool(
                 ProfileId = profile.Id,
                 SubTaskId = sub.Id,
                 Iteration = sub.Iteration,
-                Message = $"loop iter {sub.Iteration}/{sub.MaxIterations}: {reason}"
+                Message = $"loop attempt {sub.Iteration} (repair {task.RepairRoundsUsed}/{maxRepair}): {reason}"
             },
             cancellationToken).ConfigureAwait(false);
 
@@ -353,62 +382,31 @@ public sealed class TeamRedispatchTool(
         await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
 
         return ToolResult.Success(
-            $"redispatch queued iter {sub.Iteration}",
-            $"Subtask {sub.Id} queued for iteration {sub.Iteration}/{sub.MaxIterations}.");
+            $"redispatch queued attempt {sub.Iteration}",
+            $"Subtask {sub.Id} queued for attempt {sub.Iteration} (repair {task.RepairRoundsUsed}/{maxRepair}).");
     }
 }
 
-public sealed class TeamAwaitTool(AppSettings settings) : IAgentTool, ITeamLeaderTool, IExcludedFromChildAgentToolkit
+/// <summary>
+/// Deprecated alias of <see cref="TeamProgressTool"/>. Prefer team_progress.
+/// Kept for older prompts; not leader-gated so it cannot be used as an in-turn poll loop substitute.
+/// </summary>
+public sealed class TeamAwaitTool(
+    AppSettings settings,
+    ITeamTaskStore taskStore) : IAgentTool
 {
+    private readonly TeamProgressTool _inner = new(settings, taskStore);
+
     public ToolDefinition Definition => new(
         "team_await",
-        "Report live status of subtasks (Queued / Running / Ready / Succeeded / Failed).",
+        "Deprecated alias of team_progress. Do not poll after team_dispatch — end your turn. Prefer team_progress.",
         ToolSchema.Object()
             .String("subtask_ids", "Comma-separated ids; empty = all")
             .Build(),
         Group: ToolGroup.Builtin);
 
-    public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
-    {
-        if (!settings.Teams.Enabled)
-        {
-            return Task.FromResult(ToolResult.Failure("Teams disabled", "Teams feature is disabled."));
-        }
-
-        if (!TeamToolHelpers.TryGetTask(out var task, out var gateError))
-        {
-            return Task.FromResult(gateError!);
-        }
-
-        invocation.Arguments.TryGetString("subtask_ids", out var idsRaw);
-        var filter = string.IsNullOrWhiteSpace(idsRaw)
-            ? null
-            : idsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var sb = new StringBuilder();
-        var queued = 0;
-        var running = 0;
-        var ready = 0;
-        var succeeded = 0;
-        var failed = 0;
-        foreach (var sub in task.SubTasks.Where(s => filter is null || filter.Contains(s.Id)))
-        {
-            sb.AppendLine($"{sub.Id} [{sub.Status}] iter={sub.Iteration}/{sub.MaxIterations} {sub.Title}");
-            switch (sub.Status)
-            {
-                case TeamSubTaskStatus.Queued: queued++; break;
-                case TeamSubTaskStatus.Running: running++; break;
-                case TeamSubTaskStatus.Ready: ready++; break;
-                case TeamSubTaskStatus.Succeeded: succeeded++; break;
-                case TeamSubTaskStatus.Failed: failed++; break;
-            }
-        }
-
-        sb.AppendLine(
-            $"summary: queued={queued} running={running} ready={ready} succeeded={succeeded} failed={failed}");
-        return Task.FromResult(ToolResult.Success("await status", sb.Length == 0 ? "(no subtasks)" : sb.ToString()));
-    }
+    public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
+        _inner.InvokeAsync(invocation, cancellationToken);
 }
 
 public sealed class TeamCollectTool(AppSettings settings) : IAgentTool, ITeamLeaderTool, IExcludedFromChildAgentToolkit
@@ -447,13 +445,15 @@ public sealed class TeamCollectTool(AppSettings settings) : IAgentTool, ITeamLea
                 continue;
             }
 
-            if (filter is null && sub.Status != TeamSubTaskStatus.Succeeded)
+            if (filter is null
+                && sub.Status is not (TeamSubTaskStatus.Succeeded or TeamSubTaskStatus.Failed))
             {
                 continue;
             }
 
-            sb.AppendLine($"### {sub.Id} {sub.Title} (iter {sub.Iteration})");
-            sb.AppendLine(TeamWorkerHelpers.Truncate(sub.Result ?? sub.Error ?? "(empty)", 1200));
+            sb.AppendLine($"### {sub.Id} [{sub.Status}] {sub.Title} (iter {sub.Iteration})");
+            // Keep enough room for verification findings; Trace uses shorter truncation separately.
+            sb.AppendLine(TeamWorkerHelpers.Truncate(sub.Result ?? sub.Error ?? "(empty)", 8000));
             sb.AppendLine();
         }
 
@@ -490,6 +490,33 @@ public sealed class TeamSubmitResultTool(
         if (string.IsNullOrWhiteSpace(result))
         {
             return ToolResult.Failure("Invalid args", "result is required.");
+        }
+
+        var active = task.SubTasks.Where(s =>
+            s.Status is TeamSubTaskStatus.Pending
+                or TeamSubTaskStatus.Ready
+                or TeamSubTaskStatus.Queued
+                or TeamSubTaskStatus.Running
+                or TeamSubTaskStatus.WaitingRedispatch).ToList();
+        if (active.Count > 0)
+        {
+            return ToolResult.Failure(
+                "Work remaining",
+                "Cannot submit while subtasks are still Pending/Ready/Queued/Running: "
+                + string.Join(", ", active.Select(s => s.Id)));
+        }
+
+        var failed = task.SubTasks.Where(s => s.Status == TeamSubTaskStatus.Failed).ToList();
+        if (failed.Count > 0
+            && !result.Contains("partial", StringComparison.OrdinalIgnoreCase)
+            && !result.Contains("failed", StringComparison.OrdinalIgnoreCase)
+            && !result.Contains("未通过", StringComparison.Ordinal)
+            && !result.Contains("失败", StringComparison.Ordinal))
+        {
+            return ToolResult.Failure(
+                "Unresolved failures",
+                "One or more subtasks Failed. Redispatch/fix them, ask the user, or submit a FinalResult that explicitly declares partial/failed status. Failed: "
+                + string.Join(", ", failed.Select(s => s.Id)));
         }
 
         task.FinalResult = result.Trim();

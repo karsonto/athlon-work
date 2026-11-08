@@ -15,16 +15,22 @@ namespace Athlon.Agent.App.ViewModels;
 
 public sealed partial class TeamsPageViewModel : ObservableObject
 {
+    /// <summary>
+    /// Worker-selectable execution tools only.
+    /// team_progress / team_memory always attached;
+    /// load_skill_through_path / knowledge_search auto-attached when Skills / Knowledge selected.
+    /// Leader orchestration tools are never selectable for Workers.
+    /// </summary>
     private static readonly string[] CatalogTools =
     [
         "file_list",
         "file_read",
         "file_write",
+        "file_edit",
+        "apply_patch",
         "grep_files",
         "glob_files",
-        "execute_command",
-        "team_*",
-        "sessions_*"
+        "execute_command"
     ];
 
     private readonly AppSettings _settings;
@@ -98,7 +104,10 @@ public sealed partial class TeamsPageViewModel : ObservableObject
 
     public bool CanDeleteSelectedWorker => SelectedMember is { IsLeader: false };
 
-    public bool IsLoopPolicyEnabled => SelectedMember is { IsLeader: false };
+    /// <summary>Workers may pick tools/skills/MCP/knowledge; Leaders use fixed team orchestration tools only.</summary>
+    public bool IsWorkerCapabilitiesEditable => SelectedMember is { IsLeader: false };
+
+    public bool IsLeaderCapabilitiesLocked => SelectedMember is { IsLeader: true };
 
     public string EnabledBadgeText => TeamsEnabled ? "已启用" : "未启用";
 
@@ -106,6 +115,11 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     public bool IsSkillsTab => ActiveCapabilityTab == "skills";
     public bool IsMcpTab => ActiveCapabilityTab == "mcp";
     public bool IsKnowledgeTab => ActiveCapabilityTab == "kb";
+
+    public bool ShowWorkerToolsTab => IsWorkerCapabilitiesEditable && IsToolsTab;
+    public bool ShowWorkerSkillsTab => IsWorkerCapabilitiesEditable && IsSkillsTab;
+    public bool ShowWorkerMcpTab => IsWorkerCapabilitiesEditable && IsMcpTab;
+    public bool ShowWorkerKnowledgeTab => IsWorkerCapabilitiesEditable && IsKnowledgeTab;
 
     public string EditingTeamName
     {
@@ -208,42 +222,6 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         }
     }
 
-    public bool EditingAllowRedispatch
-    {
-        get => SelectedProfile?.AllowRedispatch ?? false;
-        set
-        {
-            if (SelectedProfile is null || SelectedProfile.AllowRedispatch == value)
-            {
-                return;
-            }
-
-            SelectedProfile.AllowRedispatch = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public int EditingMaxIterations
-    {
-        get => SelectedProfile?.MaxIterations ?? 1;
-        set
-        {
-            if (SelectedProfile is null)
-            {
-                return;
-            }
-
-            var clamped = Math.Clamp(value, 1, 10);
-            if (SelectedProfile.MaxIterations == clamped)
-            {
-                return;
-            }
-
-            SelectedProfile.MaxIterations = clamped;
-            OnPropertyChanged();
-        }
-    }
-
     partial void OnTeamsEnabledChanged(bool value)
     {
         _settings.Teams.Enabled = value;
@@ -265,13 +243,15 @@ public sealed partial class TeamsPageViewModel : ObservableObject
 
     partial void OnSelectedMemberChanged(TeamMemberItemViewModel? value)
     {
+        OnPropertyChanged(nameof(IsWorkerCapabilitiesEditable));
+        OnPropertyChanged(nameof(IsLeaderCapabilitiesLocked));
+        NotifyCapabilityTabVisibility();
         foreach (var member in Members)
         {
             member.IsSelected = ReferenceEquals(member, value);
         }
 
         OnPropertyChanged(nameof(SelectedProfile));
-        OnPropertyChanged(nameof(IsLoopPolicyEnabled));
         OnPropertyChanged(nameof(CanDeleteSelectedWorker));
         NotifyMemberEditingProperties();
         SyncCapabilityOptionsFromProfile();
@@ -290,17 +270,21 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         OnPropertyChanged(nameof(EditingMemberName));
         OnPropertyChanged(nameof(EditingMemberAgentMd));
         OnPropertyChanged(nameof(EditingMemberDescription));
-        OnPropertyChanged(nameof(EditingAllowRedispatch));
-        OnPropertyChanged(nameof(EditingMaxIterations));
     }
 
-    partial void OnActiveCapabilityTabChanged(string value)
+    private void NotifyCapabilityTabVisibility()
     {
         OnPropertyChanged(nameof(IsToolsTab));
         OnPropertyChanged(nameof(IsSkillsTab));
         OnPropertyChanged(nameof(IsMcpTab));
         OnPropertyChanged(nameof(IsKnowledgeTab));
+        OnPropertyChanged(nameof(ShowWorkerToolsTab));
+        OnPropertyChanged(nameof(ShowWorkerSkillsTab));
+        OnPropertyChanged(nameof(ShowWorkerMcpTab));
+        OnPropertyChanged(nameof(ShowWorkerKnowledgeTab));
     }
+
+    partial void OnActiveCapabilityTabChanged(string value) => NotifyCapabilityTabVisibility();
 
     /// <summary>
     /// First open loads from disk; later visits keep in-memory SPA edits (Chat Teams runs must
@@ -405,9 +389,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             Name = "New Leader",
             Description = "统筹拆解 · 分派 · 汇总验收",
             AgentMd = "你是 Team Leader。理解目标，拆分给 Workers，汇总可验收结果。优先使用 team_* 工具。",
-            AllowRedispatch = false,
-            MaxIterations = 1,
-            ToolAllowList = TeamToolDefaults.WorkerSafeTools.Concat(TeamToolDefaults.LeaderExtraTools).ToList()
+            ToolAllowList = TeamToolDefaults.DefaultLeaderAllowList.ToList()
         };
         await _profileStore.SaveAsync(leader).ConfigureAwait(true);
 
@@ -446,10 +428,8 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             Id = "profile-" + Guid.NewGuid().ToString("N")[..10],
             Name = "New Worker",
             Description = "执行分派任务",
-            AgentMd = "你只执行 Leader 分派的任务，输出结构化结果。",
-            AllowRedispatch = true,
-            MaxIterations = 2,
-            ToolAllowList = TeamToolDefaults.WorkerSafeTools.ToList()
+            AgentMd = "你只执行 Leader 分派的任务，输出结构化 ## Result。可用 team_progress / team_memory 查看共享进度与记忆。",
+            ToolAllowList = TeamToolDefaults.DefaultWorkerAllowList.ToList()
         };
         await _profileStore.SaveAsync(worker).ConfigureAwait(true);
 
@@ -601,70 +581,102 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     {
         var leader = new AgentProfile
         {
-            Id = "profile-leader-release",
-            Name = "Release Leader",
-            Description = "统筹拆解 · 分派 · 汇总验收",
-            AgentMd = "你是发版准备团队的 Leader。理解整体目标，拆分给 Engineering / QA / Docs Workers，汇总可验收的发布材料。不要自己做长篇撰写，优先分派。可对同一 Worker 循环重派（带 reason），达到 MaxIterations 必须收束。",
-            AllowRedispatch = false,
-            MaxIterations = 1,
-            ToolAllowList = TeamToolDefaults.WorkerSafeTools.Concat(TeamToolDefaults.LeaderExtraTools).ToList(),
-            SkillNames = ["release-notes", "risk-checklist"]
+            Id = "profile-leader-code-review",
+            Name = "Code Review Leader",
+            Description = "统筹代码审查 · 分派 · 汇总报告",
+            AgentMd =
+                "你是代码检查团队的 Leader。目标：对当前工作区项目做结构化审查并输出可执行报告。\n"
+                + "流程：team_list_members → 为 Code Map / Architecture / Quality / Frontend UI 创建子任务（可并行；若有先后依赖用真实 subtask id）→ team_dispatch → 结束回合。\n"
+                + "Workers 完成后：team_collect / team_memory，汇总为「概览 / 架构 / 质量 / UI / 优先修复清单」。\n"
+                + "某一维度明显不合格时：带着 findings 再 redispatch 或新建修复/复核子任务；通过后 team_submit_result。\n"
+                + "不要自己读代码实现细节，把执行交给 Workers。",
+            ToolAllowList = TeamToolDefaults.DefaultLeaderAllowList.ToList(),
+            SkillNames = []
         };
-        var eng = new AgentProfile
+
+        var codeMap = new AgentProfile
         {
-            Id = "profile-worker-eng",
-            Name = "Engineering Notes",
-            Description = "整理变更说明与风险点",
-            AgentMd = "你只负责从代码与 PR 中整理变更说明、兼容性风险。输出结构化要点，不要改写最终用户文案。",
-            AllowRedispatch = false,
-            MaxIterations = 1,
-            ToolAllowList = ["file_read", "grep_files", "glob_files", "knowledge_search"],
-            SkillNames = ["git-summary"],
+            Id = "profile-worker-code-map",
+            Name = "Code Map",
+            Description = "梳理项目结构、模块边界与入口",
+            AgentMd =
+                "你负责项目代码摸底，不改文件。用 file_list / glob / grep / file_read 找出：解决方案/包结构、主要入口、核心模块、配置与构建方式。\n"
+                + "输出 ## Result：status、accomplished（目录树要点、模块清单）、findings（盲区/文档缺失）。关键结论 put 到 team_memory（如 code_map）。可用 team_progress。",
+            ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(
+                ["file_list", "file_read", "grep_files", "glob_files"],
+                skillNames: null).ToList(),
+            SkillNames = [],
             KnowledgeModuleIds = []
         };
-        var qa = new AgentProfile
+
+        var architecture = new AgentProfile
         {
-            Id = "profile-worker-qa",
-            Name = "QA Summary",
-            Description = "汇总测试结论与阻断项",
-            AgentMd = "你只汇总测试结论、阻断项与回归范围。引用用例与结果，不要编写产品宣传文案。可被 Leader 循环重派以补测。",
-            AllowRedispatch = true,
-            MaxIterations = 3,
-            ToolAllowList = ["file_list", "file_read", "file_write", "execute_command", "grep_files", "glob_files"],
-            SkillNames = ["risk-checklist"]
+            Id = "profile-worker-architecture",
+            Name = "Architecture",
+            Description = "分析分层、依赖方向与扩展性",
+            AgentMd =
+                "你负责架构审查。可先 team_progress / team_memory 读取 code_map，再深入依赖与分层：App/Core/Infrastructure 边界、循环依赖、职责泄漏、耦合热点。\n"
+                + "不要改代码。输出 ## Result：架构现状、问题与建议（按严重度）。关键结论 put team_memory（如 architecture）。",
+            ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(
+                ["file_list", "file_read", "grep_files", "glob_files"],
+                skillNames: null).ToList(),
+            SkillNames = [],
+            KnowledgeModuleIds = []
         };
-        var docs = new AgentProfile
+
+        var quality = new AgentProfile
         {
-            Id = "profile-worker-docs",
-            Name = "Docs Writer",
-            Description = "撰写用户可见发布说明",
-            AgentMd = "你根据 Engineering/QA 产物撰写用户可见发布说明，语气清晰克制，不发明未确认事实。",
-            AllowRedispatch = true,
-            MaxIterations = 2,
-            ToolAllowList = ["file_list", "file_read", "file_write", "file_edit"],
-            SkillNames = ["release-notes", "git-summary"]
+            Id = "profile-worker-quality",
+            Name = "Code Quality",
+            Description = "检查可维护性、测试与风险代码",
+            AgentMd =
+                "你负责代码质量审查：命名与重复、错误处理、空 catch、魔法数、过大类/方法、测试覆盖缺口、明显安全问题（硬编码密钥等）。\n"
+                + "可用 execute_command 跑已有测试/lint（若仓库支持），失败不要伪装通过。不要改业务代码。\n"
+                + "输出 ## Result：status、findings（按 P0/P1/P2）、建议修复顺序；put team_memory（如 quality）。不合格时 status:failed / verdict:fail。",
+            ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(
+                ["file_list", "file_read", "grep_files", "glob_files", "execute_command"],
+                skillNames: null).ToList(),
+            SkillNames = [],
+            KnowledgeModuleIds = []
+        };
+
+        var frontendUi = new AgentProfile
+        {
+            Id = "profile-worker-frontend-ui",
+            Name = "Frontend UI",
+            Description = "审查前端界面结构、交互与一致性",
+            AgentMd =
+                "你负责前端/UI 审查：定位 Views/XAML/CSS/组件目录，检查布局层次、可访问性线索、文案与状态反馈、主题/样式一致性、明显可用性问题。\n"
+                + "不要改文件。输出 ## Result：UI 地图、问题清单与改进建议；put team_memory（如 frontend_ui）。若几乎无 UI 层，明确说明并 status:completed。",
+            ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(
+                ["file_list", "file_read", "grep_files", "glob_files"],
+                skillNames: null).ToList(),
+            SkillNames = [],
+            KnowledgeModuleIds = []
         };
 
         await _profileStore.SaveAsync(leader).ConfigureAwait(true);
-        await _profileStore.SaveAsync(eng).ConfigureAwait(true);
-        await _profileStore.SaveAsync(qa).ConfigureAwait(true);
-        await _profileStore.SaveAsync(docs).ConfigureAwait(true);
+        await _profileStore.SaveAsync(codeMap).ConfigureAwait(true);
+        await _profileStore.SaveAsync(architecture).ConfigureAwait(true);
+        await _profileStore.SaveAsync(quality).ConfigureAwait(true);
+        await _profileStore.SaveAsync(frontendUi).ConfigureAwait(true);
 
         var team = new TeamDefinition
         {
-            Id = "team-release-prep",
-            Name = "Release Prep Squad",
-            Description = "负责发版前的变更说明、测试结论整理与发布材料汇总。Leader 统筹；Workers 分领域执行。",
+            Id = "team-code-review",
+            Name = "Code Review Squad",
+            Description = "对工作区项目做代码摸底、架构、质量与前端 UI 审查；Leader 汇总可执行修复清单。",
             LeaderProfileId = leader.Id,
-            WorkerProfileIds = [eng.Id, qa.Id, docs.Id],
-            MaxParallelWorkers = 2
+            WorkerProfileIds = [codeMap.Id, architecture.Id, quality.Id, frontendUi.Id],
+            MaxParallelWorkers = 3
         };
         await _teamStore.SaveAsync(team).ConfigureAwait(true);
 
         _profilesById[leader.Id] = leader;
-        _profilesById[eng.Id] = eng;
-        _profilesById[qa.Id] = qa;
-        _profilesById[docs.Id] = docs;
+        _profilesById[codeMap.Id] = codeMap;
+        _profilesById[architecture.Id] = architecture;
+        _profilesById[quality.Id] = quality;
+        _profilesById[frontendUi.Id] = frontendUi;
 
         var existing = TeamItems.FirstOrDefault(t =>
             string.Equals(t.Team.Id, team.Id, StringComparison.OrdinalIgnoreCase));
@@ -681,7 +693,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             SelectedTeamItem = item;
         }
 
-        StatusMessage = "已创建示例 Team（Release Prep Squad）。";
+        StatusMessage = "已创建示例 Team（Code Review Squad）。";
     }
 
     /// <summary>
@@ -1071,8 +1083,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
 
         foreach (var tool in CatalogTools)
         {
-            var enabled = !string.Equals(tool, "sessions_*", StringComparison.Ordinal);
-            ToolOptions.Add(new CapabilityOptionViewModel(tool, tool == "team_*" ? "team_*（Leader）" : tool == "sessions_*" ? "sessions_*（禁用）" : tool, isChecked: false, isEnabled: enabled));
+            ToolOptions.Add(new CapabilityOptionViewModel(tool, tool, isChecked: false, isEnabled: true));
         }
 
         foreach (var skill in _skillCatalog.Skills.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase))
@@ -1107,6 +1118,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
 
         try
         {
+            // Only real knowledge spaces — no demo/fallback placeholders.
             foreach (var module in await _knowledgeStore.ListModulesAsync().ConfigureAwait(true))
             {
                 KnowledgeOptions.Add(new CapabilityOptionViewModel(module.Module.Id, module.Module.Name, false));
@@ -1115,15 +1127,6 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.Warning("Failed to list knowledge modules for Teams page: {Message}", ex.Message);
-        }
-
-        foreach (var fallback in new[] { "product-handbook", "eng-runbooks", "qa-playbooks", "release-archive" })
-        {
-            if (KnowledgeOptions.All(s => !string.Equals(s.Id, fallback, StringComparison.OrdinalIgnoreCase) &&
-                                          !string.Equals(s.Label, fallback, StringComparison.OrdinalIgnoreCase)))
-            {
-                KnowledgeOptions.Add(new CapabilityOptionViewModel(fallback, fallback, false));
-            }
         }
 
         WireCapabilityHandlers();
@@ -1136,44 +1139,45 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         {
             var profile = SelectedProfile;
             var isLeader = SelectedMember?.IsLeader == true;
+            if (isLeader && profile is not null)
+            {
+                ApplyFixedLeaderCapabilities(profile);
+            }
+
             var allow = profile is null
                 ? Array.Empty<string>()
-                : TeamToolDefaults.ResolveAllowList(profile, isLeader).ToArray();
+                : (isLeader
+                    ? TeamToolDefaults.DefaultLeaderAllowList.ToArray()
+                    : TeamToolDefaults.ResolveAllowList(profile, isLeader: false).ToArray());
 
             foreach (var option in ToolOptions)
             {
+                option.IsEnabled = !isLeader;
                 if (!option.IsEnabled)
                 {
                     option.IsChecked = false;
                     continue;
                 }
 
-                if (option.Id.EndsWith('*'))
-                {
-                    var prefix = option.Id[..^1];
-                    option.IsChecked = allow.Any(t =>
-                        t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(t, option.Id, StringComparison.OrdinalIgnoreCase));
-                }
-                else
-                {
-                    option.IsChecked = TeamToolDefaults.MatchesAllowList(option.Id, allow);
-                }
+                option.IsChecked = TeamToolDefaults.MatchesAllowList(option.Id, allow);
             }
 
             foreach (var option in SkillOptions)
             {
-                option.IsChecked = profile?.SkillNames.Contains(option.Id, StringComparer.OrdinalIgnoreCase) == true;
+                option.IsChecked = !isLeader
+                    && profile?.SkillNames.Contains(option.Id, StringComparer.OrdinalIgnoreCase) == true;
             }
 
             foreach (var option in McpOptions)
             {
-                option.IsChecked = profile?.McpServerNames.Contains(option.Id, StringComparer.OrdinalIgnoreCase) == true;
+                option.IsChecked = !isLeader
+                    && profile?.McpServerNames.Contains(option.Id, StringComparer.OrdinalIgnoreCase) == true;
             }
 
             foreach (var option in KnowledgeOptions)
             {
-                option.IsChecked = profile?.KnowledgeModuleIds.Contains(option.Id, StringComparer.OrdinalIgnoreCase) == true;
+                option.IsChecked = !isLeader
+                    && profile?.KnowledgeModuleIds.Contains(option.Id, StringComparer.OrdinalIgnoreCase) == true;
             }
         }
         finally
@@ -1189,14 +1193,71 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             return;
         }
 
-        SelectedProfile.ToolAllowList = ToolOptions
+        if (SelectedMember?.IsLeader == true)
+        {
+            ApplyFixedLeaderCapabilities(SelectedProfile);
+            SelectedMember.RefreshCaps(isLeader: true);
+            return;
+        }
+
+        var catalogIds = new HashSet<string>(
+            ToolOptions.Select(o => o.Id),
+            StringComparer.OrdinalIgnoreCase);
+        var impliedIds = new HashSet<string>(
+            TeamToolDefaults.SharedTeamTools
+                .Append(TeamToolDefaults.LoadSkillThroughPathTool)
+                .Append(TeamToolDefaults.KnowledgeSearchTool),
+            StringComparer.OrdinalIgnoreCase);
+        var checkedCatalog = ToolOptions
             .Where(o => o.IsEnabled && o.IsChecked)
             .Select(o => o.Id)
+            .ToList();
+        // Preserve tools that exist on the profile but are not shown in the catalog
+        // (avoids silently stripping extras after older catalog gaps).
+        // Never preserve Leader orchestration / implied tools; those are re-injected below.
+        var preserved = SelectedProfile.ToolAllowList
+            .Where(t =>
+                !string.IsNullOrWhiteSpace(t)
+                && !TeamToolDefaults.IsLeaderOrchestrationEntry(t)
+                && !impliedIds.Contains(t)
+                && !catalogIds.Contains(t)
+                && !MatchesAnyCatalogWildcard(t, catalogIds))
             .ToList();
         SelectedProfile.SkillNames = SkillOptions.Where(o => o.IsChecked).Select(o => o.Id).ToList();
         SelectedProfile.McpServerNames = McpOptions.Where(o => o.IsChecked).Select(o => o.Id).ToList();
         SelectedProfile.KnowledgeModuleIds = KnowledgeOptions.Where(o => o.IsChecked).Select(o => o.Id).ToList();
+        SelectedProfile.ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(
+            checkedCatalog.Concat(preserved),
+            SelectedProfile.SkillNames,
+            SelectedProfile.KnowledgeModuleIds).ToList();
         SelectedMember?.RefreshCaps(SelectedMember.IsLeader);
+    }
+
+    private static void ApplyFixedLeaderCapabilities(AgentProfile profile)
+    {
+        profile.ToolAllowList = TeamToolDefaults.DefaultLeaderAllowList.ToList();
+        profile.SkillNames = [];
+        profile.McpServerNames = [];
+        profile.KnowledgeModuleIds = [];
+    }
+
+    private static bool MatchesAnyCatalogWildcard(string toolName, HashSet<string> catalogIds)
+    {
+        foreach (var id in catalogIds)
+        {
+            if (!id.EndsWith('*'))
+            {
+                continue;
+            }
+
+            var prefix = id[..^1];
+            if (toolName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void WireCapabilityHandlers()

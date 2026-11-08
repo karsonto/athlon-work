@@ -27,6 +27,7 @@ public sealed class FileTeamStoresTests : IDisposable
         var profiles = new FileAgentProfileStore(_paths, _json);
         var teams = new FileTeamDefinitionStore(_paths, _json);
 
+#pragma warning disable CS0618 // Obsolete profile fields must still round-trip for older JSON
         var profile = new AgentProfile
         {
             Id = "p1",
@@ -39,6 +40,7 @@ public sealed class FileTeamStoresTests : IDisposable
         var loaded = await profiles.GetAsync("p1");
         Assert.NotNull(loaded);
         Assert.Equal(3, loaded!.MaxIterations);
+#pragma warning restore CS0618
 
         var team = new TeamDefinition
         {

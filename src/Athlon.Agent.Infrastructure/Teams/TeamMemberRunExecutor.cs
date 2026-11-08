@@ -50,7 +50,11 @@ public sealed class TeamMemberRunExecutor(
             return TeamMemberRunOutcome.Fail("Teams feature is disabled.");
         }
 
-        var allowList = TeamToolDefaults.ResolveAllowList(profile, isLeader);
+        // Leaders always use fixed orchestration tools — ignore any stale profile allow-list
+        // from older configs that may have included file/MCP/skills.
+        var allowList = isLeader
+            ? TeamToolDefaults.DefaultLeaderAllowList
+            : TeamToolDefaults.ResolveAllowList(profile, isLeader: false);
         var localTools = serviceProvider.GetServices<IAgentTool>();
         var router = new ProfileToolRouter(
             allowList,
@@ -208,8 +212,31 @@ public sealed class TeamMemberRunExecutor(
             await PersistMemberTranscriptAsync(memberDir, sessionPath, session, cancellationToken)
                 .ConfigureAwait(false);
 
-            var responseText = SubAgentResultFormatter.ExtractLastAssistantText(session)
-                ?? "(Team member finished without assistant text.)";
+            var responseText = SubAgentResultFormatter.ExtractLastAssistantText(session);
+            if (string.IsNullOrWhiteSpace(responseText))
+            {
+                return TeamMemberRunOutcome.Fail("Team member finished without assistant text.");
+            }
+
+            var parsed = TeamMemberResultParser.Parse(responseText);
+            if (parsed.Status == TeamMemberResultStatus.Invalid)
+            {
+                return TeamMemberRunOutcome.Fail(
+                    "Worker output rejected (empty, preamble-only, or invalid). Produce a full ## Result with status.");
+            }
+
+            if (!TeamMemberResultParser.IsSuccessful(parsed))
+            {
+                // Surface structured non-success so ApplyWorkerResultAsync can mark Failed
+                // while preserving the full response for Leader collect / memory.
+                return new TeamMemberRunOutcome
+                {
+                    Ok = false,
+                    ResponseText = responseText,
+                    Error = $"status={parsed.Status}; verdict={parsed.Verdict ?? "-"}; {TeamWorkerHelpers.Truncate(parsed.FindingsSummary ?? responseText, 500)}"
+                };
+            }
+
             return TeamMemberRunOutcome.Success(responseText, session);
         }
         catch (OperationCanceledException)
@@ -360,13 +387,30 @@ public sealed class TeamMemberRunExecutor(
         }
 
         sb.AppendLine($"Team task goal: {task.Goal}");
-        sb.AppendLine(isLeader
-            ? "You are the Team Leader. Use team_* tools to create, dispatch, await, collect, and submit. You may redispatch a Worker only when AllowRedispatch permits and under MaxIterations."
-            : "You are a Worker. Do not call team_* orchestration tools or sessions_*. End with ## Result.");
+        if (isLeader)
+        {
+            sb.AppendLine(
+                "You are the Team Leader. Use team_* to list members, create subtasks, dispatch, collect, and submit. "
+                + "After team_dispatch, STOP — do not poll with team_progress/team_await; the outer loop re-invokes you when workers finish. "
+                + "When a verification worker fails, redispatch the implementer (or create a fix subtask) with findings, then re-verify. "
+                + "There is no per-worker iteration cap; stop only when global repair rounds are exhausted, then ask_user or submit partial/failed. "
+                + "Use team_progress / team_memory for shared state.");
+        }
+        else
+        {
+            sb.AppendLine(
+                "You are a Worker with an independent context. Do not call team_dispatch, team_submit_result, team_create_subtask, or sessions_*. "
+                + "You may call team_progress and team_memory. Deliver a complete result — do not end with a preamble-only plan.");
+        }
+
         sb.AppendLine();
         sb.AppendLine("## Result");
-        sb.AppendLine("status: completed | blocked | needs_leader");
+        sb.AppendLine("status: completed | failed | blocked | needs_leader");
+        sb.AppendLine("verdict: pass | fail   # optional; for verification workers");
+        sb.AppendLine("fix_target_subtask_id: sub_xxx   # optional when verdict=fail");
         sb.AppendLine("accomplished:");
+        sb.AppendLine("- ...");
+        sb.AppendLine("findings:");
         sb.AppendLine("- ...");
         return sb.ToString();
     }

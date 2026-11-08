@@ -34,8 +34,7 @@ public sealed class TeamOuterLoopTests : IDisposable
             {
                 Enabled = true,
                 MaxParallelWorkers = 2,
-                DefaultMaxIterations = 3,
-                AbsoluteMaxIterations = 8
+                MaxRepairRounds = 10
             }
         };
     }
@@ -295,6 +294,60 @@ public sealed class TeamOuterLoopTests : IDisposable
         Assert.Equal("submitted", disk.FinalResult);
     }
 
+    [Fact]
+    public async Task OuterLoop_EmptyStopWithReady_NudgeThenCanRecover()
+    {
+        await SeedTeamAsync(maxParallel: 2);
+        var executor = new ScriptedMemberExecutor();
+        executor.OnLeader = (task, turn) =>
+        {
+            if (turn == 1)
+            {
+                // Create Ready work but do not dispatch — empty stop.
+                task.SubTasks.Add(new TeamSubTask
+                {
+                    Id = "sub_ready",
+                    Title = "ready work",
+                    AssigneeProfileId = "worker",
+                    Status = TeamSubTaskStatus.Ready,
+                    Iteration = 1,
+                    MemberSessionId = "mbr_ready"
+                });
+                return TeamMemberRunOutcome.Success("thinking only", AgentSession.Create("ldr"));
+            }
+
+            if (turn == 2)
+            {
+                // Nudge turn: actually queue the Ready work.
+                var sub = task.SubTasks.First(s => s.Id == "sub_ready");
+                sub.Status = TeamSubTaskStatus.Queued;
+                return TeamMemberRunOutcome.Success("dispatched after nudge", AgentSession.Create("ldr"));
+            }
+
+            task.FinalResult = "recovered";
+            task.Status = TeamTaskStatus.Succeeded;
+            task.CompletedAt = DateTimeOffset.UtcNow;
+            return TeamMemberRunOutcome.Success("submitted", AgentSession.Create("ldr"));
+        };
+        executor.OnWorker = (_, _) =>
+            Task.FromResult(TeamMemberRunOutcome.Success("worker-ok", AgentSession.Create("mbr")));
+
+        var orch = CreateOrchestrator(executor);
+        var began = await orch.BeginAsync(new TeamTaskStartRequest
+        {
+            TeamId = "t1",
+            RootSessionId = "sess",
+            Goal = "do not fail on empty stop"
+        });
+        Assert.True(began.Ok);
+
+        var completed = await orch.RunToCompletionAsync(began.Task.RootSessionId, began.Task.TaskId);
+        Assert.Equal(TeamTaskStatus.Succeeded, completed.Status);
+        Assert.Equal("recovered", completed.FinalResult);
+        Assert.True(executor.LeaderTurns >= 3, $"expected nudge + recover, got {executor.LeaderTurns} turns");
+        Assert.Equal(1, executor.WorkerStarts);
+    }
+
     public void Dispose()
     {
         try
@@ -311,7 +364,15 @@ public sealed class TeamOuterLoopTests : IDisposable
     }
 
     private TeamTaskOrchestrator CreateOrchestrator(ScriptedMemberExecutor executor) =>
-        new(_settings, _teams, _profiles, _tasks, _traces, executor, new NoOpLogger());
+        new(
+            _settings,
+            _teams,
+            _profiles,
+            _tasks,
+            _traces,
+            new FileTeamMemoryStore(_tasks),
+            executor,
+            new NoOpLogger());
 
     private async Task SeedTeamAsync(int maxParallel)
     {
@@ -334,8 +395,7 @@ public sealed class TeamOuterLoopTests : IDisposable
         AssigneeProfileId = profileId,
         Status = TeamSubTaskStatus.Queued,
         MemberSessionId = "mbr_" + id,
-        Iteration = 1,
-        MaxIterations = 1
+        Iteration = 1
     };
 
     private static async Task WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)

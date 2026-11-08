@@ -27,10 +27,18 @@ public sealed class AgentProfile
 
     public int? MaxModelToolRounds { get; set; }
 
-    /// <summary>Workers only: whether Leader may redispatch this profile.</summary>
+    /// <summary>
+    /// Obsolete: ignored at runtime. Leader may redispatch freely within the global MaxRepairRounds safety valve.
+    /// Kept so older profile JSON still deserializes.
+    /// </summary>
+    [Obsolete("Ignored at runtime. Redispatch is gated by TeamsSettings.MaxRepairRounds only.")]
     public bool AllowRedispatch { get; set; }
 
-    /// <summary>Hard cap for redispatches (inclusive of first run). Default 1 = no loop.</summary>
+    /// <summary>
+    /// Obsolete: ignored at runtime. Per-worker iteration caps were removed; attempt count is trace-only.
+    /// Kept so older profile JSON still deserializes.
+    /// </summary>
+    [Obsolete("Ignored at runtime. Use TeamsSettings.MaxRepairRounds as the silent global safety valve.")]
     public int MaxIterations { get; set; } = 1;
 
     public bool InheritSessionKnowledge { get; set; }

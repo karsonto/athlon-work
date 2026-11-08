@@ -46,6 +46,9 @@ public sealed class TeamTask
     /// <summary>Set when Status is AwaitingHuman; cleared after the human answers.</summary>
     public string? PendingHumanQuestion { get; set; }
 
+    /// <summary>Number of Leader-driven repair/redispatch waves used so far.</summary>
+    public int RepairRoundsUsed { get; set; }
+
     public List<TeamSubTask> SubTasks { get; set; } = new();
 
     public Dictionary<string, TeamTraceNodeLayout> TraceLayout { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -75,8 +78,13 @@ public sealed class TeamSubTask
 
     public List<string> ArtifactRefs { get; set; } = new();
 
+    /// <summary>Attempt counter for Trace (1-based). Not a user-configured cap.</summary>
     public int Iteration { get; set; } = 1;
 
+    /// <summary>
+    /// Obsolete compatibility field from older task.json. Not used to reject redispatch.
+    /// </summary>
+    [Obsolete("Ignored as a redispatch gate. Iteration is attempt-only; use TeamTask.RepairRoundsUsed / MaxRepairRounds.")]
     public int MaxIterations { get; set; } = 1;
 
     public string? RedispatchReason { get; set; }

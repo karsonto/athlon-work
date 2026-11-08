@@ -2,14 +2,21 @@ using System.Text;
 
 namespace Athlon.Agent.Core.Prompt;
 
+// AgentRunKind lives in Athlon.Agent.Core (parent namespace of this file).
+
 public sealed class SubAgentPersonaSection(IAgentRunContextAccessor runContextAccessor) : IEnvironmentPromptSection
 {
     public string Name => "subagent:persona";
 
     public int Order => PromptSectionBands.SubAgentPersona;
 
+    /// <summary>
+    /// SubAgent complete prompts replace the whole system prompt. Team members keep
+    /// environment sections (tools/skills/workspace) and only prepend the team persona.
+    /// </summary>
     public bool IsComplete =>
-        !string.IsNullOrWhiteSpace(runContextAccessor.Current?.CompleteSystemPrompt);
+        !string.IsNullOrWhiteSpace(runContextAccessor.Current?.CompleteSystemPrompt)
+        && runContextAccessor.Current?.Kind != AgentRunKind.TeamMember;
 
     public PromptOccupancyKind OccupancyKind => PromptOccupancyKind.Subagent;
 

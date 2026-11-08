@@ -323,10 +323,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITeamDefinitionStore, Athlon.Agent.Infrastructure.Teams.FileTeamDefinitionStore>();
         services.AddSingleton<ITeamTaskStore, Athlon.Agent.Infrastructure.Teams.FileTeamTaskStore>();
         services.AddSingleton<ITeamTraceStore, Athlon.Agent.Infrastructure.Teams.FileTeamTraceStore>();
+        services.AddSingleton<ITeamMemoryStore, Athlon.Agent.Infrastructure.Teams.FileTeamMemoryStore>();
         services.AddSingleton<Athlon.Agent.Infrastructure.Teams.TeamMemberSystemPromptOrchestrator>();
         services.AddSingleton<ITeamMemberRunExecutor, Athlon.Agent.Infrastructure.Teams.TeamMemberRunExecutor>();
         services.AddSingleton<ITeamTaskOrchestrator, Athlon.Agent.Infrastructure.Teams.TeamTaskOrchestrator>();
         // Always register; each tool no-ops when Teams.Enabled is false (avoids restart after toggle).
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamProgressTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamMemoryTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamListMembersTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamCreateSubtaskTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamDispatchTool>();

@@ -47,3 +47,46 @@ public interface ITeamTraceStore
         IReadOnlyDictionary<string, TeamTraceNodeLayout> layout,
         CancellationToken cancellationToken = default);
 }
+
+public sealed class TeamMemoryEntry
+{
+    public string Key { get; set; } = "";
+
+    public string Content { get; set; } = "";
+
+    public List<string> Tags { get; set; } = new();
+
+    public string? AuthorProfileId { get; set; }
+
+    public DateTimeOffset At { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public interface ITeamMemoryStore
+{
+    const int MaxContentChars = 4000;
+    const int MaxEntries = 200;
+
+    Task PutAsync(
+        string rootSessionId,
+        string taskId,
+        TeamMemoryEntry entry,
+        CancellationToken cancellationToken = default);
+
+    Task<TeamMemoryEntry?> GetAsync(
+        string rootSessionId,
+        string taskId,
+        string key,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TeamMemoryEntry>> ListAsync(
+        string rootSessionId,
+        string taskId,
+        int limit = 40,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteAsync(
+        string rootSessionId,
+        string taskId,
+        string key,
+        CancellationToken cancellationToken = default);
+}
