@@ -65,6 +65,12 @@ public sealed partial class SessionTurnUiController
     // Cache ViewModels by message ID so switching back to a previously-viewed
     // session reuses MarkdownMessageView / FlowDocument instead of rebuilding everything.
     private readonly Dictionary<string, ChatMessageViewModel> _viewModelCache = new(StringComparer.Ordinal);
+    /// <summary>
+    /// Files last published on a FILES_CHANGED card, keyed by <c>files:{anchor}</c>.
+    /// Teams turns never put file tools on the root transcript, so Review must use this cache.
+    /// </summary>
+    private readonly Dictionary<string, IReadOnlyList<ModifiedFileViewModel>> _publishedTurnFiles =
+        new(StringComparer.Ordinal);
     private int _bulkChatViewSyncDepth;
     private int _syncChatViewGeneration;
     private readonly SessionTurnUiTurnLifecycleState _turnLifecycle = new();
@@ -237,14 +243,20 @@ public sealed partial class SessionTurnUiController
     /// </summary>
     public IReadOnlyList<ModifiedFileViewModel> GetTurnFiles(string? entryId)
     {
-        var anchor = entryId;
-        const string prefix = "files:";
-        if (!string.IsNullOrEmpty(anchor)
-            && anchor.StartsWith(prefix, StringComparison.Ordinal))
+        var entryKey = NormalizeFilesEntryId(entryId);
+        if (entryKey is null)
         {
-            anchor = anchor[prefix.Length..];
+            return Array.Empty<ModifiedFileViewModel>();
         }
 
+        if (_publishedTurnFiles.TryGetValue(entryKey, out var published) && published.Count > 0)
+        {
+            return published;
+        }
+
+        var anchor = entryKey.StartsWith("files:", StringComparison.Ordinal)
+            ? entryKey["files:".Length..]
+            : entryKey;
         if (string.IsNullOrWhiteSpace(anchor))
         {
             return Array.Empty<ModifiedFileViewModel>();
@@ -278,7 +290,78 @@ public sealed partial class SessionTurnUiController
             body.Add(message);
         }
 
-        return SessionModifiedFilesTracker.CollectTurnFiles(body);
+        var collected = SessionModifiedFilesTracker.CollectTurnFiles(body);
+        if (collected.Count == 0)
+        {
+            // Teams file edits live in member sessions; root transcript only has step bubbles.
+            collected = CollectTeamFilesFromTurnBody(body, SessionId);
+        }
+
+        if (collected.Count > 0)
+        {
+            RememberPublishedTurnFiles(entryKey, collected);
+        }
+
+        return collected;
+    }
+
+    private static IReadOnlyList<ModifiedFileViewModel> CollectTeamFilesFromTurnBody(
+        IReadOnlyList<ChatMessage> turnBody,
+        string? rootSessionId)
+    {
+        if (string.IsNullOrWhiteSpace(rootSessionId) || turnBody.Count == 0)
+        {
+            return Array.Empty<ModifiedFileViewModel>();
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var files = new List<ModifiedFileViewModel>();
+        foreach (var message in turnBody)
+        {
+            if (message.Role == MessageRole.Tool || string.IsNullOrWhiteSpace(message.Content))
+            {
+                continue;
+            }
+
+            if (!TeamChatArtifacts.TryParseTeamTaskIdFromContent(message.Content, out var taskId)
+                || !seen.Add(taskId))
+            {
+                continue;
+            }
+
+            files.AddRange(TeamChatArtifacts.TryCollectTaskFilesForReplay(rootSessionId, taskId));
+        }
+
+        return SessionModifiedFilesTracker.MergeByPath(files);
+    }
+
+    /// <summary>Stores the files last shown on a FILES_CHANGED card for Review.</summary>
+    public void RememberPublishedTurnFiles(
+        string? entryIdOrAnchor,
+        IReadOnlyList<ModifiedFileViewModel> files)
+    {
+        var entryKey = NormalizeFilesEntryId(entryIdOrAnchor);
+        if (entryKey is null)
+        {
+            return;
+        }
+
+        _publishedTurnFiles[entryKey] = files.Count == 0
+            ? Array.Empty<ModifiedFileViewModel>()
+            : files;
+    }
+
+    private static string? NormalizeFilesEntryId(string? entryIdOrAnchor)
+    {
+        if (string.IsNullOrWhiteSpace(entryIdOrAnchor))
+        {
+            return null;
+        }
+
+        var value = entryIdOrAnchor.Trim();
+        return value.StartsWith("files:", StringComparison.Ordinal)
+            ? value
+            : "files:" + value;
     }
 
     /// <summary>
@@ -692,6 +775,12 @@ public sealed partial class SessionTurnUiController
             if (files.Count == 0 && upsert)
             {
                 return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(turnAnchorId))
+            {
+                RememberPublishedTurnFiles(turnAnchorId, files);
+                TurnFilesPublished?.Invoke("files:" + turnAnchorId, files);
             }
 
             _ = ChatView!.DispatchFilesChangedAsync(

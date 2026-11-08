@@ -135,6 +135,9 @@ public sealed class FilesChangedBubbleTests
         Assert.Equal("src/App.tsx", doc.RootElement.GetProperty("files")[0].GetProperty("path").GetString());
         Assert.Equal(1, doc.RootElement.GetProperty("files")[0].GetProperty("added").GetInt32());
         Assert.Equal(1, doc.RootElement.GetProperty("files")[0].GetProperty("removed").GetInt32());
+        // Diff lines stay in the C# Review cache — shipping them in the WebView event
+        // blew past message size limits on multi-file Teams runs.
+        Assert.False(doc.RootElement.GetProperty("files")[0].TryGetProperty("lines", out _));
     }
 
     [Fact]

@@ -769,12 +769,77 @@ public partial class MainShellViewModel
     private void OnReviewFilesRequested(object? sender, Controls.ReviewFilesRequestedEventArgs e)
     {
         var files = _activeUi.GetTurnFiles(e.EntryId);
+        if (files.Count == 0)
+        {
+            // Cold Review after reload: rebuild from the Teams task linked in this turn.
+            files = TryCollectTeamFilesForReview(e.EntryId);
+        }
+
         FillMissingWriteDiffsFromWorkspace(files);
         WorkspacePane.ShowChanges(files, e.Path, e.EntryId);
         if (!IsContextSidebarVisible)
         {
             SetContextSidebarVisible(true, animate: true);
         }
+    }
+
+    private IReadOnlyList<ModifiedFileViewModel> TryCollectTeamFilesForReview(string? entryId)
+    {
+        if (string.IsNullOrWhiteSpace(entryId) || string.IsNullOrWhiteSpace(_session.Id))
+        {
+            return Array.Empty<ModifiedFileViewModel>();
+        }
+
+        var anchor = entryId.StartsWith("files:", StringComparison.Ordinal)
+            ? entryId["files:".Length..]
+            : entryId;
+        if (string.IsNullOrWhiteSpace(anchor))
+        {
+            return Array.Empty<ModifiedFileViewModel>();
+        }
+
+        var start = -1;
+        for (var i = 0; i < _session.Messages.Count; i++)
+        {
+            if (string.Equals(_session.Messages[i].Id, anchor, StringComparison.Ordinal))
+            {
+                start = i;
+                break;
+            }
+        }
+
+        if (start < 0)
+        {
+            return Array.Empty<ModifiedFileViewModel>();
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var files = new List<ModifiedFileViewModel>();
+        for (var i = start + 1; i < _session.Messages.Count; i++)
+        {
+            var message = _session.Messages[i];
+            if (message.Role is MessageRole.User or MessageRole.Compaction)
+            {
+                break;
+            }
+
+            if (string.IsNullOrWhiteSpace(message.Content)
+                || !TeamChatArtifacts.TryParseTeamTaskIdFromContent(message.Content, out var taskId)
+                || !seen.Add(taskId))
+            {
+                continue;
+            }
+
+            files.AddRange(TeamChatArtifacts.TryCollectTaskFilesForReplay(_session.Id, taskId));
+        }
+
+        var merged = SessionModifiedFilesTracker.MergeByPath(files);
+        if (merged.Count > 0)
+        {
+            _activeUi.RememberPublishedTurnFiles(entryId, merged);
+        }
+
+        return merged;
     }
 
     /// <summary>

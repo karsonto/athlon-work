@@ -131,28 +131,15 @@ internal static partial class ChatEventSerializer
             });
         }
 
+        // Timeline card only needs path + counts. Embedding full diff lines here used to blow
+        // past WebView2 message limits on Teams runs (many file_write bodies), so the card
+        // froze on the last small upsert. Review reads diffs from the C# turn-files cache.
         var payload = files.Select(file => new
         {
             path = file.RelativePath,
             displayName = file.DisplayName,
             added = file.AddedCount,
-            removed = file.RemovedCount,
-            lines = UnifiedDiffDisplayParser.Parse(file.UnifiedDiffText, foldContext: true)
-                .Select(line => new
-                {
-                    kind = line.Kind switch
-                    {
-                        DiffLineKind.Added => "added",
-                        DiffLineKind.Removed => "removed",
-                        DiffLineKind.Context => "context",
-                        DiffLineKind.HunkHeader => "hunkHeader",
-                        DiffLineKind.Header => "header",
-                        DiffLineKind.Collapsed => "collapsed",
-                        _ => "context"
-                    },
-                    text = line.Text,
-                    count = line.CollapsedCount
-                })
+            removed = file.RemovedCount
         }).ToList();
 
         return SerializeAgui("FILES_CHANGED", new

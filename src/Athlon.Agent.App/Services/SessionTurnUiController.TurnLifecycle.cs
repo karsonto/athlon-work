@@ -210,6 +210,7 @@ public sealed partial class SessionTurnUiController
             seq: CurrentTurnFilesSeq());
         if (!string.IsNullOrWhiteSpace(_turnLifecycle.TurnAnchorId))
         {
+            RememberPublishedTurnFiles(_turnLifecycle.TurnAnchorId, files);
             TurnFilesPublished?.Invoke("files:" + _turnLifecycle.TurnAnchorId, files);
         }
     }

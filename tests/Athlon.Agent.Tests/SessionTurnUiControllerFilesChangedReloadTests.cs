@@ -302,6 +302,36 @@ public sealed class SessionTurnUiControllerFilesChangedReloadTests
         Assert.Empty(tracker.PeekSegmentEditCards());
     }
 
+    [Fact]
+    public async Task GetTurnFiles_prefers_published_team_cache_over_empty_root_transcript()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.SetDisplayed(true);
+
+        var anchor = "user-team-anchor";
+        var published = new ModifiedFileViewModel(
+            "src/Athlon.Agent.App/ViewModels/MainShellViewModel.cs",
+            "apply_patch",
+            ModifiedFileStatus.Succeeded);
+        published.SetDiff(string.Join(
+            "\n",
+            "--- a/src/Athlon.Agent.App/ViewModels/MainShellViewModel.cs",
+            "+++ b/src/Athlon.Agent.App/ViewModels/MainShellViewModel.cs",
+            "@@ -1,1 +1,2 @@",
+            " context",
+            "+added"));
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            ui.RememberPublishedTurnFiles(anchor, [published]);
+            var files = ui.GetTurnFiles("files:" + anchor);
+            Assert.Single(files);
+            Assert.Contains("MainShellViewModel.cs", files[0].RelativePath, StringComparison.Ordinal);
+            Assert.True(files[0].HasDiff);
+        });
+    }
+
     private static async Task EmitFileWrite(AgentTurnCallbacks callbacks, string toolCallId, string path)
     {
         await callbacks.OnStreamEvent!(new AgentStreamEvent.ToolCallStart(toolCallId, "file_write", 0));

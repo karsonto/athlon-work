@@ -681,9 +681,29 @@ function selectNode(id, opts){
     document.getElementById('toggleDrawer').textContent='收起详情';
   }
 }
+function isSubSucceeded(s){ return /success/i.test(String(s?.status||'')); }
+function isSubTerminal(s){ return /success|fail|cancel|error/i.test(String(s?.status||'')); }
+function aggregateUi(){
+  const subs=data.subtasks||[];
+  const done=subs.filter(isSubSucceeded).length;
+  const terminal=subs.filter(isSubTerminal).length;
+  const task=statusUi(data.status);
+  // Synthetic collect node: follow task terminal state, else wait until workers finish.
+  if(task.cls==='success' || (subs.length>0 && done===subs.length)){
+    return {cls:'success', text:'Success', pill:'success', foot:`${done}/${subs.length} ready`};
+  }
+  if(task.cls==='error' || (subs.length>0 && terminal===subs.length && done<subs.length)){
+    return {cls:'error', text: task.cls==='error' ? task.text : 'Partial', pill:'error', foot:`${done}/${subs.length} ready`};
+  }
+  if(subs.some(s=>/run/i.test(String(s.status||''))) || task.cls==='running'){
+    return {cls:'running', text:'Collecting', pill:'running', foot:`${done}/${subs.length} ready`};
+  }
+  return {cls:'waiting', text:'Waiting', pill:'waiting', foot:`${done}/${subs.length} ready`};
+}
 function renderNodes(){
   nodesEl.innerHTML='';
   const leaderUi=statusUi(data.status);
+  const agg=aggregateUi();
   const defs=[
     {id:'leader', name:'Leader', kind:'Leader', kindClass:'leader', ui:leaderUi, meta:'plan + dispatch', foot:[`${(data.subtasks||[]).length} workers`, elapsed()]},
     ...(data.subtasks||[]).map(s=>{
@@ -693,7 +713,7 @@ function renderNodes(){
       const meta=failed && failText ? failText : `${s.profileId||''} · ${s.status}`;
       return {id:s.id, name:s.title||s.id, kind:'Worker', kindClass:'', ui:u, meta, metaFail:failed && !!failText, foot:[`iter ${s.iteration}/${s.maxIterations}`, s.completedAt?'done':'—'], tip:failed?(s.error||s.reason||''):''};
     }),
-    {id:'agg', name:'Aggregate Results', kind:'Leader', kindClass:'leader', ui:{cls:'waiting',text:'Waiting',pill:'waiting'}, meta:'collect + review', foot:[`${(data.subtasks||[]).filter(s=>/success/i.test(s.status||'')).length}/${(data.subtasks||[]).length} ready`,'—']},
+    {id:'agg', name:'Aggregate Results', kind:'Leader', kindClass:'leader', ui:{cls:agg.cls,text:agg.text,pill:agg.pill}, meta:'collect + review', foot:[agg.foot,'—']},
     {id:'submit', name:'Submit Final', kind:'Leader', kindClass:'leader', ui:statusUi(data.status), meta:'team_submit_result', foot:['artifact','—']}
   ];
   defs.forEach(n=>{

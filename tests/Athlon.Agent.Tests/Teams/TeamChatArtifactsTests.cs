@@ -71,6 +71,58 @@ public sealed class TeamChatArtifactsTests : IDisposable
     }
 
     [Fact]
+    public async Task CollectTaskFiles_IncludesApplyPatchPathsFromUpdateMarkers()
+    {
+        var task = new TeamTask
+        {
+            RootSessionId = "sess-patch",
+            TaskId = "tm_patch1",
+            TeamId = "t1",
+            Goal = "patch",
+            Status = TeamTaskStatus.Succeeded,
+            SubTasks =
+            [
+                new TeamSubTask
+                {
+                    Id = "sub_1",
+                    Title = "Runner",
+                    AssigneeProfileId = "worker",
+                    Status = TeamSubTaskStatus.Succeeded,
+                    MemberSessionId = "mbr_patch",
+                    Iteration = 1
+                }
+            ]
+        };
+        await _tasks.SaveAsync(task);
+
+        var memberDir = _tasks.ResolveMemberDirectory(task.RootSessionId, task.TaskId, "mbr_patch");
+        Directory.CreateDirectory(memberDir);
+        var patch = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-p",
+                "Tool `apply_patch` succeeded.",
+                "",
+                "Arguments: patch=*** Begin Patch",
+                "*** Update File: src/Athlon.Agent.App/ViewModels/MainShellViewModel.cs",
+                "@@",
+                "+    private void OnChatPagePropertyChanged()",
+                "*** End Patch",
+                "Summary: Patched 1 file(s)",
+                "",
+                "src/Athlon.Agent.App/ViewModels/MainShellViewModel.cs"));
+        var session = AgentSession.Create("mbr_patch").WithMessages([patch]);
+        await _json.SaveAsync(Path.Combine(memberDir, "session.json"), session);
+
+        var files = TeamChatArtifacts.CollectTaskFiles(task, _tasks);
+        Assert.Contains(
+            files,
+            f => f.RelativePath.Replace('\\', '/')
+                .Contains("MainShellViewModel.cs", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task CollectTaskFiles_MergesMemberFileEdits()
     {
         var task = new TeamTask

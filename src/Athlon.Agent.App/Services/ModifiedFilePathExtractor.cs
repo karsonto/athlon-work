@@ -76,8 +76,15 @@ internal static class ModifiedFilePathExtractor
         var pastSummary = false;
         var pastSummaryBlank = false;
         var paths = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var line in lines)
         {
+            if (TryReadApplyPatchFileMarker(line, out var markerPath)
+                && seen.Add(markerPath))
+            {
+                paths.Add(markerPath);
+            }
+
             if (line.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
             {
                 pastSummary = true;
@@ -99,15 +106,43 @@ internal static class ModifiedFilePathExtractor
             if (trimmed.StartsWith("ToolCallId:", StringComparison.OrdinalIgnoreCase)
                 || trimmed.StartsWith("Tool `", StringComparison.Ordinal)
                 || trimmed.StartsWith("Arguments:", StringComparison.OrdinalIgnoreCase)
-                || trimmed.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
+                || trimmed.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase)
+                || trimmed.StartsWith("*** ", StringComparison.Ordinal))
             {
                 continue;
             }
 
-            paths.Add(ToolPathNormalizer.ForModel(trimmed));
+            var normalized = ToolPathNormalizer.ForModel(trimmed);
+            if (seen.Add(normalized))
+            {
+                paths.Add(normalized);
+            }
         }
 
         return paths;
+    }
+
+    private static bool TryReadApplyPatchFileMarker(string line, out string path)
+    {
+        path = string.Empty;
+        string[] markers =
+        [
+            "*** Update File:",
+            "*** Add File:",
+            "*** Delete File:"
+        ];
+        foreach (var marker in markers)
+        {
+            if (!line.TrimStart().StartsWith(marker, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            path = ToolPathNormalizer.ForModel(line.TrimStart()[marker.Length..].Trim());
+            return !string.IsNullOrWhiteSpace(path);
+        }
+
+        return false;
     }
 
     public static ModifiedFileStatus ToModifiedFileStatus(ToolCallDisplayStatus status) => status switch
