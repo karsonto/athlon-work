@@ -579,61 +579,111 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     [RelayCommand]
     private async Task CreateSampleTeamAsync()
     {
+        var readTools = new[] { "file_list", "file_read", "grep_files", "glob_files" };
+        var writeTools = new[]
+        {
+            "file_list", "file_read", "file_write", "file_edit", "apply_patch",
+            "grep_files", "glob_files", "execute_command"
+        };
+
         var leader = new AgentProfile
         {
-            Id = "profile-leader-code-review",
-            Name = "Code Review Leader",
-            Description = "统筹代码审查 · 分派 · 汇总报告",
+            Id = "profile-leader-arch-optimizer",
+            Name = "Architecture Optimizer Leader",
+            Description = "编排配方批次 · 验收行为等价重构",
             AgentMd =
-                "你是代码检查团队的 Leader。目标：对当前工作区项目做结构化审查并输出可执行报告。\n"
-                + "默认四路并行：为 Code Map / Architecture / Quality / Frontend UI 各 create_subtask，**不要**加 depends_on（除非用户明确要求串行）。\n"
-                + "然后一次 team_dispatch（不带 subtask_ids 或传入全部 Ready id），立刻结束回合，让外环并行跑满 MaxParallelWorkers。\n"
-                + "Workers 可自行用 team_memory 读彼此结论；你不必为了读 code_map 而串行等待。\n"
-                + "全部完成后：team_collect / team_memory，汇总「概览 / 架构 / 质量 / UI / 优先修复清单」并 team_submit_result。\n"
-                + "某一维度明显不合格时再 redispatch 或新建复核子任务。不要自己读代码实现细节。",
+                "你是代码优化团队的 Leader。目标：用**可命名、可复查、行为等价、最小侵入**的「配方(recipe)」批次优化工作区代码"
+                + "（清晰分层、类单一职责、消灭上帝类、降低耦合），而不是大段重写或风格大扫除。\n"
+                + "默认流水线（depends_on 串行；禁止多人同时改同一批文件）：\n"
+                + "1) Recipe Scout → dispatch\n"
+                + "2) Recipe Author（depends_on Scout）→ dispatch\n"
+                + "3) Recipe Runner（depends_on Author）→ dispatch\n"
+                + "4) Recipe Verifier（depends_on Runner）→ dispatch\n"
+                + "范围：用户指定路径/模块则只做该范围；否则每轮只批准 **1～3 条**高价值配方（优先 ExtractClass / ExtractMethod / MoveMethod / IntroduceInterface / BreakCycle）。\n"
+                + "硬约束：保公开行为；禁止无关格式化、整仓搬家、无配方的「顺手清理」。Verifier fail → redispatch Runner（或补 Author）后再验。\n"
+                + "全部通过后 team_collect / team_memory，按「应用了哪些配方 / 改了哪些符号与文件 / 剩余机会」汇总并 team_submit_result。你只编排，不读实现、不改文件。",
             ToolAllowList = TeamToolDefaults.DefaultLeaderAllowList.ToList(),
             SkillNames = []
         };
 
-        var codeMap = new AgentProfile
+        var scout = new AgentProfile
         {
-            Id = "profile-worker-code-map",
-            Name = "Code Map",
-            Description = "梳理项目结构、模块边界与入口",
+            Id = "profile-worker-arch-scout",
+            Name = "Recipe Scout",
+            Description = "搜索可机械落地的优化机会（配方候选）",
             AgentMd =
-                "你负责项目代码摸底，不改文件。用 file_list / glob / grep / file_read 找出：解决方案/包结构、主要入口、核心模块、配置与构建方式。\n"
-                + "输出 ## Result：status、accomplished（目录树要点、模块清单）、findings（盲区/文档缺失）。关键结论 put 到 team_memory（如 code_map）。可用 team_progress。",
-            ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(
-                ["file_list", "file_read", "grep_files", "glob_files"],
-                skillNames: null).ToList(),
+                "你负责「搜索」阶段：只发现机会，不改文件、不写执行步骤。用 file_list / glob / grep / file_read 做符号与调用关系摸底（类型、方法、引用、项目分层）。\n"
+                + "只报告能映射到标准配方族的机会（每条必须可被 Runner 机械执行）：\n"
+                + "- ExtractClass：上帝类/混杂职责（UI+IO+领域同文件），给出可拆出的方法/字段簇\n"
+                + "- ExtractMethod：过长/过复杂方法的可抽连续语句块\n"
+                + "- MoveMethod：Feature Envy（方法更依赖另一类型）\n"
+                + "- IntroduceInterface / InvertDependency：跨层或枢纽耦合\n"
+                + "- BreakCycle：import/项目引用环上的最小可断边\n"
+                + "- SplitFile：单文件多顶层类型或模块社区可拆\n"
+                + "- RemoveDeadCode：确认无引用的私有成员（不确定则不要报）\n"
+                + "每条机会写清：id、recipe、target（path+symbol）、evidence（行数/方法数/依赖方）、severity(P0|P1|P2)、why_safe（为何可行为等价）。跳过纯审美/命名争论。\n"
+                + "输出 ## Result：status、opportunities（≤12，按 severity）、scope_map。put team_memory 键 opportunity_catalog。",
+            ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(readTools, skillNames: null).ToList(),
             SkillNames = [],
             KnowledgeModuleIds = []
         };
 
-        var architecture = new AgentProfile
+        var planner = new AgentProfile
         {
-            Id = "profile-worker-architecture",
-            Name = "Architecture",
-            Description = "分析分层、依赖方向与扩展性",
+            Id = "profile-worker-arch-planner",
+            Name = "Recipe Author",
+            Description = "把机会写成可执行、可回滚的配方批次",
             AgentMd =
-                "你负责架构审查。可先 team_progress / team_memory 读取 code_map，再深入依赖与分层：App/Core/Infrastructure 边界、循环依赖、职责泄漏、耦合热点。\n"
-                + "不要改代码。输出 ## Result：架构现状、问题与建议（按严重度）。关键结论 put team_memory（如 architecture）。",
-            ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(
-                ["file_list", "file_read", "grep_files", "glob_files"],
-                skillNames: null).ToList(),
+                "你负责编写配方：把 opportunity_catalog 编成本轮可执行 recipe batch，不改业务代码。先 team_memory 读目录，必要时精读目标文件确认符号边界。\n"
+                + "只挑选本轮 1～3 条（优先 P0/P1、调用面可控、能编译）。每条配方必须包含：\n"
+                + "- recipe_id / recipe（同上标准名）/ display_name\n"
+                + "- preconditions（文件存在、符号仍在、依赖方向假设）\n"
+                + "- search（精确符号/调用点/旧 import，禁止模糊全文替换）\n"
+                + "- transform（有序原子步骤：新建类型→移动成员→改调用点→修 using/import→删除空壳）\n"
+                + "- invariants（行为等价；保留原访问级别除非配方要求；保留注释与既有格式）\n"
+                + "- affected_paths / rollback（git 级或逐步反向）\n"
+                + "- acceptance（可检查断言，如「Foo 不再包含 Bar 逻辑」「A 不再引用 B」）\n"
+                + "配方之间声明 order 与冲突（改同一文件则串行）。禁止「整体重写某文件」「顺便全项目改名」。\n"
+                + "输出 ## Result：status、batch。put team_memory 键 recipe_batch。",
+            ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(readTools, skillNames: null).ToList(),
             SkillNames = [],
             KnowledgeModuleIds = []
         };
 
-        var quality = new AgentProfile
+        var engineer = new AgentProfile
         {
-            Id = "profile-worker-quality",
-            Name = "Code Quality",
-            Description = "检查可维护性、测试与风险代码",
+            Id = "profile-worker-arch-engineer",
+            Name = "Recipe Runner",
+            Description = "按配方最小侵入应用变换并逐步编译",
             AgentMd =
-                "你负责代码质量审查：命名与重复、错误处理、空 catch、魔法数、过大类/方法、测试覆盖缺口、明显安全问题（硬编码密钥等）。\n"
-                + "可用 execute_command 跑已有测试/lint（若仓库支持），失败不要伪装通过。不要改业务代码。\n"
-                + "输出 ## Result：status、findings（按 P0/P1/P2）、建议修复顺序；put team_memory（如 quality）。不合格时 status:failed / verdict:fail。",
+                "你负责按配方执行变换：严格按 recipe_batch 应用，不做计划外优化。先 team_memory 读 batch。\n"
+                + "执行纪律：\n"
+                + "1) 按 order 逐条配方；每条内按 transform 逐步做。\n"
+                + "2) 大文件/多点改动用 apply_patch；小替换用 file_edit；新建文件可用 file_write。改前先 file_read 确认 search 仍命中。\n"
+                + "3) 最小侵入：只改配方列出的符号与调用点；保留格式、注释、using 顺序（除非配方要求）。\n"
+                + "4) 行为等价：不改算法语义；不删测试；不「为了绿而删断言」。\n"
+                + "5) 每完成一条配方：execute_command 跑最窄构建（单项目/解决方案）；失败则就地修到该配方 precondition/acceptance 可过，再下一条。\n"
+                + "6) 某条无法安全应用：跳过并记录 skipped_reason，不要用大重写硬上。\n"
+                + "输出 ## Result：status、applied[]、skipped[]、changed_files、build_commands。put team_memory 键 recipe_results。",
+            ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(writeTools, skillNames: null).ToList(),
+            SkillNames = [],
+            KnowledgeModuleIds = []
+        };
+
+        var verifier = new AgentProfile
+        {
+            Id = "profile-worker-arch-verifier",
+            Name = "Recipe Verifier",
+            Description = "验证配方 acceptance、构建测试与无越权改动",
+            AgentMd =
+                "你负责校验：证明本轮配方批次安全且达标。默认不改代码（仅允许修明显笔误级编译错误，并记入 notes）。\n"
+                + "读 team_memory：recipe_batch、recipe_results。对每条 applied 配方：\n"
+                + "- 核对 acceptance 是否成立（grep/read 符号与依赖方向）\n"
+                + "- 核对 diff 范围是否落在 affected_paths（越权改动 → fail）\n"
+                + "- 核对是否引入新的循环依赖或跨层泄漏\n"
+                + "用 execute_command 跑构建；有测试则跑相关测试。失败：status:failed、verdict:fail，附命令与关键日志。\n"
+                + "全部通过：verdict:pass，列出 residual_opportunities（未做的高价值机会，供下轮）。\n"
+                + "输出 ## Result：status、verdict、per_recipe_checks、build、tests、residual_opportunities。put team_memory 键 verify_report。",
             ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(
                 ["file_list", "file_read", "grep_files", "glob_files", "execute_command"],
                 skillNames: null).ToList(),
@@ -641,43 +691,29 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             KnowledgeModuleIds = []
         };
 
-        var frontendUi = new AgentProfile
-        {
-            Id = "profile-worker-frontend-ui",
-            Name = "Frontend UI",
-            Description = "审查前端界面结构、交互与一致性",
-            AgentMd =
-                "你负责前端/UI 审查：定位 Views/XAML/CSS/组件目录，检查布局层次、可访问性线索、文案与状态反馈、主题/样式一致性、明显可用性问题。\n"
-                + "不要改文件。输出 ## Result：UI 地图、问题清单与改进建议；put team_memory（如 frontend_ui）。若几乎无 UI 层，明确说明并 status:completed。",
-            ToolAllowList = TeamToolDefaults.EnsureWorkerImpliedTools(
-                ["file_list", "file_read", "grep_files", "glob_files"],
-                skillNames: null).ToList(),
-            SkillNames = [],
-            KnowledgeModuleIds = []
-        };
-
         await _profileStore.SaveAsync(leader).ConfigureAwait(true);
-        await _profileStore.SaveAsync(codeMap).ConfigureAwait(true);
-        await _profileStore.SaveAsync(architecture).ConfigureAwait(true);
-        await _profileStore.SaveAsync(quality).ConfigureAwait(true);
-        await _profileStore.SaveAsync(frontendUi).ConfigureAwait(true);
+        await _profileStore.SaveAsync(scout).ConfigureAwait(true);
+        await _profileStore.SaveAsync(planner).ConfigureAwait(true);
+        await _profileStore.SaveAsync(engineer).ConfigureAwait(true);
+        await _profileStore.SaveAsync(verifier).ConfigureAwait(true);
 
         var team = new TeamDefinition
         {
-            Id = "team-code-review",
-            Name = "Code Review Squad",
-            Description = "对工作区项目做代码摸底、架构、质量与前端 UI 审查；Leader 汇总可执行修复清单。",
+            Id = "team-arch-optimizer",
+            Name = "Architecture Optimizer",
+            Description =
+                "代码架构优化：搜索可机械落地的配方机会 → 编写小步行为等价配方 → 最小侵入执行 → 构建/验收；面向拆上帝类、单一职责与降耦合。",
             LeaderProfileId = leader.Id,
-            WorkerProfileIds = [codeMap.Id, architecture.Id, quality.Id, frontendUi.Id],
-            MaxParallelWorkers = 3
+            WorkerProfileIds = [scout.Id, planner.Id, engineer.Id, verifier.Id],
+            MaxParallelWorkers = 2
         };
         await _teamStore.SaveAsync(team).ConfigureAwait(true);
 
         _profilesById[leader.Id] = leader;
-        _profilesById[codeMap.Id] = codeMap;
-        _profilesById[architecture.Id] = architecture;
-        _profilesById[quality.Id] = quality;
-        _profilesById[frontendUi.Id] = frontendUi;
+        _profilesById[scout.Id] = scout;
+        _profilesById[planner.Id] = planner;
+        _profilesById[engineer.Id] = engineer;
+        _profilesById[verifier.Id] = verifier;
 
         var existing = TeamItems.FirstOrDefault(t =>
             string.Equals(t.Team.Id, team.Id, StringComparison.OrdinalIgnoreCase));
@@ -694,7 +730,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             SelectedTeamItem = item;
         }
 
-        StatusMessage = "已创建示例 Team（Code Review Squad）。";
+        StatusMessage = "已创建示例 Team（Architecture Optimizer）。";
     }
 
     /// <summary>
