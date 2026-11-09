@@ -43,9 +43,9 @@ public partial class MainShellViewModel
 {
     private void OnTurnStateChanged(object? sender, string sessionId)
     {
-        // Pin the controller for the duration of the turn so LRU eviction cannot drop its buffered
-        // streaming state when the user switches away and back.
-        _uiCache.SetPinned(sessionId, _sessionTurns.TurnHost.IsRunning(sessionId));
+        // Pin the controller for the duration of the turn / Teams run so LRU eviction cannot drop
+        // its buffered streaming state when the user switches away and back.
+        SyncSessionUiPin(sessionId);
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
@@ -148,21 +148,25 @@ public partial class MainShellViewModel
         // Anchor file cards to the latest user bubble that started / resumed this Teams turn.
         var resumeUser = captureUi.AppendLocalUserMessage(text);
         var turnAnchorId = resumeUser.Id;
-        if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
-        {
-            _session = _session.WithMessage(resumeUser);
-            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
-        }
+        await PersistTeamChatMessageAsync(captureSessionId, resumeUser).ConfigureAwait(true);
 
         ShowShellToast(_loc["Teams_RunningToast"], ShellToastKind.Info);
-        SetComposerStatus("Teams · resume");
-        IsBusy = true;
+        if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
+        {
+            SetComposerStatus("Teams · resume");
+        }
+
         var progress = CreateTeamChatProgress(captureSessionId, captureUi, turnAnchorId);
+        RequestRefreshSessionHistory();
         try
         {
-            var (ok, message, task) = await TeamsPageVm
-                .ResumeTeamAskAsync(captureSessionId, text, openTrace: true, progress: progress)
-                .ConfigureAwait(true);
+            var runTask = TeamsPageVm.ResumeTeamAskAsync(
+                captureSessionId, text, openTrace: true, progress: progress);
+            SyncSessionUiPin(captureSessionId);
+            UpdateDisplayedBusyState();
+            RequestRefreshSessionHistory();
+
+            var (ok, message, task) = await runTask.ConfigureAwait(true);
             await ApplyTeamRunOutcomeToChatAsync(
                     captureSessionId,
                     captureUi,
@@ -174,12 +178,14 @@ public partial class MainShellViewModel
         }
         finally
         {
-            if (!TeamsPageVm.IsTeamRunActive(captureSessionId))
+            SyncSessionUiPin(captureSessionId);
+            if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
             {
-                IsBusy = false;
+                UpdateDisplayedBusyState();
+                RefreshTeamComposerStatusForDisplayedSession();
             }
 
-            SetComposerStatus(null);
+            RequestRefreshSessionHistory();
             NotifyCommandStatesChanged();
         }
     }
@@ -214,7 +220,7 @@ public partial class MainShellViewModel
             }
 
             _sessionNavigation.InvalidateDisplayPage(e.SessionId);
-            _uiCache.SetPinned(e.SessionId, _sessionTurns.TurnHost.IsRunning(e.SessionId));
+            SyncSessionUiPin(e.SessionId);
             RequestRefreshSessionHistory();
             if (_sessionTurns.QueuedTurnPresenter.TryProcessNext(e, out var queueError))
             {

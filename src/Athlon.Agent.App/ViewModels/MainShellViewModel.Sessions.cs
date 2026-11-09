@@ -118,9 +118,9 @@ public partial class MainShellViewModel
             return;
         }
 
-        if (_sessionTurns.TurnHost.IsRunning(_displayedSessionId))
+        if (IsSessionRunning(_displayedSessionId))
         {
-            _sessionTurns.TurnHost.Cancel(_displayedSessionId);
+            StopSession(_displayedSessionId);
         }
 
         _session = _session.WithMessages(Array.Empty<ChatMessage>());
@@ -367,6 +367,7 @@ public partial class MainShellViewModel
             _sessionTurns.TurnHost.Cancel(item.Id);
         }
 
+        TeamsPageVm.CancelActiveTeamRun(item.Id);
         _sessionTurns.TurnHost.ClearQueue(item.Id);
         _sessionTurns.QueuedTurnPresenter.RemoveSession(item.Id);
 

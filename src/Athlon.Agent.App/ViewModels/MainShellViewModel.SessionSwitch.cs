@@ -202,7 +202,8 @@ public partial class MainShellViewModel
                 return;
             }
 
-            var preserveActiveTurn = _sessionTurns.TurnHost.IsRunning(sessionId);
+            // Preserve live Chat/Teams UI when this session is still running in the background.
+            var preserveActiveTurn = IsSessionRunning(sessionId);
             // A session with a running turn already holds live in-memory state. Keep it instead of
             // downgrading the entry to the metadata shell (which would also clear SessionComplete
             // and suppress the turn's session.json writes while the background load is in flight).
@@ -256,7 +257,15 @@ public partial class MainShellViewModel
                         _olderDisplayCursor is not null).ConfigureAwait(true);
                 }
 
-                SetComposerStatus(null);
+                if (TeamsPageVm.IsTeamRunActive(sessionId))
+                {
+                    RefreshTeamComposerStatusForDisplayedSession();
+                }
+                else
+                {
+                    SetComposerStatus(null);
+                }
+
                 if (announceLoad)
                 {
                     ShowShellToast(_loc.Format("Shell_LoadConversationDone", snapshot.Session.Title), ShellToastKind.Success);
@@ -293,14 +302,20 @@ public partial class MainShellViewModel
 
             ApplySessionWorkspace();
             UpdateDisplayedBusyState();
+            RefreshTeamComposerStatusForDisplayedSession();
         }
         finally
         {
             if (IsSessionLoadCurrent(loadGeneration))
             {
                 IsLoadingSession = false;
-                if (!StatusFeedback.IsComposerStatusVisible
-                    || StatusFeedback.ComposerStatusText == _loc["Shell_LoadingConversation"])
+                if (TeamsPageVm.IsTeamRunActive(_displayedSessionId))
+                {
+                    RefreshTeamComposerStatusForDisplayedSession();
+                }
+                else if (!StatusFeedback.IsComposerStatusVisible
+                    || StatusFeedback.ComposerStatusText == _loc["Shell_LoadingConversation"]
+                    || StatusFeedback.ComposerStatusText.StartsWith("Teams ·", StringComparison.Ordinal))
                 {
                     SetComposerStatus(null);
                 }
@@ -517,6 +532,7 @@ public partial class MainShellViewModel
         OnPropertyChanged(nameof(QueuedTurns));
         OnPropertyChanged(nameof(HasQueuedTurns));
         UpdateDisplayedBusyState();
+        RefreshTeamComposerStatusForDisplayedSession();
         if (IsComputerUseOverlayActive)
         {
             AttachComputerUseStatusMessageListeners();

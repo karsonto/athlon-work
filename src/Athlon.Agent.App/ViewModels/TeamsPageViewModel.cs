@@ -810,8 +810,11 @@ public sealed partial class TeamsPageViewModel : ObservableObject
                    && !cts.IsCancellationRequested;
         }
 
-        return IsBusy || _runCtsBySession.Count > 0;
+        return _runCtsBySession.Values.Any(cts => !cts.IsCancellationRequested);
     }
+
+    private void RefreshBusyFromActiveRuns() =>
+        IsBusy = IsTeamRunActive();
 
     public bool TryGetPendingAsk(string rootSessionId, out string taskId)
     {
@@ -849,7 +852,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         CancelRunForSession(rootSessionId);
         var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _runCtsBySession[rootSessionId] = runCts;
-        IsBusy = true;
+        RefreshBusyFromActiveRuns();
         try
         {
             if (openTrace)
@@ -886,7 +889,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         finally
         {
             ClearRunCts(rootSessionId, runCts);
-            IsBusy = false;
+            RefreshBusyFromActiveRuns();
         }
     }
 
@@ -927,7 +930,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         _pendingAsksBySession.Remove(rootSessionId);
         var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _runCtsBySession[rootSessionId] = runCts;
-        IsBusy = true;
+        RefreshBusyFromActiveRuns();
         try
         {
             var request = new TeamTaskStartRequest
@@ -988,7 +991,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         finally
         {
             ClearRunCts(rootSessionId, runCts);
-            IsBusy = false;
+            RefreshBusyFromActiveRuns();
         }
     }
 

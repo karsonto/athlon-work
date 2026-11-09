@@ -117,30 +117,34 @@ public partial class MainShellViewModel
         var captureSessionId = _displayedSessionId;
         var captureUi = _activeUi;
         ShowShellToast(_loc["Teams_RunningToast"], ShellToastKind.Info);
-        SetComposerStatus($"Teams · {team.Name}");
-        IsBusy = true;
+        if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
+        {
+            SetComposerStatus($"Teams · {team.Name}");
+        }
 
         var userMessage = captureUi.AppendLocalUserMessage(goal);
         var turnAnchorId = userMessage.Id;
-        if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
-        {
-            _session = _session.WithMessage(userMessage);
-            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
-        }
+        await PersistTeamChatMessageAsync(captureSessionId, userMessage).ConfigureAwait(true);
 
         var progress = CreateTeamChatProgress(captureSessionId, captureUi, turnAnchorId);
+        // Register CTS inside RunTeamGoal before first await — refresh Busy/sidebar after kickoff starts.
+        RequestRefreshSessionHistory();
 
         try
         {
             // Run via orchestrator path without mutating Teams config page (no new Team / no list refresh).
-            var (ok, message, task) = await TeamsPageVm
-                .RunTeamGoalAsync(
-                    captureSessionId,
-                    goal,
-                    team.Id,
-                    openTrace: true,
-                    progress: progress)
-                .ConfigureAwait(true);
+            // Multiple sessions may run Teams concurrently; Busy is always derived from the displayed session.
+            var runTask = TeamsPageVm.RunTeamGoalAsync(
+                captureSessionId,
+                goal,
+                team.Id,
+                openTrace: true,
+                progress: progress);
+            SyncSessionUiPin(captureSessionId);
+            UpdateDisplayedBusyState();
+            RequestRefreshSessionHistory();
+
+            var (ok, message, task) = await runTask.ConfigureAwait(true);
 
             await ApplyTeamRunOutcomeToChatAsync(
                     captureSessionId,
@@ -153,12 +157,14 @@ public partial class MainShellViewModel
         }
         finally
         {
-            if (!TeamsPageVm.IsTeamRunActive(captureSessionId))
+            SyncSessionUiPin(captureSessionId);
+            if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
             {
-                IsBusy = false;
+                UpdateDisplayedBusyState();
+                RefreshTeamComposerStatusForDisplayedSession();
             }
 
-            SetComposerStatus(null);
+            RequestRefreshSessionHistory();
             NotifyCommandStatesChanged();
         }
 
@@ -193,11 +199,7 @@ public partial class MainShellViewModel
     {
         var markdown = TeamChatArtifacts.FormatStepMarkdown(step);
         var assistantMessage = captureUi.AppendLocalAssistantMessage(markdown);
-        if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
-        {
-            _session = _session.WithMessage(assistantMessage);
-            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
-        }
+        await PersistTeamChatMessageAsync(captureSessionId, assistantMessage).ConfigureAwait(true);
 
         // Kickoff Trace bubble has no file edits yet — skip FilesChanged churn.
         if (step.Kind == Athlon.Agent.Core.Teams.TeamRunProgressKind.TaskStarted)
@@ -243,11 +245,7 @@ public partial class MainShellViewModel
         }
 
         FillMissingWriteDiffsFromWorkspace(files);
-        if (!string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
-        {
-            return;
-        }
-
+        // Keep file cards on the captured UI even when the user switched away mid-run.
         captureUi.PublishLocalFilesChanged(turnAnchorId, files, upsert: !seal);
     }
 
@@ -302,10 +300,9 @@ public partial class MainShellViewModel
         }
 
         var assistantMessage = captureUi.AppendLocalAssistantMessage(summaryMarkdown);
+        await PersistTeamChatMessageAsync(captureSessionId, assistantMessage).ConfigureAwait(true);
         if (string.Equals(_displayedSessionId, captureSessionId, StringComparison.Ordinal))
         {
-            _session = _session.WithMessage(assistantMessage);
-            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
             QuestionBar.RefreshFromActiveSession();
         }
 
@@ -319,6 +316,45 @@ public partial class MainShellViewModel
                     task.TaskId,
                     seal: true)
                 .ConfigureAwait(true);
+        }
+    }
+
+    private async Task PersistTeamChatMessageAsync(string sessionId, ChatMessage message)
+    {
+        if (string.Equals(_displayedSessionId, sessionId, StringComparison.Ordinal))
+        {
+            _session = _session.WithMessage(message);
+            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
+            return;
+        }
+
+        // Background Teams runs must still land in session.json so a later switch reload is complete.
+        try
+        {
+            await _runtime.UpsertAsync(sessionId, message).ConfigureAwait(true);
+            RequestRefreshSessionHistory();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("Failed to persist Teams chat message for {SessionId}: {Error}", sessionId, ex.Message);
+        }
+    }
+
+    private void SyncSessionUiPin(string sessionId) =>
+        _uiCache.SetPinned(sessionId, IsSessionRunning(sessionId));
+
+    private void RefreshTeamComposerStatusForDisplayedSession()
+    {
+        if (TeamsPageVm.IsTeamRunActive(_displayedSessionId))
+        {
+            SetComposerStatus("Teams · running");
+            return;
+        }
+
+        if (!StatusFeedback.IsComposerStatusVisible
+            || StatusFeedback.ComposerStatusText.StartsWith("Teams ·", StringComparison.Ordinal))
+        {
+            SetComposerStatus(null);
         }
     }
 

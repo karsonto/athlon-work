@@ -897,7 +897,15 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         _sessionTurns.TurnHost.Cancel(sessionId);
         _sessionTurns.QueuedTurnPresenter.Clear(sessionId);
+        TeamsPageVm.CancelActiveTeamRun(sessionId);
+        SyncSessionUiPin(sessionId);
+        UpdateDisplayedBusyState();
+        RequestRefreshSessionHistory();
     }
+
+    private bool IsSessionRunning(string sessionId) =>
+        _sessionTurns.TurnHost.IsRunning(sessionId)
+        || TeamsPageVm.IsTeamRunActive(sessionId);
 
 
 
@@ -985,14 +993,15 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private async Task RefreshSessionHistoryAsync()
     {
-        await _sessionHistory.RefreshAsync(_displayedSessionId, _sessionTurns.TurnHost.IsRunning, StopSession);
+        await _sessionHistory.RefreshAsync(_displayedSessionId, IsSessionRunning, StopSession);
         OnPropertyChanged(nameof(HasAgentRecords));
     }
 
     public bool HasAgentRecords => _sessionHistory.HasAgentRecords;
 
 
-    public bool HasPendingShutdownWork => _sessionTurns.HasActiveWork;
+    public bool HasPendingShutdownWork =>
+        _sessionTurns.HasActiveWork || TeamsPageVm.IsTeamRunActive();
 
     public async Task ShutdownAsync(
         IProgress<string>? progress = null,
