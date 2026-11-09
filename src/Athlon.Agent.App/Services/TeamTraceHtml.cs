@@ -385,12 +385,29 @@ const defaultLayout={leader:{x:560,y:80}, agg:{x:560,y:620}, submit:{x:560,y:860
 const layout=Object.assign({}, defaultLayout, data.layout||{});
 let isDragging=false;
 let drawerScrollTop=0;
+let drawerFollowBottom=true;
+const DRAWER_FOLLOW_THRESHOLD=56;
 const openToolKeys=new Set();
 renderStatus();
 
+function drawerBody(){ return document.querySelector('.drawer-b'); }
+function isDrawerNearBottom(el){
+  if(!el) return true;
+  return (el.scrollHeight - el.scrollTop - el.clientHeight) <= DRAWER_FOLLOW_THRESHOLD;
+}
+function scrollDrawerToBottom(force){
+  const body=drawerBody();
+  if(!body) return;
+  if(!(force || drawerFollowBottom)) return;
+  body.scrollTop=body.scrollHeight;
+  drawerFollowBottom=true;
+}
 function captureDrawerUi(){
-  const body=document.querySelector('.drawer-b');
-  if(body) drawerScrollTop=body.scrollTop;
+  const body=drawerBody();
+  if(body){
+    drawerFollowBottom=isDrawerNearBottom(body);
+    drawerScrollTop=body.scrollTop;
+  }
   openToolKeys.clear();
   document.querySelectorAll('#dTools details.block').forEach((el,i)=>{
     const key=el.querySelector('summary span')?.textContent||String(i);
@@ -398,12 +415,18 @@ function captureDrawerUi(){
   });
 }
 function restoreDrawerUi(){
-  const body=document.querySelector('.drawer-b');
-  if(body) body.scrollTop=drawerScrollTop;
   document.querySelectorAll('#dTools details.block').forEach((el,i)=>{
     const key=el.querySelector('summary span')?.textContent||String(i);
-    if(openToolKeys.size) el.open=openToolKeys.has(key);
+    // Only reopen blocks the user left open — never auto-expand new tools.
+    el.open=openToolKeys.has(key);
   });
+  const body=drawerBody();
+  if(!body) return;
+  if(drawerFollowBottom){
+    requestAnimationFrame(()=>scrollDrawerToBottom(true));
+  } else {
+    body.scrollTop=drawerScrollTop;
+  }
 }
 function fingerprintPayload(d){
   const subs=(d.subtasks||[]).map(s=>s.id+':'+s.status+':'+s.iteration+(s.result||'').length).join('|');
@@ -569,11 +592,12 @@ function renderTools(id){
     host.innerHTML='<div class="meta" style="color:var(--muted);padding:8px 2px">暂无模型回复或工具调用。成员开始运行后会实时出现在这里。</div>';
     return;
   }
-  items.forEach((item, idx)=>{
+  items.forEach((item)=>{
     const kind=String(item.kind||'');
     const details=document.createElement('details');
     details.className='block';
-    details.open = idx >= items.length-6;
+    // Keep Tools collapsed by default; user expands selectively.
+    details.open=false;
     if(kind==='assistant'){
       const body=[item.reasoning?`Reasoning:\n${item.reasoning}`:'', item.text||''].filter(Boolean).join('\n\n')||'(empty)';
       details.innerHTML=`<summary><span>Model</span><span class="pill running">assistant</span></summary><pre>${esc(body)}</pre>`;
@@ -679,6 +703,7 @@ function selectNode(id, opts){
   if(!preserve){
     document.getElementById('workspace').classList.remove('drawer-closed');
     document.getElementById('toggleDrawer').textContent='收起详情';
+    requestAnimationFrame(()=>scrollDrawerToBottom(false));
   }
 }
 function isSubSucceeded(s){ return /success/i.test(String(s?.status||'')); }
@@ -754,8 +779,17 @@ document.querySelectorAll('.drawer-tab').forEach(tab=>{
     tab.classList.add('active');
     const id=tab.dataset.tab;
     document.querySelectorAll('.pane').forEach(p=>{ p.hidden=p.dataset.pane!==id; });
+    if(id==='tools' || id==='timeline'){
+      requestAnimationFrame(()=>scrollDrawerToBottom(false));
+    }
   });
 });
+const drawerScrollHost=drawerBody();
+if(drawerScrollHost){
+  drawerScrollHost.addEventListener('scroll',()=>{
+    drawerFollowBottom=isDrawerNearBottom(drawerScrollHost);
+  },{passive:true});
+}
 renderNodes();
 const first=(data.subtasks||[]).find(s=>(s.iteration||1)>1) || (data.subtasks||[])[0] || {id:'leader'};
 selectNode(first.id||'leader');
