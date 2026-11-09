@@ -77,8 +77,12 @@ public sealed class TeamMemberRunExecutor(
         var rootSession = await storage.LoadSessionAsync(task.RootSessionId, cancellationToken)
             .ConfigureAwait(false);
 
-        var memberDir = taskStore.ResolveMemberDirectory(task.RootSessionId, task.TaskId, memberSessionId);
+        var memberDir = ResolveMemberWorkingDirectory(task, memberSessionId, isLeader);
         Directory.CreateDirectory(memberDir);
+        if (isLeader)
+        {
+            await TrySeedLeaderSessionFromLegacyAsync(task, memberDir, cancellationToken).ConfigureAwait(false);
+        }
 
         var sessionPath = Path.Combine(memberDir, "session.json");
         AgentSession session;
@@ -86,6 +90,11 @@ public sealed class TeamMemberRunExecutor(
         {
             session = await jsonFileStore.LoadAsync<AgentSession>(sessionPath, cancellationToken).ConfigureAwait(false)
                 ?? CreateMemberSession(task, memberSessionId, profile, rootSession);
+            // Keep session id stable when continuing a shared Leader transcript.
+            if (!string.Equals(session.Id, memberSessionId, StringComparison.Ordinal))
+            {
+                session = session with { Id = memberSessionId };
+            }
         }
         else
         {
@@ -141,16 +150,19 @@ public sealed class TeamMemberRunExecutor(
             loopOptions: new AgentLoopOptions { MaxModelToolRounds = maxRounds },
             workspaceRoot,
             ignorePatterns,
-            completeSystemPrompt: completePrompt);
+            completeSystemPrompt: completePrompt,
+            teamId: task.TeamId,
+            isLeader: isLeader);
 
+        // Leaders orchestrate only — strip skills / MCP / knowledge so they cannot do Worker work.
         var profileOptions = new AgentProfileTurnOptions(
             ProfileId: profile.Id,
             ModelNameOverride: profile.ModelNameOverride,
             MaxModelToolRounds: maxRounds,
-            SkillNames: profile.SkillNames,
-            McpServerNames: profile.McpServerNames,
+            SkillNames: isLeader ? Array.Empty<string>() : profile.SkillNames,
+            McpServerNames: isLeader ? Array.Empty<string>() : profile.McpServerNames,
             ToolAllowList: allowList,
-            KnowledgeModuleIds: profile.KnowledgeModuleIds,
+            KnowledgeModuleIds: isLeader ? Array.Empty<string>() : profile.KnowledgeModuleIds,
             IsLeader: isLeader,
             TeamTaskId: task.TaskId,
             RootSessionId: task.RootSessionId);
@@ -220,9 +232,31 @@ public sealed class TeamMemberRunExecutor(
 
             var parsed = TeamMemberResultParser.Parse(responseText);
 
+            // Leader handoff: success is decided by tool side effects in the orchestrator.
+            // needs_leader / blocked / missing ## Result after dispatch must not fail the task.
+            if (isLeader)
+            {
+                if (parsed.Status is TeamMemberResultStatus.NeedsLeader
+                    or TeamMemberResultStatus.Blocked
+                    or TeamMemberResultStatus.Completed
+                    or TeamMemberResultStatus.Invalid)
+                {
+                    return TeamMemberRunOutcome.Success(responseText, session);
+                }
+
+                // status=failed from Leader text — still return response; orchestrator keeps
+                // Queued / AwaitingHuman / FinalResult when present.
+                return new TeamMemberRunOutcome
+                {
+                    Ok = false,
+                    ResponseText = responseText,
+                    Error = $"status={parsed.Status}; {TeamWorkerHelpers.Truncate(parsed.FindingsSummary ?? responseText, 500)}"
+                };
+            }
+
             // Workers often end on a mid-turn progress note after tools succeed. Nudge once for a
             // structured ## Result instead of counting that as a hard failure / burning a redispatch.
-            if (parsed.Status == TeamMemberResultStatus.Invalid && !isLeader)
+            if (parsed.Status == TeamMemberResultStatus.Invalid)
             {
                 _logger.Warning(
                     "Worker result format invalid; nudging once for ## Result task={TaskId} member={MemberId} preview={Preview}",
@@ -332,6 +366,72 @@ public sealed class TeamMemberRunExecutor(
             cancellationToken).ConfigureAwait(false);
     }
 
+    private string ResolveMemberWorkingDirectory(TeamTask task, string memberSessionId, bool isLeader)
+    {
+        if (isLeader && !string.IsNullOrWhiteSpace(task.TeamId))
+        {
+            return taskStore.ResolveLeaderDirectory(task.RootSessionId, task.TeamId);
+        }
+
+        return taskStore.ResolveMemberDirectory(task.RootSessionId, task.TaskId, memberSessionId);
+    }
+
+    /// <summary>
+    /// One-time migration: copy the newest per-task Leader transcript into the stable Leader dir
+    /// so upgrading mid-Chat does not drop prior Teams turns.
+    /// </summary>
+    private async Task TrySeedLeaderSessionFromLegacyAsync(
+        TeamTask task,
+        string leaderDir,
+        CancellationToken cancellationToken)
+    {
+        var sessionPath = Path.Combine(leaderDir, "session.json");
+        if (File.Exists(sessionPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var prior = await taskStore.ListForRootSessionAsync(task.RootSessionId, cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var old in prior
+                         .Where(t =>
+                             string.Equals(t.TeamId, task.TeamId, StringComparison.OrdinalIgnoreCase)
+                             && !string.IsNullOrWhiteSpace(t.LeaderSessionId)
+                             && !string.Equals(t.TaskId, task.TaskId, StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(t => t.UpdatedAt))
+            {
+                var legacyDir = taskStore.ResolveMemberDirectory(
+                    old.RootSessionId,
+                    old.TaskId,
+                    old.LeaderSessionId!);
+                var legacySession = Path.Combine(legacyDir, "session.json");
+                if (!File.Exists(legacySession))
+                {
+                    continue;
+                }
+
+                Directory.CreateDirectory(leaderDir);
+                foreach (var name in new[] { "session.json", "conversation.jsonl" })
+                {
+                    var src = Path.Combine(legacyDir, name);
+                    var dst = Path.Combine(leaderDir, name);
+                    if (File.Exists(src) && !File.Exists(dst))
+                    {
+                        File.Copy(src, dst, overwrite: false);
+                    }
+                }
+
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("Failed seeding Leader session from legacy path: {Error}", ex.Message);
+        }
+    }
+
     private AgentSession CreateMemberSession(
         TeamTask task,
         string memberSessionId,
@@ -411,21 +511,26 @@ public sealed class TeamMemberRunExecutor(
         if (isLeader)
         {
             sb.AppendLine(
-                "You are the Team Leader. Use team_* to list members, create subtasks, dispatch, collect, and submit. "
-                + "After team_dispatch, STOP — do not poll with team_progress/team_await; the outer loop re-invokes you when workers finish. "
-                + "When a verification worker fails, redispatch the implementer (or create a fix subtask) with findings, then re-verify. "
-                + "There is no per-worker iteration cap; stop only when global repair rounds are exhausted, then ask_user or submit partial/failed. "
+                "You are the Team Leader. Workers are a pool — do NOT dispatch every Worker up front. "
+                + "Pick assignees from team_list_members based on the goal and prior results; often start with one Worker. "
+                + "Use team_* to create/dispatch only what you need now, then STOP after team_dispatch "
+                + "(outer loop re-invokes you when workers finish — do not poll with team_progress/team_await). "
+                + "After team_dispatch you may end without a ## Result, or write status: needs_leader. "
+                + "On re-invoke: collect results, then schedule the next Worker, redispatch a failed one, ask_user, or submit. "
+                + "When verification fails, redispatch the implementer (or a fix subtask) with findings, then re-verify. "
+                + "No per-worker iteration cap; when global repair rounds are exhausted, ask_user or submit with disposition=partial|failed. "
                 + "Use team_progress / team_memory for shared state.");
-        }
-        else
-        {
-            sb.AppendLine(
-                "You are a Worker with an independent context. Do not call team_dispatch, team_submit_result, team_create_subtask, or sessions_*. "
-                + "You may call team_progress and team_memory. "
-                + "Your FINAL assistant message must be the ## Result block below (not a progress note like \"build green, next…\"). "
-                + "Do not end with a preamble-only plan.");
+            sb.AppendLine();
+            sb.AppendLine("Optional Leader ## Result (not required after dispatch):");
+            sb.AppendLine("status: needs_leader | completed | failed | blocked");
+            return sb.ToString();
         }
 
+        sb.AppendLine(
+            "You are a Worker with an independent context. Do not call team_dispatch, team_submit_result, team_create_subtask, or sessions_*. "
+            + "You may call team_progress and team_memory. "
+            + "Your FINAL assistant message must be the ## Result block below (not a progress note like \"build green, next…\"). "
+            + "A status: line is REQUIRED. Do not end with a preamble-only plan.");
         sb.AppendLine();
         sb.AppendLine("## Result");
         sb.AppendLine("status: completed | failed | blocked | needs_leader");

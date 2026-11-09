@@ -80,8 +80,8 @@ public static class TeamMemberResultParser
         var verdict = verdictMatch.Success ? verdictMatch.Groups[1].Value.Trim().ToLowerInvariant() : null;
         var fixTarget = fixTargetMatch.Success ? fixTargetMatch.Groups[1].Value.Trim() : null;
         var findings = ExtractFindings(text);
-        var hasResultHeading = text.Contains("## Result", StringComparison.OrdinalIgnoreCase);
 
+        // Explicit verdict=fail wins even without a status line (verification workers).
         if (string.Equals(verdict, "fail", StringComparison.OrdinalIgnoreCase))
         {
             return new TeamMemberParsedResult(
@@ -92,7 +92,8 @@ public static class TeamMemberResultParser
                 findings);
         }
 
-        if (string.Equals(verdict, "pass", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(verdict, "pass", StringComparison.OrdinalIgnoreCase)
+            && !statusMatch.Success)
         {
             return new TeamMemberParsedResult(
                 TeamMemberResultStatus.Completed,
@@ -102,26 +103,12 @@ public static class TeamMemberResultParser
                 findings);
         }
 
+        // Workers must emit an explicit status: line — no length / ## Result heuristics.
         if (!statusMatch.Success)
         {
-            // Compat: ## Result heading, findings, or a long substantive write-up counts as done.
-            // Also accept common Chinese completion markers that models emit without the English enum.
-            if (hasResultHeading
-                || findings is not null
-                || text.Length >= 320
-                || LooksLikeCompletedProse(text))
-            {
-                return new TeamMemberParsedResult(
-                    TeamMemberResultStatus.Completed,
-                    Verdict: null,
-                    FixTargetSubtaskId: fixTarget,
-                    RawText: text,
-                    FindingsSummary: findings);
-            }
-
             return new TeamMemberParsedResult(
                 TeamMemberResultStatus.Invalid,
-                Verdict: null,
+                Verdict: verdict,
                 FixTargetSubtaskId: fixTarget,
                 RawText: text,
                 FindingsSummary: findings);
@@ -155,37 +142,6 @@ public static class TeamMemberResultParser
         return PreambleOnly.Any(p => lower.StartsWith(p, StringComparison.Ordinal) || lower.Contains(p, StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// Heuristic for models that summarize completion without the English status enum
-    /// (still reject short mid-turn "build green, next…" chatter).
-    /// </summary>
-    private static bool LooksLikeCompletedProse(string text)
-    {
-        var compact = text.ReplaceLineEndings(" ").Trim();
-        if (compact.Length < 180)
-        {
-            return false;
-        }
-
-        var lower = compact.ToLowerInvariant();
-        if (lower.Contains("moving to", StringComparison.Ordinal)
-            || lower.Contains("next i'll", StringComparison.Ordinal)
-            || lower.Contains("next i will", StringComparison.Ordinal)
-            || lower.Contains("让我", StringComparison.Ordinal)
-            || lower.Contains("接下来", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        return lower.Contains("status: completed", StringComparison.Ordinal)
-               || lower.Contains("status：completed", StringComparison.Ordinal)
-               || lower.Contains("已完成", StringComparison.Ordinal)
-               || lower.Contains("全部完成", StringComparison.Ordinal)
-               || lower.Contains("配方已应用", StringComparison.Ordinal)
-               || (lower.Contains("applied", StringComparison.Ordinal)
-                   && lower.Contains("changed_files", StringComparison.Ordinal));
-    }
-
     private static string? ExtractFindings(string text)
     {
         const string marker = "findings:";
@@ -201,11 +157,10 @@ public static class TeamMemberResultParser
             return null;
         }
 
-        return TeamWorkerHelpersTruncate(slice, 1500);
+        return Truncate(slice, 1500);
     }
 
-    // Local truncate to avoid Infrastructure dependency from Core.
-    private static string TeamWorkerHelpersTruncate(string text, int max)
+    private static string Truncate(string text, int max)
     {
         text = text.ReplaceLineEndings(" ").Trim();
         return text.Length <= max ? text : text[..max] + "…";

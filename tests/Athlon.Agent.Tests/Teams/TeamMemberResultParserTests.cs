@@ -112,7 +112,7 @@ public sealed class TeamMemberResultParserTests
     }
 
     [Fact]
-    public void Parse_LongCompletedProseWithoutEnglishStatus_Succeeds()
+    public void Parse_LongCompletedProseWithoutStatus_IsInvalid()
     {
         var body = string.Concat(
             "本轮配方已应用完毕，已完成两处 ExtractClass。",
@@ -120,6 +120,19 @@ public sealed class TeamMemberResultParserTests
             new string('x', 120),
             " applied: R1-01, R1-02。验收：编译 0 errors。");
         var parsed = TeamMemberResultParser.Parse(body);
-        Assert.Equal(TeamMemberResultStatus.Completed, parsed.Status);
+        Assert.Equal(TeamMemberResultStatus.Invalid, parsed.Status);
+    }
+
+    [Fact]
+    public void Parse_ResultHeadingWithoutStatus_IsInvalid()
+    {
+        var parsed = TeamMemberResultParser.Parse("""
+            ## Result
+            accomplished:
+            - did a lot of work without a status line
+            findings:
+            - none
+            """ + new string('y', 200));
+        Assert.Equal(TeamMemberResultStatus.Invalid, parsed.Status);
     }
 }

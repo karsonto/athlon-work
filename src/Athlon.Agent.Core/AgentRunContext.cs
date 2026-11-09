@@ -42,6 +42,12 @@ public sealed record AgentRunContext
     /// <summary>Set for <see cref="AgentRunKind.TeamMember"/> runs.</summary>
     public string? TeamTaskId { get; init; }
 
+    /// <summary>Team definition id; used with <see cref="IsTeamLeader"/> for stable Leader dirs.</summary>
+    public string? TeamId { get; init; }
+
+    /// <summary>When true, session files live under teams/_leaders/{TeamId}.</summary>
+    public bool IsTeamLeader { get; init; }
+
     /// <summary>Set for <see cref="AgentRunKind.TeamMember"/> runs.</summary>
     public string? TeamProfileId { get; init; }
 
@@ -110,7 +116,9 @@ public sealed record AgentRunContext
         AgentLoopOptions? loopOptions,
         string? workspaceRoot,
         IReadOnlyList<string> ignorePatterns,
-        string? completeSystemPrompt = null) =>
+        string? completeSystemPrompt = null,
+        string? teamId = null,
+        bool isLeader = false) =>
         new()
         {
             SessionId = memberSessionId,
@@ -130,11 +138,23 @@ public sealed record AgentRunContext
             Kind = AgentRunKind.TeamMember,
             ComputerUseActive = ComputerUseActive,
             TeamTaskId = teamTaskId,
+            TeamId = teamId,
+            IsTeamLeader = isLeader,
             TeamProfileId = profileId
         };
 
     public string ResolveSessionDirectory(string sessionsPath, string sessionId)
     {
+        if (Kind == AgentRunKind.TeamMember
+            && ParentSessionId is not null
+            && IsTeamLeader
+            && !string.IsNullOrWhiteSpace(TeamId)
+            && string.Equals(sessionId, SessionId, StringComparison.Ordinal))
+        {
+            var safeTeam = SanitizePathSegment(TeamId);
+            return Path.Combine(sessionsPath, ParentSessionId, "teams", "_leaders", safeTeam);
+        }
+
         if (Kind == AgentRunKind.TeamMember
             && ParentSessionId is not null
             && TeamTaskId is not null
@@ -164,14 +184,38 @@ public sealed record AgentRunContext
         var parts = sessionJsonPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         for (var i = 0; i < parts.Length - 1; i++)
         {
-            if (string.Equals(parts[i], "teams", StringComparison.OrdinalIgnoreCase)
-                && i + 2 < parts.Length
-                && string.Equals(parts[i + 2], "members", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(parts[i], "teams", StringComparison.OrdinalIgnoreCase)
+                || i + 2 >= parts.Length)
+            {
+                continue;
+            }
+
+            if (string.Equals(parts[i + 2], "members", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (string.Equals(parts[i + 1], "_leaders", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static string SanitizePathSegment(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "unknown";
+        }
+
+        foreach (var c in Path.GetInvalidFileNameChars())
+        {
+            value = value.Replace(c, '_');
+        }
+
+        return value.Trim();
     }
 }

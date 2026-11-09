@@ -105,6 +105,13 @@ public partial class MainShellViewModel
             return true;
         }
 
+        // Drop any pending ask for this session so a new goal cannot race with ResumeTeamAsk.
+        if (TeamsPageVm.TryGetPendingAsk(_displayedSessionId, out _))
+        {
+            TeamsPageVm.ClearPendingAsk(_displayedSessionId);
+            TeamsPageVm.CancelActiveTeamRun(_displayedSessionId);
+        }
+
         await EnsureDisplayedSessionReadyAsync().ConfigureAwait(true);
         // Capture session + UI so a mid-run switch cannot write the summary into another chat.
         var captureSessionId = _displayedSessionId;

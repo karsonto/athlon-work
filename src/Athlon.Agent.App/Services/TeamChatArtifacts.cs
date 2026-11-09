@@ -22,7 +22,7 @@ internal static class TeamChatArtifacts
         var all = new List<ModifiedFileViewModel>();
         if (!string.IsNullOrWhiteSpace(task.LeaderSessionId))
         {
-            all.AddRange(CollectMemberFiles(task, taskStore, task.LeaderSessionId));
+            all.AddRange(CollectMemberFiles(task, taskStore, task.LeaderSessionId, isLeader: true));
         }
 
         foreach (var sub in task.SubTasks)
@@ -32,7 +32,7 @@ internal static class TeamChatArtifacts
                 continue;
             }
 
-            all.AddRange(CollectMemberFiles(task, taskStore, sub.MemberSessionId));
+            all.AddRange(CollectMemberFiles(task, taskStore, sub.MemberSessionId, isLeader: false));
         }
 
         return SessionModifiedFilesTracker.MergeByPath(all);
@@ -41,9 +41,11 @@ internal static class TeamChatArtifacts
     public static IReadOnlyList<ModifiedFileViewModel> CollectMemberFiles(
         TeamTask task,
         ITeamTaskStore taskStore,
-        string memberSessionId)
+        string memberSessionId,
+        bool isLeader = false)
     {
-        var messages = TeamTraceTranscriptBuilder.ReadMemberMessages(task, taskStore, memberSessionId);
+        var messages = TeamTraceTranscriptBuilder.ReadMemberMessages(
+            task, taskStore, memberSessionId, isLeader);
         return messages.Count == 0
             ? Array.Empty<ModifiedFileViewModel>()
             : SessionModifiedFilesTracker.CollectTurnFiles(messages);
@@ -65,6 +67,12 @@ internal static class TeamChatArtifacts
         var body = !string.IsNullOrWhiteSpace(step.ResponseText)
             ? step.ResponseText.Trim()
             : (!string.IsNullOrWhiteSpace(step.Error) ? step.Error!.Trim() : "(empty)");
+
+        const int maxBodyChars = 400;
+        if (body.Length > maxBodyChars)
+        {
+            body = body[..maxBodyChars].TrimEnd() + "…\n\n_(full output in Teams Trace)_";
+        }
 
         return $"### Teams · {title} · {status}{iter}\n\n{body}";
     }

@@ -11,6 +11,20 @@ public sealed class FileTeamTaskStore(IAppPathProvider paths, IJsonFileStore jso
     public string ResolveMemberDirectory(string rootSessionId, string taskId, string memberSessionId) =>
         Path.Combine(ResolveTaskDirectory(rootSessionId, taskId), "members", memberSessionId);
 
+    public string ResolveLeaderDirectory(string rootSessionId, string teamId) =>
+        Path.Combine(paths.SessionsPath, rootSessionId, "teams", "_leaders", SanitizePathSegment(teamId));
+
+    public string StableLeaderSessionId(string teamId)
+    {
+        var safe = SanitizePathSegment(teamId);
+        if (safe.Length > 40)
+        {
+            safe = safe[..40];
+        }
+
+        return "ldr_" + safe;
+    }
+
     public async Task<TeamTask?> GetAsync(string rootSessionId, string taskId, CancellationToken cancellationToken = default)
     {
         var path = GetTaskPath(rootSessionId, taskId);
@@ -65,6 +79,12 @@ public sealed class FileTeamTaskStore(IAppPathProvider paths, IJsonFileStore jso
         var results = new List<TeamTask>();
         foreach (var dir in Directory.EnumerateDirectories(root))
         {
+            var name = Path.GetFileName(dir);
+            if (string.Equals(name, "_leaders", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var path = Path.Combine(dir, "task.json");
             if (!File.Exists(path))
             {
@@ -83,4 +103,19 @@ public sealed class FileTeamTaskStore(IAppPathProvider paths, IJsonFileStore jso
 
     private string GetTaskPath(string rootSessionId, string taskId) =>
         Path.Combine(ResolveTaskDirectory(rootSessionId, taskId), "task.json");
+
+    private static string SanitizePathSegment(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "unknown";
+        }
+
+        foreach (var c in Path.GetInvalidFileNameChars())
+        {
+            value = value.Replace(c, '_');
+        }
+
+        return value.Trim();
+    }
 }

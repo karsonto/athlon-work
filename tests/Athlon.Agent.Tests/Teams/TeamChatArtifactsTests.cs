@@ -53,7 +53,7 @@ public sealed class TeamChatArtifactsTests : IDisposable
     }
 
     [Fact]
-    public void FormatStepMarkdown_IncludesFullBody()
+    public void FormatStepMarkdown_IncludesBody()
     {
         var md = TeamChatArtifacts.FormatStepMarkdown(new TeamRunProgress
         {
@@ -68,6 +68,23 @@ public sealed class TeamChatArtifactsTests : IDisposable
 
         Assert.Contains("### Teams · Recipe Runner · Succeeded · iter 2", md, StringComparison.Ordinal);
         Assert.Contains("full body here", md, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatStepMarkdown_TruncatesLongBody()
+    {
+        var md = TeamChatArtifacts.FormatStepMarkdown(new TeamRunProgress
+        {
+            Kind = TeamRunProgressKind.LeaderTurnCompleted,
+            RootSessionId = "s",
+            TaskId = "t",
+            Title = "Leader",
+            StatusLabel = "Running",
+            ResponseText = new string('x', 800)
+        });
+
+        Assert.Contains("Teams Trace", md, StringComparison.Ordinal);
+        Assert.True(md.Length < 800);
     }
 
     [Fact]

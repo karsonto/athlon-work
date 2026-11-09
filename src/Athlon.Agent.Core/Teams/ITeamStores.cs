@@ -33,6 +33,15 @@ public interface ITeamTaskStore
     string ResolveTaskDirectory(string rootSessionId, string taskId);
 
     string ResolveMemberDirectory(string rootSessionId, string taskId, string memberSessionId);
+
+    /// <summary>
+    /// Stable Leader transcript directory for a Chat root session + Team
+    /// (survives multiple Team Tasks so multi-turn Teams keep one Leader conversation).
+    /// </summary>
+    string ResolveLeaderDirectory(string rootSessionId, string teamId);
+
+    /// <summary>Deterministic Leader session id for <paramref name="teamId"/> within a root Chat session.</summary>
+    string StableLeaderSessionId(string teamId);
 }
 
 public interface ITeamTraceStore

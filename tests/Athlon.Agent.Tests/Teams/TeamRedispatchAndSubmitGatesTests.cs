@@ -38,7 +38,7 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
     }
 
     [Fact]
-    public async Task Redispatch_SucceededWithoutRepairReason_Denied()
+    public async Task Redispatch_SucceededWithoutConfirmRepair_Denied()
     {
         await SeedAsync(TeamSubTaskStatus.Succeeded);
         var tool = new TeamRedispatchTool(_settings, _tasks, _profiles, _traces);
@@ -55,7 +55,27 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
             default);
         Assert.False(result.Succeeded);
         var text = $"{result.Summary}\n{result.Error}\n{result.Content}";
-        Assert.Contains("verification", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("confirm_repair", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Redispatch_SucceededWithConfirmRepair_Allowed()
+    {
+        await SeedAsync(TeamSubTaskStatus.Succeeded);
+        var tool = new TeamRedispatchTool(_settings, _tasks, _profiles, _traces);
+        using var scope = TeamTaskExecutionScope.Enter((await _tasks.GetAsync("sess", "tm_1"))!);
+        var result = await tool.InvokeAsync(
+            new ToolInvocation(
+                "team_redispatch",
+                ToolCallArguments.FromStrings(new Dictionary<string, string>
+                {
+                    ["subtask_id"] = "sub_a",
+                    ["reason"] = "verification failed",
+                    ["handoff"] = "fix findings",
+                    ["confirm_repair"] = "true"
+                })),
+            default);
+        Assert.True(result.Succeeded, result.Error ?? result.Content ?? result.Summary);
     }
 
     [Fact]
@@ -176,7 +196,8 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                 "team_submit_result",
                 ToolCallArguments.FromStrings(new Dictionary<string, string>
                 {
-                    ["result"] = "all done"
+                    ["result"] = "all done",
+                    ["disposition"] = "completed"
                 })),
             default);
         Assert.False(result.Succeeded);
@@ -185,7 +206,7 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
     }
 
     [Fact]
-    public async Task Submit_WithFailedWithoutPartialDeclaration_Denied()
+    public async Task Submit_WithFailedAndCompletedDisposition_Denied()
     {
         await SeedAsync(TeamSubTaskStatus.Failed);
         var tool = new TeamSubmitResultTool(_settings, _tasks, _traces);
@@ -195,12 +216,34 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                 "team_submit_result",
                 ToolCallArguments.FromStrings(new Dictionary<string, string>
                 {
-                    ["result"] = "here is the release notes"
+                    ["result"] = "here is the release notes",
+                    ["disposition"] = "completed"
                 })),
             default);
         Assert.False(result.Succeeded);
         var text = $"{result.Summary}\n{result.Error}\n{result.Content}";
         Assert.Contains("Unresolved failures", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Submit_WithFailedAndPartialDisposition_Allowed()
+    {
+        await SeedAsync(TeamSubTaskStatus.Failed);
+        var tool = new TeamSubmitResultTool(_settings, _tasks, _traces);
+        using var scope = TeamTaskExecutionScope.Enter((await _tasks.GetAsync("sess", "tm_1"))!);
+        var result = await tool.InvokeAsync(
+            new ToolInvocation(
+                "team_submit_result",
+                ToolCallArguments.FromStrings(new Dictionary<string, string>
+                {
+                    ["result"] = "partial deliverable",
+                    ["disposition"] = "partial"
+                })),
+            default);
+        Assert.True(result.Succeeded, result.Error ?? result.Content ?? result.Summary);
+        var task = await _tasks.GetAsync("sess", "tm_1");
+        Assert.Equal(TeamTaskStatus.Succeeded, task!.Status);
+        Assert.Equal("partial deliverable", task.FinalResult);
     }
 
     private async Task SeedAsync(TeamSubTaskStatus status, int repairRoundsUsed = 0)

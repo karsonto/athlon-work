@@ -26,7 +26,7 @@ internal static class TeamTraceTranscriptBuilder
 
         if (!string.IsNullOrWhiteSpace(task.LeaderSessionId))
         {
-            map["leader"] = LoadMemberActivity(task, taskStore, task.LeaderSessionId);
+            map["leader"] = LoadMemberActivity(task, taskStore, task.LeaderSessionId, isLeader: true);
             map["agg"] = map["leader"];
             map["submit"] = map["leader"];
         }
@@ -39,7 +39,7 @@ internal static class TeamTraceTranscriptBuilder
                 continue;
             }
 
-            map[sub.Id] = LoadMemberActivity(task, taskStore, sub.MemberSessionId);
+            map[sub.Id] = LoadMemberActivity(task, taskStore, sub.MemberSessionId, isLeader: false);
         }
 
         return map;
@@ -48,12 +48,13 @@ internal static class TeamTraceTranscriptBuilder
     private static IReadOnlyList<object> LoadMemberActivity(
         TeamTask task,
         ITeamTaskStore taskStore,
-        string memberSessionId)
+        string memberSessionId,
+        bool isLeader)
     {
         try
         {
-            var dir = taskStore.ResolveMemberDirectory(task.RootSessionId, task.TaskId, memberSessionId);
-            var messages = ReadMessages(dir);
+            var dir = ResolveActivityDirectory(task, taskStore, memberSessionId, isLeader);
+            var messages = FilterForTaskWindow(ReadMessages(dir), task, isLeader);
             if (messages.Count == 0)
             {
                 return Array.Empty<object>();
@@ -76,7 +77,8 @@ internal static class TeamTraceTranscriptBuilder
     public static IReadOnlyList<ChatMessage> ReadMemberMessages(
         TeamTask task,
         ITeamTaskStore taskStore,
-        string memberSessionId)
+        string memberSessionId,
+        bool isLeader = false)
     {
         if (string.IsNullOrWhiteSpace(memberSessionId))
         {
@@ -85,13 +87,52 @@ internal static class TeamTraceTranscriptBuilder
 
         try
         {
-            var dir = taskStore.ResolveMemberDirectory(task.RootSessionId, task.TaskId, memberSessionId);
-            return ReadMessages(dir);
+            var dir = ResolveActivityDirectory(task, taskStore, memberSessionId, isLeader);
+            return FilterForTaskWindow(ReadMessages(dir), task, isLeader);
         }
         catch
         {
             return Array.Empty<ChatMessage>();
         }
+    }
+
+    /// <summary>
+    /// Shared Leader transcripts span multiple Team Tasks; keep only this task's window.
+    /// </summary>
+    private static List<ChatMessage> FilterForTaskWindow(
+        IReadOnlyList<ChatMessage> messages,
+        TeamTask task,
+        bool isLeader)
+    {
+        if (!isLeader || messages.Count == 0)
+        {
+            return messages as List<ChatMessage> ?? messages.ToList();
+        }
+
+        var start = task.CreatedAt == default
+            ? DateTimeOffset.MinValue
+            : task.CreatedAt.AddSeconds(-2);
+        return messages.Where(m => m.CreatedAt >= start).ToList();
+    }
+
+    private static string ResolveActivityDirectory(
+        TeamTask task,
+        ITeamTaskStore taskStore,
+        string memberSessionId,
+        bool isLeader)
+    {
+        if (isLeader && !string.IsNullOrWhiteSpace(task.TeamId))
+        {
+            var leaderDir = taskStore.ResolveLeaderDirectory(task.RootSessionId, task.TeamId);
+            if (Directory.Exists(leaderDir)
+                && (File.Exists(Path.Combine(leaderDir, "session.json"))
+                    || File.Exists(Path.Combine(leaderDir, "conversation.jsonl"))))
+            {
+                return leaderDir;
+            }
+        }
+
+        return taskStore.ResolveMemberDirectory(task.RootSessionId, task.TaskId, memberSessionId);
     }
 
     private static List<ChatMessage> ReadMessages(string memberDir)
@@ -223,6 +264,7 @@ internal static class TeamTraceTranscriptBuilder
         var sb = new System.Text.StringBuilder(256);
         sb.Append(task.TaskId).Append('|')
             .Append(task.Status).Append('|')
+            .Append(task.CreatedAt.UtcTicks).Append('|')
             .Append(task.UpdatedAt.UtcTicks).Append('|')
             .Append(events.Count).Append('|')
             .Append(task.SubTasks.Count);
@@ -240,8 +282,9 @@ internal static class TeamTraceTranscriptBuilder
 
         if (!string.IsNullOrWhiteSpace(task.LeaderSessionId))
         {
-            AppendMemberStamp(sb, taskStore.ResolveMemberDirectory(
-                task.RootSessionId, task.TaskId, task.LeaderSessionId));
+            AppendMemberStamp(
+                sb,
+                ResolveActivityDirectory(task, taskStore, task.LeaderSessionId, isLeader: true));
         }
 
         return sb.ToString();

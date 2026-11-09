@@ -40,6 +40,76 @@ public sealed class TeamOuterLoopTests : IDisposable
     }
 
     [Fact]
+    public async Task BeginAsync_ReusesStableLeaderSessionId_AcrossTasksInSameChatSession()
+    {
+        await SeedTeamAsync(maxParallel: 2);
+        var orch = CreateOrchestrator(new ScriptedMemberExecutor());
+        var first = await orch.BeginAsync(new TeamTaskStartRequest
+        {
+            TeamId = "t1",
+            RootSessionId = "sess-shared",
+            Goal = "first wave"
+        });
+        var second = await orch.BeginAsync(new TeamTaskStartRequest
+        {
+            TeamId = "t1",
+            RootSessionId = "sess-shared",
+            Goal = "second wave"
+        });
+
+        Assert.True(first.Ok);
+        Assert.True(second.Ok);
+        Assert.NotEqual(first.Task.TaskId, second.Task.TaskId);
+        Assert.Equal(first.Task.LeaderSessionId, second.Task.LeaderSessionId);
+        Assert.Equal(_tasks.StableLeaderSessionId("t1"), first.Task.LeaderSessionId);
+        Assert.Equal(
+            _tasks.ResolveLeaderDirectory("sess-shared", "t1"),
+            _tasks.ResolveLeaderDirectory("sess-shared", "t1"));
+    }
+
+    [Fact]
+    public async Task OuterLoop_LeaderNeedsLeaderText_DoesNotFailWhenQueued()
+    {
+        await SeedTeamAsync(maxParallel: 2);
+        var executor = new ScriptedMemberExecutor();
+        executor.OnLeader = (task, turn) =>
+        {
+            if (turn == 1)
+            {
+                task.SubTasks.Add(MakeQueued("sub_a", "worker"));
+                // Simulate parse non-success after dispatch — side effects must win.
+                return new TeamMemberRunOutcome
+                {
+                    Ok = false,
+                    ResponseText = "## Result\nstatus: needs_leader",
+                    Error = "status=NeedsLeader"
+                };
+            }
+
+            task.FinalResult = "done after handoff";
+            task.Status = TeamTaskStatus.Succeeded;
+            task.CompletedAt = DateTimeOffset.UtcNow;
+            return TeamMemberRunOutcome.Success("submitted", AgentSession.Create("ldr"));
+        };
+        executor.OnWorker = (_, _) =>
+            Task.FromResult(TeamMemberRunOutcome.Success("worker-ok", AgentSession.Create("mbr")));
+
+        var orch = CreateOrchestrator(executor);
+        var began = await orch.BeginAsync(new TeamTaskStartRequest
+        {
+            TeamId = "t1",
+            RootSessionId = "sess-needs-leader",
+            Goal = "ship it"
+        });
+        Assert.True(began.Ok);
+
+        var completed = await orch.RunToCompletionAsync(began.Task.RootSessionId, began.Task.TaskId);
+        Assert.Equal(TeamTaskStatus.Succeeded, completed.Status);
+        Assert.Equal(1, executor.WorkerStarts);
+        Assert.True(executor.LeaderTurns >= 2);
+    }
+
+    [Fact]
     public async Task OuterLoop_RunsQueuedWorkersThenLeaderSubmits()
     {
         await SeedTeamAsync(maxParallel: 2);
@@ -420,6 +490,7 @@ public sealed class TeamOuterLoopTests : IDisposable
             _traces,
             new FileTeamMemoryStore(_tasks),
             executor,
+            new NoOpStorage(),
             new NoOpLogger());
 
     private async Task SeedTeamAsync(int maxParallel)

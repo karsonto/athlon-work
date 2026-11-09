@@ -21,10 +21,19 @@ public sealed class TeamsSettings
     public int MaxModelToolRounds { get; set; } = 24;
 
     /// <summary>
-    /// Silent global safety valve: max Leader-driven repair/redispatch waves per task.
+    /// Silent global safety valve: max Leader-driven create/redispatch scheduling waves per task.
     /// Not exposed in Teams UI. When reached, Leader must ask_user or submit partial/failed.
     /// </summary>
     public int MaxRepairRounds { get; set; } = 10;
+
+    /// <summary>Silent cap on Leader outer-loop turns per Team Task (not exposed in UI).</summary>
+    public int MaxLeaderTurnsPerTask { get; set; } = 30;
+
+    /// <summary>Per-Worker wall-clock timeout in seconds (silent safety valve).</summary>
+    public int WorkerRunTimeoutSeconds { get; set; } = 900;
+
+    /// <summary>Max empty-stop nudge Leader turns before Incomplete Failed.</summary>
+    public int MaxEmptyStopNudges { get; set; } = 3;
 
     /// <summary>When true, orchestrator writes subtask result summaries into team memory.</summary>
     public bool AutoWriteTeamMemory { get; set; } = true;

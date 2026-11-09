@@ -36,4 +36,35 @@ public sealed class AgentRunContextTeamMemberTests
             Path.Combine(Path.GetTempPath(), "sessions", "parent-1", "teams", "tm_abc", "members", "mbr_1"),
             dir);
     }
+
+    [Fact]
+    public void CreateTeamMember_Leader_UsesStableLeadersDirectory()
+    {
+        var root = AgentRunContext.CreateRoot(
+            AgentSession.Create("parent") with { Id = "parent-1" },
+            "run-root",
+            new NoOpToolRouter(),
+            PromptTestHelpers.CreateStaticOrchestrator(),
+            WorkspaceIgnoreDefaults.BuiltIn);
+
+        var leader = root.CreateTeamMember(
+            "ldr_t1",
+            "tm_abc",
+            "profile-leader",
+            new NoOpToolRouter(),
+            PromptTestHelpers.CreateStaticOrchestrator(),
+            "Leader",
+            new AgentLoopOptions { MaxModelToolRounds = 8 },
+            workspaceRoot: null,
+            ignorePatterns: WorkspaceIgnoreDefaults.BuiltIn,
+            teamId: "t1",
+            isLeader: true);
+
+        Assert.True(leader.IsTeamLeader);
+        Assert.Equal("t1", leader.TeamId);
+        var dir = leader.ResolveSessionDirectory(Path.Combine(Path.GetTempPath(), "sessions"), "ldr_t1");
+        Assert.Equal(
+            Path.Combine(Path.GetTempPath(), "sessions", "parent-1", "teams", "_leaders", "t1"),
+            dir);
+    }
 }

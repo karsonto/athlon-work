@@ -12,6 +12,7 @@ public sealed class TeamTaskOrchestrator(
     ITeamTraceStore traceStore,
     ITeamMemoryStore memoryStore,
     ITeamMemberRunExecutor memberExecutor,
+    IFileStorageService storage,
     IAppLogger logger) : ITeamTaskOrchestrator
 {
     private readonly IAppLogger _logger = logger.ForContext("TeamTaskOrchestrator");
@@ -45,7 +46,8 @@ public sealed class TeamTaskOrchestrator(
             Goal = request.Goal.Trim(),
             Status = TeamTaskStatus.Running,
             LeaderProfileId = leader.Id,
-            LeaderSessionId = "ldr_" + IdGen.NewId()[..10],
+            // Stable across Team Tasks in the same Chat session so multi-turn Teams keep one Leader thread.
+            LeaderSessionId = taskStore.StableLeaderSessionId(team.Id),
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -122,14 +124,17 @@ public sealed class TeamTaskOrchestrator(
 
             await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
             leaderKickoff = string.IsNullOrWhiteSpace(humanAnswer)
-                ? BuildLeaderKickoff(task)
-                : BuildLeaderResume(task, humanAnswer!);
+                ? await BuildLeaderKickoffAsync(task, cancellationToken).ConfigureAwait(false)
+                : await BuildLeaderResumeAsync(task, humanAnswer!, cancellationToken).ConfigureAwait(false);
         }
 
         var inFlight = new Dictionary<string, Task<WorkerRunResult>>(StringComparer.OrdinalIgnoreCase);
         var needsLeader = true;
         var useInitialKickoff = true;
-        var emptyStopNudgeUsed = false;
+        var emptyStopNudgesUsed = 0;
+        var leaderTurns = 0;
+        var maxLeaderTurns = Math.Max(1, settings.Teams.MaxLeaderTurnsPerTask);
+        var maxEmptyNudges = Math.Max(1, settings.Teams.MaxEmptyStopNudges);
 
         try
         {
@@ -177,10 +182,9 @@ public sealed class TeamTaskOrchestrator(
                 // Phase 2: wait for any in-flight worker (no lock held).
                 if (inFlight.Count > 0)
                 {
-                    var finished = await Task.WhenAny(inFlight.Values).ConfigureAwait(false);
-                    var result = await finished.ConfigureAwait(false);
-                    inFlight.Remove(result.SubTaskId);
-                    await ApplyWorkerResultAsync(rootSessionId, taskId, result, progress).ConfigureAwait(false);
+                    var finished = await WaitForAnyWorkerAsync(inFlight.Values, cancellationToken).ConfigureAwait(false);
+                    inFlight.Remove(finished.SubTaskId);
+                    await ApplyWorkerResultAsync(rootSessionId, taskId, finished, progress).ConfigureAwait(false);
                     needsLeader = true;
                     continue;
                 }
@@ -222,6 +226,21 @@ public sealed class TeamTaskOrchestrator(
                         return await FinalizeIfIncompleteCoreAsync(snapshot).ConfigureAwait(false);
                     }
 
+                    if (leaderTurns >= maxLeaderTurns)
+                    {
+                        snapshot.Status = TeamTaskStatus.Failed;
+                        snapshot.Error =
+                            $"MaxLeaderTurnsPerTask={maxLeaderTurns} reached. Ask the user or submit a partial/failed result next time.";
+                        snapshot.CompletedAt = DateTimeOffset.UtcNow;
+                        await taskStore.SaveAsync(snapshot, CancellationToken.None).ConfigureAwait(false);
+                        await traceStore.AppendAsync(
+                            snapshot.RootSessionId,
+                            snapshot.TaskId,
+                            new TeamTraceEvent { Type = "task.failed", Message = snapshot.Error },
+                            CancellationToken.None).ConfigureAwait(false);
+                        return snapshot;
+                    }
+
                     // Always rebuild follow-up from latest disk state after the first kickoff/resume.
                     if (!useInitialKickoff)
                     {
@@ -239,6 +258,7 @@ public sealed class TeamTaskOrchestrator(
                         progress)
                     .ConfigureAwait(false);
 
+                leaderTurns++;
                 useInitialKickoff = false;
 
                 using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false))
@@ -251,15 +271,15 @@ public sealed class TeamTaskOrchestrator(
                     }
 
                     // Empty-stop safety: if Leader ended with actionable Ready/Failed and nothing in flight,
-                    // inject one stronger nudge turn instead of Incomplete Failed immediately.
-                    if (!emptyStopNudgeUsed
+                    // inject a stronger nudge turn instead of Incomplete Failed immediately.
+                    if (emptyStopNudgesUsed < maxEmptyNudges
                         && snapshot.Status == TeamTaskStatus.Running
                         && string.IsNullOrWhiteSpace(snapshot.FinalResult)
                         && HasActionableReadyOrFailed(snapshot)
                         && !snapshot.SubTasks.Any(s =>
                             s.Status is TeamSubTaskStatus.Queued or TeamSubTaskStatus.Running))
                     {
-                        emptyStopNudgeUsed = true;
+                        emptyStopNudgesUsed++;
                         needsLeader = true;
                         leaderKickoff = BuildLeaderEmptyStopNudge(snapshot);
                     }
@@ -275,8 +295,40 @@ public sealed class TeamTaskOrchestrator(
         }
         catch (OperationCanceledException)
         {
+            await DrainInFlightAsync(inFlight, TimeSpan.FromSeconds(5)).ConfigureAwait(false);
             return await CancelTaskAsync(rootSessionId, taskId).ConfigureAwait(false);
         }
+    }
+
+    private static async Task<WorkerRunResult> WaitForAnyWorkerAsync(
+        IEnumerable<Task<WorkerRunResult>> workers,
+        CancellationToken cancellationToken)
+    {
+        var whenAny = Task.WhenAny(workers);
+        var completed = await whenAny.WaitAsync(cancellationToken).ConfigureAwait(false);
+        return await completed.ConfigureAwait(false);
+    }
+
+    private static async Task DrainInFlightAsync(
+        Dictionary<string, Task<WorkerRunResult>> inFlight,
+        TimeSpan timeout)
+    {
+        if (inFlight.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var all = Task.WhenAll(inFlight.Values.ToArray());
+            await Task.WhenAny(all, Task.Delay(timeout)).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Best-effort: give workers a brief window to observe cancel before we mark Cancelled.
+        }
+
+        inFlight.Clear();
     }
 
     private async Task RunLeaderTurnAsync(
@@ -312,25 +364,9 @@ public sealed class TeamTaskOrchestrator(
                 var scoped = TeamTaskExecutionScope.Current?.Task ?? task;
                 MergeLeaderMutations(latest, scoped);
 
-                if (!outcome.Ok)
+                // Leader text Ok is secondary to tool side effects (dispatch / ask_user / submit).
+                if (!outcome.Ok && !LeaderTurnHasUsefulSideEffects(latest))
                 {
-                    if (latest.Status == TeamTaskStatus.Succeeded
-                        && !string.IsNullOrWhiteSpace(latest.FinalResult))
-                    {
-                        await taskStore.SaveAsync(latest, CancellationToken.None).ConfigureAwait(false);
-                        ReportProgress(progress, new TeamRunProgress
-                        {
-                            Kind = TeamRunProgressKind.LeaderTurnCompleted,
-                            RootSessionId = rootSessionId,
-                            TaskId = taskId,
-                            Title = "Leader",
-                            ProfileId = leader.Id,
-                            StatusLabel = "Succeeded",
-                            ResponseText = latest.FinalResult ?? outcome.ResponseText
-                        });
-                        return;
-                    }
-
                     latest.Status = TeamTaskStatus.Failed;
                     latest.Error = outcome.Error ?? outcome.ResponseText;
                     latest.CompletedAt = DateTimeOffset.UtcNow;
@@ -354,6 +390,20 @@ public sealed class TeamTaskOrchestrator(
                     return;
                 }
 
+                if (!outcome.Ok)
+                {
+                    await traceStore.AppendAsync(
+                        latest.RootSessionId,
+                        latest.TaskId,
+                        new TeamTraceEvent
+                        {
+                            Type = "leader.parse_ignored",
+                            NodeId = "leader",
+                            Message = outcome.Error ?? "Leader text non-success; keeping tool side effects."
+                        },
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+
                 await taskStore.SaveAsync(latest, CancellationToken.None).ConfigureAwait(false);
                 ReportProgress(progress, new TeamRunProgress
                 {
@@ -372,6 +422,15 @@ public sealed class TeamTaskOrchestrator(
             }
         }
     }
+
+    private static bool LeaderTurnHasUsefulSideEffects(TeamTask task) =>
+        task.Status == TeamTaskStatus.AwaitingHuman
+        || (task.Status == TeamTaskStatus.Succeeded && !string.IsNullOrWhiteSpace(task.FinalResult))
+        || task.SubTasks.Any(s =>
+            s.Status is TeamSubTaskStatus.Queued
+                or TeamSubTaskStatus.Ready
+                or TeamSubTaskStatus.Running
+                or TeamSubTaskStatus.Pending);
 
     private static void MergeLeaderMutations(TeamTask disk, TeamTask scoped)
     {
@@ -403,8 +462,8 @@ public sealed class TeamTaskOrchestrator(
                 continue;
             }
 
-            if (diskSub.Status == TeamSubTaskStatus.Running
-                && scopedSub.Status is TeamSubTaskStatus.Ready or TeamSubTaskStatus.Pending)
+            // Never let a stale Leader snapshot rewind terminal / running workers.
+            if (IsProtectedWorkerStatus(diskSub.Status) && IsLeaderQueueStatus(scopedSub.Status))
             {
                 continue;
             }
@@ -576,9 +635,12 @@ public sealed class TeamTaskOrchestrator(
         var profileId = profile.Id;
         var iteration = sub.Iteration;
         var taskForExec = task;
+        var timeoutSeconds = Math.Max(30, settings.Teams.WorkerRunTimeoutSeconds);
 
         return Task.Run(async () =>
         {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
             try
             {
                 var outcome = await memberExecutor.ExecuteAsync(
@@ -587,10 +649,10 @@ public sealed class TeamTaskOrchestrator(
                     memberSessionId,
                     message,
                     isLeader: false,
-                    cancellationToken).ConfigureAwait(false);
+                    timeoutCts.Token).ConfigureAwait(false);
                 return new WorkerRunResult(subId, profileId, iteration, outcome);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 return new WorkerRunResult(
                     subId,
@@ -599,12 +661,21 @@ public sealed class TeamTaskOrchestrator(
                     TeamMemberRunOutcome.Fail("cancelled"),
                     Cancelled: true);
             }
+            catch (OperationCanceledException)
+            {
+                return new WorkerRunResult(
+                    subId,
+                    profileId,
+                    iteration,
+                    TeamMemberRunOutcome.Fail($"Worker timed out after {timeoutSeconds}s"),
+                    TimedOut: true);
+            }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Worker run crashed sub={SubTaskId}", subId);
                 return new WorkerRunResult(subId, profileId, iteration, TeamMemberRunOutcome.Fail(ex.Message));
             }
-        }, CancellationToken.None);
+        }, cancellationToken);
     }
 
     private async Task ApplyWorkerResultAsync(
@@ -631,6 +702,12 @@ public sealed class TeamTaskOrchestrator(
                 sub.Status = TeamSubTaskStatus.Cancelled;
                 sub.Error = "cancelled";
                 kind = TeamRunProgressKind.WorkerCancelled;
+            }
+            else if (result.TimedOut)
+            {
+                sub.Status = TeamSubTaskStatus.Failed;
+                sub.Error = result.Outcome.Error ?? "worker timed out";
+                kind = TeamRunProgressKind.WorkerFailed;
             }
             else if (result.Outcome.Ok)
             {
@@ -796,20 +873,34 @@ public sealed class TeamTaskOrchestrator(
         }
     }
 
-    private string BuildLeaderKickoff(TeamTask task)
+    private async Task<string> BuildLeaderKickoffAsync(TeamTask task, CancellationToken cancellationToken)
     {
         var sb = new StringBuilder();
+        sb.AppendLine($"--- TeamTask boundary: {task.TaskId} ---");
         sb.AppendLine("Organize the team to complete this goal.");
         sb.AppendLine(task.Goal);
         sb.AppendLine();
-        sb.AppendLine("Recommended flow:");
-        sb.AppendLine("1) team_list_members");
-        sb.AppendLine("2) team_create_subtask for each worker assignment (depends_on must use real subtask ids)");
-        sb.AppendLine("3) team_dispatch");
-        sb.AppendLine("4) STOP — do not poll; you will be re-invoked after workers finish");
-        sb.AppendLine("5) On re-invoke: team_collect (and team_memory/team_progress); if verification failed, redispatch or create a fix subtask; when done team_submit_result");
         sb.AppendLine(
-            "You may redispatch / create repair subtasks freely while repair rounds remain "
+            "This Leader conversation is shared for the Team inside this Chat session — "
+            + "treat prior turns in this thread as continuous context.");
+        sb.AppendLine(
+            $"New Team Task id={task.TaskId}. Subtasks and team_memory start empty for this task "
+            + "(do not assume prior-task blackboard keys still exist).");
+        AppendChatSessionContext(sb, await TryLoadRootSessionAsync(task.RootSessionId, cancellationToken).ConfigureAwait(false));
+        sb.AppendLine("Scheduling policy (important):");
+        sb.AppendLine("- Workers are a capability pool — do NOT start every Worker by default.");
+        sb.AppendLine("- Choose only the Workers whose skills match this goal; start with the smallest useful set (often 1).");
+        sb.AppendLine("- After results return, decide the next Worker(s) yourself (or redispatch / ask_user / submit).");
+        sb.AppendLine("- Prefer sequential waves when later work depends on earlier findings; parallelize only independent slices.");
+        sb.AppendLine();
+        sb.AppendLine("Recommended flow:");
+        sb.AppendLine("1) team_list_members — inspect the pool");
+        sb.AppendLine("2) team_create_subtask only for Workers you need now (depends_on must use real subtask ids)");
+        sb.AppendLine("3) team_dispatch those Ready subtasks");
+        sb.AppendLine("4) STOP — do not poll; the outer loop re-invokes you when workers finish");
+        sb.AppendLine("5) On re-invoke: team_collect / team_memory / team_progress; then schedule the next Worker, redispatch, ask_user, or team_submit_result");
+        sb.AppendLine(
+            "You may redispatch / create repair subtasks while repair rounds remain "
             + $"(MaxRepairRounds={Math.Max(1, settings.Teams.MaxRepairRounds)}). There is no per-worker MaxIterations.");
         return sb.ToString();
     }
@@ -817,7 +908,8 @@ public sealed class TeamTaskOrchestrator(
     private string BuildLeaderFollowUp(TeamTask task)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Continue the team task. Current subtask status:");
+        sb.AppendLine("Continue the team task. Schedule the next step from results — do not auto-engage idle Workers.");
+        sb.AppendLine("Current subtask status:");
         foreach (var sub in task.SubTasks)
         {
             sb.AppendLine(
@@ -832,16 +924,22 @@ public sealed class TeamTaskOrchestrator(
         {
             sb.AppendLine(
                 "One or more subtasks Failed (often verification). Use team_collect / team_memory, then "
-                + "team_redispatch (with handoff findings) or create a fix subtask + dispatch — while repair rounds remain. "
+                + "team_redispatch (with handoff findings) or create a targeted fix subtask + dispatch — while repair rounds remain. "
                 + "Otherwise team_ask_user or submit an explicit partial/failed FinalResult.");
         }
         else if (task.SubTasks.Any(s => s.Status is TeamSubTaskStatus.Ready or TeamSubTaskStatus.Queued))
         {
-            sb.AppendLine("Dispatch remaining Ready/Queued work, then STOP.");
+            sb.AppendLine("Dispatch remaining Ready/Queued work you intentionally created, then STOP.");
+        }
+        else if (task.SubTasks.Count == 0)
+        {
+            sb.AppendLine("No subtasks yet. Pick the smallest useful Worker set for the goal, create + dispatch, then STOP.");
         }
         else
         {
-            sb.AppendLine("If all workers finished successfully: team_collect then team_submit_result. Do not blind-redispatch.");
+            sb.AppendLine(
+                "Review finished work. If the goal is met: team_collect then team_submit_result. "
+                + "If more specialized help is needed: create/dispatch only that Worker. Do not blind-redispatch or fan-out to unused Workers.");
         }
 
         return sb.ToString();
@@ -861,15 +959,64 @@ public sealed class TeamTaskOrchestrator(
     private static bool HasActionableReadyOrFailed(TeamTask task) =>
         task.SubTasks.Any(s => s.Status is TeamSubTaskStatus.Ready or TeamSubTaskStatus.Failed);
 
-    private string BuildLeaderResume(TeamTask task, string humanAnswer)
+    private async Task<string> BuildLeaderResumeAsync(
+        TeamTask task,
+        string humanAnswer,
+        CancellationToken cancellationToken)
     {
         var sb = new StringBuilder();
         sb.AppendLine("The human answered your question. Continue the team task.");
         sb.AppendLine("Human answer:");
         sb.AppendLine(humanAnswer.Trim());
         sb.AppendLine();
+        AppendChatSessionContext(sb, await TryLoadRootSessionAsync(task.RootSessionId, cancellationToken).ConfigureAwait(false));
         sb.AppendLine(BuildLeaderFollowUp(task));
         return sb.ToString();
+    }
+
+    private async Task<AgentSession?> TryLoadRootSessionAsync(string rootSessionId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await storage.LoadSessionAsync(rootSessionId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("Failed loading Chat session for Team kickoff context: {Error}", ex.Message);
+            return null;
+        }
+    }
+
+    private static void AppendChatSessionContext(StringBuilder sb, AgentSession? rootSession)
+    {
+        if (rootSession?.Messages is not { Count: > 0 })
+        {
+            return;
+        }
+
+        // Keep a short tail of Chat turns so multi-wave Teams stays aligned with the user thread.
+        const int maxMessages = 8;
+        const int maxCharsPerMessage = 600;
+        var recent = rootSession.Messages
+            .Where(m => m.Role is MessageRole.User or MessageRole.Assistant)
+            .Where(m => !string.IsNullOrWhiteSpace(m.Content))
+            .Where(m => !m.Content.TrimStart().StartsWith("### Teams ·", StringComparison.Ordinal))
+            .TakeLast(maxMessages)
+            .ToList();
+        if (recent.Count == 0)
+        {
+            return;
+        }
+
+        sb.AppendLine("Recent Chat session context (same conversation; stay consistent with it):");
+        foreach (var message in recent)
+        {
+            var role = message.Role == MessageRole.User ? "user" : "assistant";
+            var text = TeamWorkerHelpers.Truncate(message.Content, maxCharsPerMessage);
+            sb.AppendLine($"- [{role}] {text}");
+        }
+
+        sb.AppendLine();
     }
 
     private static string AggregateResults(TeamTask task)
@@ -880,16 +1027,29 @@ public sealed class TeamTaskOrchestrator(
         {
             sb.AppendLine();
             sb.AppendLine($"### {sub.Title} ({sub.Status})");
-            sb.AppendLine(sub.Result ?? sub.Error ?? "(empty)");
+            sb.AppendLine(TeamWorkerHelpers.Truncate(sub.Result ?? sub.Error ?? "(empty)", 1200));
         }
 
         return sb.ToString();
     }
+
+    private static bool IsProtectedWorkerStatus(TeamSubTaskStatus status) =>
+        status is TeamSubTaskStatus.Succeeded
+            or TeamSubTaskStatus.Failed
+            or TeamSubTaskStatus.Cancelled
+            or TeamSubTaskStatus.Running;
+
+    private static bool IsLeaderQueueStatus(TeamSubTaskStatus status) =>
+        status is TeamSubTaskStatus.Queued
+            or TeamSubTaskStatus.Ready
+            or TeamSubTaskStatus.Pending
+            or TeamSubTaskStatus.WaitingRedispatch;
 
     private sealed record WorkerRunResult(
         string SubTaskId,
         string ProfileId,
         int Iteration,
         TeamMemberRunOutcome Outcome,
-        bool Cancelled = false);
+        bool Cancelled = false,
+        bool TimedOut = false);
 }

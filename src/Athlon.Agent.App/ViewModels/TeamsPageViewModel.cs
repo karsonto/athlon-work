@@ -389,8 +389,11 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         {
             Id = "profile-" + Guid.NewGuid().ToString("N")[..10],
             Name = "New Leader",
-            Description = "统筹拆解 · 分派 · 汇总验收",
-            AgentMd = "你是 Team Leader。理解目标，拆分给 Workers，汇总可验收结果。优先使用 team_* 工具。",
+            Description = "统筹拆解 · 按需分派 · 汇总验收",
+            AgentMd =
+                "你是 Team Leader。Workers 是能力池，不要默认启动全部成员。"
+                + "先 team_list_members，再按当前目标只给真正需要的 Worker 建 subtask 并 dispatch；"
+                + "根据返回结果决定下一波调度、redispatch、ask_user 或 submit。优先使用 team_* 工具。",
             ToolAllowList = TeamToolDefaults.DefaultLeaderAllowList.ToList()
         };
         await _profileStore.SaveAsync(leader).ConfigureAwait(true);
@@ -596,14 +599,16 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             AgentMd =
                 "你是代码优化团队的 Leader。目标：用**可命名、可复查、行为等价、最小侵入**的「配方(recipe)」批次优化工作区代码"
                 + "（清晰分层、类单一职责、消灭上帝类、降低耦合），而不是大段重写或风格大扫除。\n"
-                + "默认流水线（depends_on 串行；禁止多人同时改同一批文件）：\n"
+                + "Workers 是能力池：按目标与上一波结果**按需调度**，不要一上来给全员建 subtask。"
+                + "常见可串行配方（仅在需要时启用；depends_on；禁止多人同时改同一批文件）：\n"
                 + "1) Recipe Scout → dispatch\n"
-                + "2) Recipe Author（depends_on Scout）→ dispatch\n"
-                + "3) Recipe Runner（depends_on Author）→ dispatch\n"
-                + "4) Recipe Verifier（depends_on Runner）→ dispatch\n"
+                + "2) 有机会后再 Recipe Author（depends_on Scout）→ dispatch\n"
+                + "3) 有批准配方后再 Recipe Runner（depends_on Author）→ dispatch\n"
+                + "4) 有改动后再 Recipe Verifier（depends_on Runner）→ dispatch\n"
+                + "若目标只需摸底，可只跑 Scout 后 submit；若用户已给出明确配方，可跳过 Scout/Author 直接派 Runner。\n"
                 + "范围：用户指定路径/模块则只做该范围；否则每轮只批准 **1～3 条**高价值配方（优先 ExtractClass / ExtractMethod / MoveMethod / IntroduceInterface / BreakCycle）。\n"
                 + "硬约束：保公开行为；禁止无关格式化、整仓搬家、无配方的「顺手清理」。Verifier fail → redispatch Runner（或补 Author）后再验。\n"
-                + "全部通过后 team_collect / team_memory，按「应用了哪些配方 / 改了哪些符号与文件 / 剩余机会」汇总并 team_submit_result。你只编排，不读实现、不改文件。",
+                + "目标达成后 team_collect / team_memory 汇总并 team_submit_result。你只编排，不读实现、不改文件。",
             ToolAllowList = TeamToolDefaults.DefaultLeaderAllowList.ToList(),
             SkillNames = []
         };
@@ -780,6 +785,9 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         return false;
     }
 
+    public void ClearPendingAsk(string rootSessionId) =>
+        _pendingAsksBySession.Remove(rootSessionId);
+
     /// <summary>Resumes a Team Task paused on <see cref="TeamTaskStatus.AwaitingHuman"/>.</summary>
     public async Task<(bool Ok, string Message, TeamTask? Task)> ResumeTeamAskAsync(
         string rootSessionId,
@@ -876,6 +884,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         }
 
         CancelRunForSession(rootSessionId);
+        _pendingAsksBySession.Remove(rootSessionId);
         var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _runCtsBySession[rootSessionId] = runCts;
         IsBusy = true;
