@@ -29,8 +29,8 @@ public sealed class TeamsSettings
     /// <summary>Silent cap on Leader outer-loop turns per Team Task (not exposed in UI).</summary>
     public int MaxLeaderTurnsPerTask { get; set; } = 30;
 
-    /// <summary>Per-Worker wall-clock timeout in seconds (silent safety valve).</summary>
-    public int WorkerRunTimeoutSeconds { get; set; } = 900;
+    /// <summary>Per-Worker wall-clock timeout in seconds (silent safety valve). Default 12h.</summary>
+    public int WorkerRunTimeoutSeconds { get; set; } = 43_200;
 
     /// <summary>Max empty-stop nudge Leader turns before Incomplete Failed.</summary>
     public int MaxEmptyStopNudges { get; set; } = 3;
