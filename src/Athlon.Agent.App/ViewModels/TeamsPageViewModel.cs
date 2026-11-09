@@ -52,6 +52,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         new(StringComparer.OrdinalIgnoreCase);
     private bool _suppressCapabilitySync;
     private bool _catalogLoaded;
+    private readonly SemaphoreSlim _catalogGate = new(1, 1);
 
     public TeamsPageViewModel(
         AppSettings settings,
@@ -291,11 +292,45 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     /// <summary>
     /// First open loads from disk; later visits keep in-memory SPA edits (Chat Teams runs must
     /// not reshuffle or append Team definitions on this page).
+    /// Page Loaded and navigation may race — serialize so TeamItems cannot be double-appended.
     /// </summary>
-    public Task EnsureLoadedAsync() =>
-        _catalogLoaded ? Task.CompletedTask : RefreshAsync();
+    public async Task EnsureLoadedAsync()
+    {
+        if (_catalogLoaded)
+        {
+            return;
+        }
+
+        await _catalogGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            if (_catalogLoaded)
+            {
+                return;
+            }
+
+            await RefreshCoreAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            _catalogGate.Release();
+        }
+    }
 
     public async Task RefreshAsync()
+    {
+        await _catalogGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            await RefreshCoreAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            _catalogGate.Release();
+        }
+    }
+
+    private async Task RefreshCoreAsync()
     {
         var selectedTeamId = SelectedTeamItem?.Team.Id;
         var selectedProfileId = SelectedMember?.Profile.Id;
@@ -724,20 +759,25 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         _profilesById[engineer.Id] = engineer;
         _profilesById[verifier.Id] = verifier;
 
-        var existing = TeamItems.FirstOrDefault(t =>
-            string.Equals(t.Team.Id, team.Id, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null)
+        // Replace any prior sample / same-id entry; also collapse same-name leftovers from older runs.
+        for (var i = TeamItems.Count - 1; i >= 0; i--)
         {
-            var index = TeamItems.IndexOf(existing);
-            TeamItems[index] = new TeamListItemViewModel(team);
-            SelectedTeamItem = TeamItems[index];
+            var item = TeamItems[i];
+            if (string.Equals(item.Team.Id, team.Id, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(item.Team.Name, team.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.Equals(item.Team.Id, team.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    await _teamStore.DeleteAsync(item.Team.Id).ConfigureAwait(true);
+                }
+
+                TeamItems.RemoveAt(i);
+            }
         }
-        else
-        {
-            var item = new TeamListItemViewModel(team);
-            TeamItems.Add(item);
-            SelectedTeamItem = item;
-        }
+
+        var created = new TeamListItemViewModel(team);
+        TeamItems.Add(created);
+        SelectedTeamItem = created;
 
         StatusMessage = "已创建示例 Team（Architecture Optimizer）。";
     }
@@ -911,6 +951,20 @@ public sealed partial class TeamsPageViewModel : ObservableObject
                 await Application.Current.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
             }
 
+            // Chat Trace bubble at kickoff so closing the window still leaves a deep link.
+            ReportTeamProgress(progress, new TeamRunProgress
+            {
+                Kind = TeamRunProgressKind.TaskStarted,
+                RootSessionId = began.Task.RootSessionId,
+                TaskId = began.Task.TaskId,
+                Title = TeamItems.FirstOrDefault(t =>
+                            string.Equals(t.Team.Id, began.Task.TeamId, StringComparison.OrdinalIgnoreCase))
+                        ?.Name
+                        ?? began.Task.TeamId,
+                StatusLabel = "Running",
+                ResponseText = began.Task.Goal
+            });
+
             var completed = await _orchestrator
                 .RunToCompletionAsync(
                     began.Task.RootSessionId,
@@ -935,6 +989,18 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         {
             ClearRunCts(rootSessionId, runCts);
             IsBusy = false;
+        }
+    }
+
+    private static void ReportTeamProgress(IProgress<TeamRunProgress>? progress, TeamRunProgress update)
+    {
+        try
+        {
+            progress?.Report(update);
+        }
+        catch
+        {
+            // Chat progress must never fail the Team run.
         }
     }
 

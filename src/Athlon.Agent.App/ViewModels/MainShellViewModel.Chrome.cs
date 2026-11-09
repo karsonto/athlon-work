@@ -199,6 +199,12 @@ public partial class MainShellViewModel
             await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
         }
 
+        // Kickoff Trace bubble has no file edits yet — skip FilesChanged churn.
+        if (step.Kind == Athlon.Agent.Core.Teams.TeamRunProgressKind.TaskStarted)
+        {
+            return;
+        }
+
         await PublishTeamFilesChangedAsync(
                 captureSessionId,
                 captureUi,

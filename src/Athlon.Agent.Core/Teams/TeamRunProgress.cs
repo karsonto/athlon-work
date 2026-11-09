@@ -2,6 +2,8 @@ namespace Athlon.Agent.Core.Teams;
 
 public enum TeamRunProgressKind
 {
+    /// <summary>Emitted right after Begin so Chat can show a Trace deep-link immediately.</summary>
+    TaskStarted,
     LeaderTurnCompleted,
     WorkerCompleted,
     WorkerFailed,

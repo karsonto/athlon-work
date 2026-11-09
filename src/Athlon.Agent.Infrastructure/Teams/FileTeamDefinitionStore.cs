@@ -10,17 +10,24 @@ public sealed class FileTeamDefinitionStore(IAppPathProvider paths, IJsonFileSto
     public async Task<IReadOnlyList<TeamDefinition>> ListAsync(CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(Root);
-        var results = new List<TeamDefinition>();
+        // Dedupe by Id in case stale/duplicate filenames exist on disk (keep newest UpdatedAt).
+        var byId = new Dictionary<string, TeamDefinition>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in Directory.EnumerateFiles(Root, "*.json"))
         {
             var team = await jsonFileStore.LoadAsync<TeamDefinition>(file, cancellationToken).ConfigureAwait(false);
-            if (team is not null && !string.IsNullOrWhiteSpace(team.Id))
+            if (team is null || string.IsNullOrWhiteSpace(team.Id))
             {
-                results.Add(team);
+                continue;
+            }
+
+            if (!byId.TryGetValue(team.Id, out var existing)
+                || team.UpdatedAt >= existing.UpdatedAt)
+            {
+                byId[team.Id] = team;
             }
         }
 
-        return results.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+        return byId.Values.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     public async Task<TeamDefinition?> GetAsync(string teamId, CancellationToken cancellationToken = default)

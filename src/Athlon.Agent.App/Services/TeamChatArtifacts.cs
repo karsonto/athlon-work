@@ -53,6 +53,11 @@ internal static class TeamChatArtifacts
 
     public static string FormatStepMarkdown(TeamRunProgress step)
     {
+        if (step.Kind == TeamRunProgressKind.TaskStarted)
+        {
+            return FormatTraceStartedMarkdown(step.TaskId, step.Title, step.ResponseText);
+        }
+
         var role = step.Kind switch
         {
             TeamRunProgressKind.LeaderTurnCompleted => "Leader",
@@ -75,6 +80,32 @@ internal static class TeamChatArtifacts
         }
 
         return $"### Teams · {title} · {status}{iter}\n\n{body}";
+    }
+
+    /// <summary>Early Chat bubble so users can reopen Trace if the window was closed.</summary>
+    public static string FormatTraceStartedMarkdown(
+        string taskId,
+        string? teamOrTitle = null,
+        string? goalPreview = null)
+    {
+        var title = string.IsNullOrWhiteSpace(teamOrTitle) ? "Teams" : teamOrTitle.Trim();
+        var sb = new System.Text.StringBuilder();
+        sb.Append("### Teams · ").Append(title).AppendLine(" · Running");
+        sb.AppendLine();
+        if (!string.IsNullOrWhiteSpace(goalPreview))
+        {
+            var preview = goalPreview.Trim();
+            if (preview.Length > 200)
+            {
+                preview = preview[..200].TrimEnd() + "…";
+            }
+
+            sb.AppendLine(preview);
+            sb.AppendLine();
+        }
+
+        sb.Append("[查看 Trace](athlon://team-trace?taskId=").Append(taskId.Trim()).Append(')');
+        return sb.ToString();
     }
 
     /// <summary>

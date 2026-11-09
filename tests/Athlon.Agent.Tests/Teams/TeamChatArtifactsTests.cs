@@ -71,6 +71,24 @@ public sealed class TeamChatArtifactsTests : IDisposable
     }
 
     [Fact]
+    public void FormatStepMarkdown_TaskStarted_IncludesTraceDeepLink()
+    {
+        var md = TeamChatArtifacts.FormatStepMarkdown(new TeamRunProgress
+        {
+            Kind = TeamRunProgressKind.TaskStarted,
+            RootSessionId = "s",
+            TaskId = "tm_abc123",
+            Title = "Architecture Optimizer",
+            StatusLabel = "Running",
+            ResponseText = "optimize the layering"
+        });
+
+        Assert.Contains("### Teams · Architecture Optimizer · Running", md, StringComparison.Ordinal);
+        Assert.Contains("athlon://team-trace?taskId=tm_abc123", md, StringComparison.Ordinal);
+        Assert.Contains("optimize the layering", md, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FormatStepMarkdown_TruncatesLongBody()
     {
         var md = TeamChatArtifacts.FormatStepMarkdown(new TeamRunProgress
