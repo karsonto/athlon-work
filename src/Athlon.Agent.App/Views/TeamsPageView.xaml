@@ -124,6 +124,14 @@
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Content="创建示例" Command="{Binding CreateSampleTeamCommand}"
                                 Style="{StaticResource TeamsSecondaryButtonStyle}" Margin="0,0,8,0" />
+                        <Button Content="导入" Command="{Binding ImportTeamCommand}"
+                                Style="{StaticResource TeamsSecondaryButtonStyle}"
+                                Margin="0,0,8,0"
+                                ToolTip="从 .team.json 导入 Team（含 Leader / Worker Profiles）" />
+                        <Button Content="导出" Command="{Binding ExportSelectedTeamCommand}"
+                                Style="{StaticResource TeamsSecondaryButtonStyle}"
+                                Margin="0,0,8,0"
+                                ToolTip="导出当前 Team 为可编辑的结构化 JSON" />
                         <Button Content="打开 Trace" Command="{Binding OpenSelectedTraceCommand}"
                                 Style="{StaticResource TeamsSecondaryButtonStyle}" Margin="0,0,8,0" />
                         <Button Content="删除 Team" Command="{Binding DeleteTeamCommand}"

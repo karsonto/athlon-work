@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
@@ -240,6 +241,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
 
         OnPropertyChanged(nameof(SelectedTeam));
         OnPropertyChanged(nameof(HasSelectedTeam));
+        ExportSelectedTeamCommand.NotifyCanExecuteChanged();
         NotifyTeamEditingProperties();
         RebuildMembers();
     }
@@ -394,6 +396,100 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveAllAsync()
     {
+        await PersistSelectedTeamEditsAsync().ConfigureAwait(true);
+        StatusMessage = "已保存 Team 与成员配置。";
+    }
+
+    [RelayCommand(CanExecute = nameof(HasSelectedTeam))]
+    private async Task ExportSelectedTeamAsync()
+    {
+        if (SelectedTeam is null)
+        {
+            StatusMessage = "请先选择要导出的 Team。";
+            return;
+        }
+
+        try
+        {
+            // Flush in-memory SPA edits so the JSON matches what the user sees.
+            await PersistSelectedTeamEditsAsync().ConfigureAwait(true);
+
+            var profiles = CollectProfilesForTeam(SelectedTeam);
+            var package = TeamConfigPackageCodec.Build(SelectedTeam, profiles);
+            var json = TeamConfigPackageCodec.Serialize(package);
+
+            var safeName = SanitizeFileName(SelectedTeam.Name);
+            if (string.IsNullOrWhiteSpace(safeName))
+            {
+                safeName = SelectedTeam.Id;
+            }
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "导出 Team 配置",
+                FileName = safeName + ".team.json",
+                Filter = "Team 配置 (*.team.json)|*.team.json|JSON (*.json)|*.json",
+                DefaultExt = ".team.json",
+                AddExtension = true
+            };
+            if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.FileName))
+            {
+                return;
+            }
+
+            await File.WriteAllTextAsync(dialog.FileName, json).ConfigureAwait(true);
+            StatusMessage = $"已导出 Team「{SelectedTeam.Name}」→ {dialog.FileName}";
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Export team failed");
+            StatusMessage = "导出失败：" + ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ImportTeamAsync()
+    {
+        try
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "导入 Team 配置",
+                Filter = "Team 配置 (*.team.json;*.json)|*.team.json;*.json|JSON (*.json)|*.json",
+                CheckFileExists = true,
+                Multiselect = false
+            };
+            if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.FileName))
+            {
+                return;
+            }
+
+            var json = await File.ReadAllTextAsync(dialog.FileName).ConfigureAwait(true);
+            var package = TeamConfigPackageCodec.Parse(json);
+            var (team, profiles) = TeamConfigPackageCodec.MaterializeForImport(package);
+
+            foreach (var profile in profiles)
+            {
+                await _profileStore.SaveAsync(profile).ConfigureAwait(true);
+                _profilesById[profile.Id] = profile;
+            }
+
+            await _teamStore.SaveAsync(team).ConfigureAwait(true);
+
+            var item = new TeamListItemViewModel(team);
+            TeamItems.Add(item);
+            SelectedTeamItem = item;
+            StatusMessage = $"已导入 Team「{team.Name}」（{profiles.Count} 个 Profile）。";
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Import team failed");
+            StatusMessage = "导入失败：" + ex.Message;
+        }
+    }
+
+    private async Task PersistSelectedTeamEditsAsync()
+    {
         ApplyCapabilityOptionsToProfile();
         _settings.Teams.Enabled = TeamsEnabled;
         await _settingsRepository.SaveSettingsAsync(_settings).ConfigureAwait(true);
@@ -411,8 +507,52 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             await _profileStore.SaveAsync(member.Profile).ConfigureAwait(true);
             member.RefreshFromProfile();
         }
+    }
 
-        StatusMessage = "已保存 Team 与成员配置。";
+    private IReadOnlyList<AgentProfile> CollectProfilesForTeam(TeamDefinition team)
+    {
+        var list = new List<AgentProfile>();
+        void TryAdd(string? profileId)
+        {
+            if (string.IsNullOrWhiteSpace(profileId))
+            {
+                return;
+            }
+
+            if (_profilesById.TryGetValue(profileId, out var profile))
+            {
+                list.Add(profile);
+                return;
+            }
+
+            var fromMembers = Members.FirstOrDefault(m =>
+                string.Equals(m.Profile.Id, profileId, StringComparison.OrdinalIgnoreCase));
+            if (fromMembers is not null)
+            {
+                list.Add(fromMembers.Profile);
+            }
+        }
+
+        TryAdd(team.LeaderProfileId);
+        foreach (var workerId in team.WorkerProfileIds)
+        {
+            TryAdd(workerId);
+        }
+
+        return list;
+    }
+
+    private static string SanitizeFileName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "";
+        }
+
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = name.Trim().Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray();
+        var cleaned = new string(chars).Trim('.', ' ');
+        return cleaned.Length > 80 ? cleaned[..80] : cleaned;
     }
 
     [RelayCommand]
