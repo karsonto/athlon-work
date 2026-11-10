@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading;
 using System.Windows;
-using System.Windows.Threading;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Windows;
 using Athlon.Agent.Core;
@@ -41,16 +40,12 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     private readonly IAgentProfileStore _profileStore;
     private readonly ITeamTaskStore _taskStore;
     private readonly ITeamTraceStore _traceStore;
-    private readonly ITeamTaskOrchestrator _orchestrator;
     private readonly IActiveAgentSessionContext _activeSession;
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly IKnowledgeStore _knowledgeStore;
     private readonly IAppLogger _logger;
+    private readonly TeamRunController _runController;
     private readonly Dictionary<string, AgentProfile> _profilesById = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, CancellationTokenSource> _runCtsBySession =
-        new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, (string RootSessionId, string TaskId)> _pendingAsksBySession =
-        new(StringComparer.OrdinalIgnoreCase);
     private bool _suppressCapabilitySync;
     private bool _catalogLoaded;
     private readonly SemaphoreSlim _catalogGate = new(1, 1);
@@ -66,7 +61,8 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         IActiveAgentSessionContext activeSession,
         IAgentSkillCatalog skillCatalog,
         IKnowledgeStore knowledgeStore,
-        IAppLogger logger)
+        IAppLogger logger,
+        TeamRunController runController)
     {
         _settings = settings;
         _settingsRepository = settingsRepository;
@@ -74,11 +70,14 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         _profileStore = profileStore;
         _taskStore = taskStore;
         _traceStore = traceStore;
-        _orchestrator = orchestrator;
         _activeSession = activeSession;
         _skillCatalog = skillCatalog;
         _knowledgeStore = knowledgeStore;
         _logger = logger.ForContext("TeamsPage");
+        _runController = runController;
+        _runController.BusyChanged += (_, busy) => IsBusy = busy;
+        _runController.TraceRequested += (_, (task, live)) => _ = OpenTraceAsync(task, live);
+        _runController.TraceStatusChanged += (_, message) => StatusMessage = message;
         TeamsEnabled = settings.Teams.Enabled;
         TeamChatArtifacts.ConfigureTaskStore(taskStore);
     }
@@ -926,118 +925,32 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     /// Cancels the in-flight Team run for <paramref name="rootSessionId"/> (or all sessions when null).
     /// Returns true when at least one run was cancelled.
     /// </summary>
-    public bool CancelActiveTeamRun(string? rootSessionId = null)
-    {
-        if (!string.IsNullOrWhiteSpace(rootSessionId))
-        {
-            return CancelRunForSession(rootSessionId);
-        }
+    public bool CancelActiveTeamRun(string? rootSessionId = null) =>
+        _runController.CancelActiveTeamRun(rootSessionId);
 
-        var any = false;
-        foreach (var sessionId in _runCtsBySession.Keys.ToList())
-        {
-            any |= CancelRunForSession(sessionId);
-        }
+    public bool IsTeamRunActive(string? rootSessionId = null) =>
+        _runController.IsTeamRunActive(rootSessionId);
 
-        return any;
-    }
-
-    public bool IsTeamRunActive(string? rootSessionId = null)
-    {
-        if (!string.IsNullOrWhiteSpace(rootSessionId))
-        {
-            return _runCtsBySession.TryGetValue(rootSessionId, out var cts)
-                   && !cts.IsCancellationRequested;
-        }
-
-        return _runCtsBySession.Values.Any(cts => !cts.IsCancellationRequested);
-    }
-
-    private void RefreshBusyFromActiveRuns() =>
-        IsBusy = IsTeamRunActive();
-
-    public bool TryGetPendingAsk(string rootSessionId, out string taskId)
-    {
-        if (_pendingAsksBySession.TryGetValue(rootSessionId, out var pending))
-        {
-            taskId = pending.TaskId;
-            return true;
-        }
-
-        taskId = "";
-        return false;
-    }
+    public bool TryGetPendingAsk(string rootSessionId, out string taskId) =>
+        _runController.TryGetPendingAsk(rootSessionId, out taskId);
 
     public void ClearPendingAsk(string rootSessionId) =>
-        _pendingAsksBySession.Remove(rootSessionId);
+        _runController.ClearPendingAsk(rootSessionId);
 
     /// <summary>Resumes a Team Task paused on <see cref="TeamTaskStatus.AwaitingHuman"/>.</summary>
-    public async Task<(bool Ok, string Message, TeamTask? Task)> ResumeTeamAskAsync(
+    public Task<(bool Ok, string Message, TeamTask? Task)> ResumeTeamAskAsync(
         string rootSessionId,
         string humanAnswer,
         bool openTrace = true,
         CancellationToken cancellationToken = default,
-        IProgress<TeamRunProgress>? progress = null)
-    {
-        if (!_pendingAsksBySession.TryGetValue(rootSessionId, out var pending))
-        {
-            return (false, "No pending team question", null);
-        }
-
-        if (string.IsNullOrWhiteSpace(humanAnswer))
-        {
-            return (false, "Empty answer", null);
-        }
-
-        CancelRunForSession(rootSessionId);
-        var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _runCtsBySession[rootSessionId] = runCts;
-        RefreshBusyFromActiveRuns();
-        try
-        {
-            if (openTrace)
-            {
-                var existing = await _taskStore.GetAsync(pending.RootSessionId, pending.TaskId, runCts.Token)
-                    .ConfigureAwait(true);
-                if (existing is not null)
-                {
-                    await OpenTraceAsync(existing, live: true).ConfigureAwait(true);
-                    await Application.Current.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
-                }
-            }
-
-            var completed = await _orchestrator
-                .RunToCompletionAsync(
-                    pending.RootSessionId,
-                    pending.TaskId,
-                    runCts.Token,
-                    humanAnswer.Trim(),
-                    progress)
-                .ConfigureAwait(true);
-
-            return FinalizeTeamRunResult(rootSessionId, completed);
-        }
-        catch (OperationCanceledException)
-        {
-            return (false, "cancelled", null);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "Team ask resume failed");
-            return (false, ex.Message, null);
-        }
-        finally
-        {
-            ClearRunCts(rootSessionId, runCts);
-            RefreshBusyFromActiveRuns();
-        }
-    }
+        IProgress<TeamRunProgress>? progress = null) =>
+        _runController.ResumeTeamAskAsync(rootSessionId, humanAnswer, openTrace, cancellationToken, progress);
 
     /// <summary>
     /// Runs a Team Task for Chat / schedule. Does not mutate Teams config page state
     /// (no auto-enable, no Team list refresh, no synthetic Team creation).
     /// </summary>
-    public async Task<(bool Ok, string Message, TeamTask? Task)> RunTeamGoalAsync(
+    public Task<(bool Ok, string Message, TeamTask? Task)> RunTeamGoalAsync(
         string rootSessionId,
         string goal,
         string? teamId = null,
@@ -1045,158 +958,17 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         CancellationToken cancellationToken = default,
         IProgress<TeamRunProgress>? progress = null)
     {
-        if (!_settings.Teams.Enabled)
-        {
-            return (false, "Teams disabled", null);
-        }
-
-        teamId ??= SelectedTeam?.Id ?? _settings.Teams.SelectedTeamId;
-        if (string.IsNullOrWhiteSpace(teamId))
-        {
-            return (false, "No team selected", null);
-        }
-
-        if (string.IsNullOrWhiteSpace(goal))
-        {
-            return (false, "Empty goal", null);
-        }
-
-        if (string.IsNullOrWhiteSpace(rootSessionId))
-        {
-            return (false, "Missing root session", null);
-        }
-
-        CancelRunForSession(rootSessionId);
-        _pendingAsksBySession.Remove(rootSessionId);
-        var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _runCtsBySession[rootSessionId] = runCts;
-        RefreshBusyFromActiveRuns();
-        try
-        {
-            var request = new TeamTaskStartRequest
-            {
-                TeamId = teamId,
-                RootSessionId = rootSessionId,
-                Goal = goal.Trim()
-            };
-
-            // Open Trace immediately so the user can watch Leader/Workers live.
-            var began = await _orchestrator.BeginAsync(request, runCts.Token).ConfigureAwait(true);
-            if (!began.Ok)
-            {
-                return (false, began.Error ?? "Failed", began.Task);
-            }
-
-            if (openTrace)
-            {
-                await OpenTraceAsync(began.Task, live: true).ConfigureAwait(true);
-                // Let the Trace window paint before the Leader turn blocks the UI thread.
-                await Application.Current.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
-            }
-
-            // Chat Trace bubble at kickoff so closing the window still leaves a deep link.
-            ReportTeamProgress(progress, new TeamRunProgress
-            {
-                Kind = TeamRunProgressKind.TaskStarted,
-                RootSessionId = began.Task.RootSessionId,
-                TaskId = began.Task.TaskId,
-                Title = TeamItems.FirstOrDefault(t =>
-                            string.Equals(t.Team.Id, began.Task.TeamId, StringComparison.OrdinalIgnoreCase))
-                        ?.Name
-                        ?? began.Task.TeamId,
-                StatusLabel = "Running",
-                ResponseText = began.Task.Goal
-            });
-
-            var completed = await _orchestrator
-                .RunToCompletionAsync(
-                    began.Task.RootSessionId,
-                    began.Task.TaskId,
-                    runCts.Token,
-                    humanAnswer: null,
-                    progress)
-                .ConfigureAwait(true);
-
-            return FinalizeTeamRunResult(rootSessionId, completed);
-        }
-        catch (OperationCanceledException)
-        {
-            return (false, "cancelled", null);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "Team run failed");
-            return (false, ex.Message, null);
-        }
-        finally
-        {
-            ClearRunCts(rootSessionId, runCts);
-            RefreshBusyFromActiveRuns();
-        }
-    }
-
-    private static void ReportTeamProgress(IProgress<TeamRunProgress>? progress, TeamRunProgress update)
-    {
-        try
-        {
-            progress?.Report(update);
-        }
-        catch
-        {
-            // Chat progress must never fail the Team run.
-        }
-    }
-
-    private (bool Ok, string Message, TeamTask? Task) FinalizeTeamRunResult(string rootSessionId, TeamTask completed)
-    {
-        if (completed.Status == TeamTaskStatus.AwaitingHuman)
-        {
-            _pendingAsksBySession[rootSessionId] = (completed.RootSessionId, completed.TaskId);
-            var question = completed.PendingHumanQuestion ?? "Team needs your input.";
-            return (false, question, completed);
-        }
-
-        _pendingAsksBySession.Remove(rootSessionId);
-
-        var ok = completed.Status == TeamTaskStatus.Succeeded
-                 && !string.IsNullOrWhiteSpace(completed.FinalResult);
-        var message = ok
-            ? completed.FinalResult!
-            : completed.Error
-              ?? (completed.Status == TeamTaskStatus.Succeeded
-                  ? "Succeeded without FinalResult"
-                  : completed.Status.ToString());
-        return (ok, message, completed);
-    }
-
-    private bool CancelRunForSession(string rootSessionId)
-    {
-        if (!_runCtsBySession.TryGetValue(rootSessionId, out var cts)
-            || cts.IsCancellationRequested)
-        {
-            return false;
-        }
-
-        try
-        {
-            cts.Cancel();
-            return true;
-        }
-        catch (ObjectDisposedException)
-        {
-            return false;
-        }
-    }
-
-    private void ClearRunCts(string rootSessionId, CancellationTokenSource runCts)
-    {
-        if (_runCtsBySession.TryGetValue(rootSessionId, out var current)
-            && ReferenceEquals(current, runCts))
-        {
-            _runCtsBySession.Remove(rootSessionId);
-        }
-
-        runCts.Dispose();
+        teamId ??= SelectedTeam?.Id;
+        return _runController.RunTeamGoalAsync(
+            rootSessionId,
+            goal,
+            teamId,
+            openTrace,
+            cancellationToken,
+            progress,
+            teamIdParam => TeamItems.FirstOrDefault(t =>
+                    string.Equals(t.Team.Id, teamIdParam, StringComparison.OrdinalIgnoreCase))
+                ?.Name);
     }
 
     [RelayCommand]
@@ -1258,39 +1030,16 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     }
 
     public IReadOnlyList<ModifiedFileViewModel> CollectChatFiles(TeamTask task) =>
-        TeamChatArtifacts.CollectTaskFiles(task, _taskStore);
+        _runController.CollectChatFiles(task);
 
     public Task<TeamTask?> GetTaskSnapshotAsync(
         string rootSessionId,
         string taskId,
         CancellationToken cancellationToken = default) =>
-        _taskStore.GetAsync(rootSessionId, taskId, cancellationToken);
+        _runController.GetTaskSnapshotAsync(rootSessionId, taskId, cancellationToken);
 
-    public async Task OpenTraceByTaskIdAsync(string rootSessionId, string taskId)
-    {
-        if (string.IsNullOrWhiteSpace(rootSessionId) || string.IsNullOrWhiteSpace(taskId))
-        {
-            StatusMessage = "无效的 Trace 链接。";
-            return;
-        }
-
-        var task = await _taskStore.GetAsync(rootSessionId, taskId).ConfigureAwait(true);
-        if (task is null)
-        {
-            // Fall back to latest task in this session when the deep-link target is gone.
-            var listed = await _taskStore.ListForRootSessionAsync(rootSessionId).ConfigureAwait(true);
-            task = listed.FirstOrDefault(t => string.Equals(t.TaskId, taskId, StringComparison.OrdinalIgnoreCase))
-                ?? listed.FirstOrDefault();
-            if (task is null)
-            {
-                StatusMessage = $"找不到 Team Task：{taskId}";
-                return;
-            }
-        }
-
-        var live = task.Status is TeamTaskStatus.Running or TeamTaskStatus.AwaitingHuman;
-        await OpenTraceAsync(task, live).ConfigureAwait(true);
-    }
+    public Task OpenTraceByTaskIdAsync(string rootSessionId, string taskId) =>
+        _runController.OpenTraceByTaskIdAsync(rootSessionId, taskId);
 
     private void RebuildMembers()
     {

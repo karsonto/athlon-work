@@ -220,6 +220,8 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ScheduleViewModel>();
 
+        services.AddSingleton<TeamRunController>();
+
         services.AddSingleton<TeamsPageViewModel>();
 
         services.AddSingleton<SkillHubViewModel>();
