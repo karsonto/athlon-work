@@ -1256,7 +1256,46 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             checkedCatalog.Concat(preserved),
             SelectedProfile.SkillNames,
             SelectedProfile.KnowledgeModuleIds).ToList();
+        EnsureSelectedSkillsEnabledInSettings(SelectedProfile.SkillNames);
         SelectedMember?.RefreshCaps(SelectedMember.IsLeader);
+    }
+
+    /// <summary>
+    /// Worker-selected skills must be runnable via load_skill_through_path; flip any global
+    /// sidebar disable so settings stay consistent with the Team assignment.
+    /// </summary>
+    private void EnsureSelectedSkillsEnabledInSettings(IReadOnlyList<string> skillNames)
+    {
+        var changed = false;
+        foreach (var name in skillNames.Where(n => !string.IsNullOrWhiteSpace(n)))
+        {
+            var existing = _settings.Skills.FirstOrDefault(skill =>
+                string.Equals(skill.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (existing is null)
+            {
+                _settings.Skills.Add(new SkillSettings
+                {
+                    Name = name,
+                    Enabled = true,
+                    Path = name
+                });
+                changed = true;
+                continue;
+            }
+
+            if (existing.Enabled)
+            {
+                continue;
+            }
+
+            existing.Enabled = true;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            _ = _settingsRepository.SaveSettingsAsync(_settings);
+        }
     }
 
     private static void ApplyFixedLeaderCapabilities(AgentProfile profile)

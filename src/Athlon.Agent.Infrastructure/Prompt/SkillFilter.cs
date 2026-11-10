@@ -16,25 +16,22 @@ public static class SkillFilter
 
     public static bool IsEnabled(AgentSkill skill, AppSettings settings)
     {
-        if (IsDisabled(skill.Name, settings))
-        {
-            return false;
-        }
-
         var allowed = AgentProfileTurnScope.SkillNames ?? ScheduleTurnScope.Current?.SkillNames;
-        if (allowed is null)
+        if (allowed is not null)
         {
-            return true;
+            // Empty allow-list: deny (matches profile UI "skills×0" and MCP empty semantics).
+            if (allowed.Count == 0)
+            {
+                return false;
+            }
+
+            // Team Worker / schedule assignment is an explicit allow for this turn — do not let a
+            // global sidebar disable block load_skill_through_path for skills the profile selected.
+            return allowed.Any(name =>
+                string.Equals(name, skill.Name, StringComparison.OrdinalIgnoreCase));
         }
 
-        // Empty allow-list: deny (matches profile UI "skills×0" and MCP empty semantics).
-        if (allowed.Count == 0)
-        {
-            return false;
-        }
-
-        return allowed.Any(name =>
-            string.Equals(name, skill.Name, StringComparison.OrdinalIgnoreCase));
+        return !IsDisabled(skill.Name, settings);
     }
 
     public static bool IsDisabled(string skillName, AppSettings settings) =>

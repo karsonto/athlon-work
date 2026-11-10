@@ -1,5 +1,6 @@
 using System.Text;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
 
@@ -59,9 +60,23 @@ public sealed class SkillRuntime(IAgentSkillCatalog catalog, AppSettings setting
                 $"Skill not found: '{skillId}'. Please check the skill name. Available: {available}");
         }
 
-        if (SkillFilter.IsDisabled(skill.Name, settings))
+        if (!SkillFilter.IsEnabled(skill, settings))
         {
-            throw new ArgumentException($"Skill '{skillId}' is disabled in settings.");
+            var hasTurnAllowList =
+                AgentProfileTurnScope.SkillNames is not null
+                || ScheduleTurnScope.Current?.SkillNames is not null;
+            if (hasTurnAllowList)
+            {
+                throw new ArgumentException(
+                    $"Skill '{skillId}' is not allowed for this Team Worker / schedule profile.");
+            }
+
+            if (SkillFilter.IsDisabled(skill.Name, settings))
+            {
+                throw new ArgumentException($"Skill '{skillId}' is disabled in settings.");
+            }
+
+            throw new ArgumentException($"Skill '{skillId}' is not available.");
         }
 
         return skill;

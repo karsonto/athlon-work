@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
@@ -41,6 +42,37 @@ public sealed class SkillRuntimeTests
 
             Assert.Single(skills);
             Assert.Equal("alpha", skills[0].Name);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void SkillFilter_ProfileAllowList_OverridesGlobalDisable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-runtime", Guid.NewGuid().ToString("N"));
+        CreateSkillFolder(root, "taste-skill", "taste-skill", "Taste", "Body.");
+        try
+        {
+            var catalog = new AgentSkillCatalog(new FileSystemSkillRepository(root));
+            catalog.Reload();
+            var settings = new AppSettings
+            {
+                Skills = { new SkillSettings { Name = "taste-skill", Enabled = false } }
+            };
+
+            Assert.False(SkillFilter.IsEnabled(catalog.Skills.Single(), settings));
+
+            using var scope = AgentProfileTurnScope.Enter(new AgentProfileTurnOptions(
+                ProfileId: "worker-1",
+                SkillNames: ["taste-skill"]));
+            Assert.True(SkillFilter.IsEnabled(catalog.Skills.Single(), settings));
+
+            var runtime = new SkillRuntime(catalog, settings);
+            var loaded = runtime.LoadResource("taste-skill", "SKILL.md");
+            Assert.Contains("Successfully loaded skill", loaded, StringComparison.Ordinal);
         }
         finally
         {
