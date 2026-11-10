@@ -76,7 +76,8 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         _logger = logger.ForContext("TeamsPage");
         _runController = runController;
         _runController.BusyChanged += (_, busy) => IsBusy = busy;
-        _runController.TraceRequested += (_, (task, live)) => _ = OpenTraceAsync(task, live);
+        // Avoid lambda tuple-deconstruction (`(_, (task, live))`) — WPF temp compile hits CS1001.
+        _runController.TraceRequested += (_, args) => _ = OpenTraceAsync(args.Task, args.Live);
         _runController.TraceStatusChanged += (_, message) => StatusMessage = message;
         TeamsEnabled = settings.Teams.Enabled;
         TeamChatArtifacts.ConfigureTaskStore(taskStore);
