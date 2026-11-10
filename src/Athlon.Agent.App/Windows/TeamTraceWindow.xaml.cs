@@ -162,15 +162,56 @@ public partial class TeamTraceWindow : Window
             core.Settings.IsStatusBarEnabled = false;
             core.WebMessageReceived += OnWebMessageReceived;
 
-            // Paint a light shell first; transcripts load off the UI thread next.
-            var shell = TeamTraceHtml.Build(_task, _events, _teamName);
-            core.NavigateToString(shell);
+            // NavigateToString is async: pushing Tools before NavigationCompleted can no-op
+            // applyTraceUpdate while still stamping _lastFingerprint, so reopen stays empty.
+            var navigationDone = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnNavigationCompleted(object? _, CoreWebView2NavigationCompletedEventArgs args)
+            {
+                core.NavigationCompleted -= OnNavigationCompleted;
+                navigationDone.TrySetResult(args.IsSuccess);
+            }
+
+            core.NavigationCompleted += OnNavigationCompleted;
+
+            // Bake transcripts into the first document so close/reopen does not depend solely on a
+            // post-navigation script push (which used to race and leave Tools empty).
+            var task = _task;
+            var events = _events;
+            var teamName = _teamName;
+            var taskStore = _taskStore;
+            var initial = await Task.Run(() =>
+            {
+                var transcripts = taskStore is null
+                    ? null
+                    : TeamTraceTranscriptBuilder.Build(task, taskStore);
+                var fingerprint = taskStore is null
+                    ? null
+                    : TeamTraceTranscriptBuilder.ComputeFingerprint(task, events, taskStore);
+                var html = TeamTraceHtml.Build(task, events, teamName, transcripts);
+                return (html, fingerprint);
+            }).ConfigureAwait(true);
+
+            core.NavigateToString(initial.html);
+
+            var navigated = await navigationDone.Task.ConfigureAwait(true);
+            if (!navigated)
+            {
+                throw new InvalidOperationException("Team Trace page failed to load.");
+            }
+
             _webReady = true;
+            if (!string.IsNullOrWhiteSpace(initial.fingerprint))
+            {
+                _lastFingerprint = initial.fingerprint;
+            }
+
             if (_live)
             {
                 _pollTimer?.Start();
             }
 
+            // Refresh once more in case member files changed while the page was loading.
             await PushPayloadAsync(force: true).ConfigureAwait(true);
         }
         catch (Exception ex)
@@ -303,10 +344,18 @@ public partial class TeamTraceWindow : Window
             return;
         }
 
-        _lastFingerprint = built.fingerprint;
-        await TraceWebView.CoreWebView2
-            .ExecuteScriptAsync($"window.applyTraceUpdate && window.applyTraceUpdate({built.json});")
+        // Only stamp fingerprint after the page actually applied the payload. Otherwise a race
+        // against NavigateToString leaves Tools empty and every later poll/push is skipped.
+        var appliedJson = await TraceWebView.CoreWebView2
+            .ExecuteScriptAsync(
+                "(function(){ try { if (typeof window.applyTraceUpdate !== 'function') return false; "
+                + $"window.applyTraceUpdate({built.json}); return true; "
+                + "} catch (e) { return false; } })()")
             .ConfigureAwait(true);
+        if (string.Equals(appliedJson, "true", StringComparison.Ordinal))
+        {
+            _lastFingerprint = built.fingerprint;
+        }
     }
 
     private static bool IsTerminal(TeamTaskStatus status) =>
