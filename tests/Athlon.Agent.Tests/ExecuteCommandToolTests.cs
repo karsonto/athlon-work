@@ -115,6 +115,35 @@ public sealed class ExecuteCommandToolTests
     }
 
     [Fact]
+    public async Task InvokeAsync_WithWorkspace_AllowsCwdUnderSkillsDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-exec-skills-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        var skillDir = Path.Combine(appDataRoot, "skills", "demo-skill");
+        Directory.CreateDirectory(workspaceRoot);
+        Directory.CreateDirectory(skillDir);
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var result = await tool.InvokeAsync(new ToolInvocation(
+                "execute_command",
+                new Dictionary<string, string>
+                {
+                    ["command"] = "cd",
+                    ["cwd"] = skillDir
+                }));
+
+            Assert.True(result.Succeeded, result.Error ?? result.Summary);
+            Assert.Contains("demo-skill", result.Content, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task InvokeAsync_LargeOutput_TruncatesCapturedContent()
     {
         var tool = CreateTool();
@@ -308,12 +337,13 @@ public sealed class ExecuteCommandToolTests
         return line[prefix.Length..].Trim();
     }
 
-    private static ExecuteCommandTool CreateTool(string? workspaceRoot = null) =>
-        CreateHarness(workspaceRoot).Execute;
+    private static ExecuteCommandTool CreateTool(string? workspaceRoot = null, string? appDataRoot = null) =>
+        CreateHarness(workspaceRoot, appDataRoot).Execute;
 
-    private static CommandHarness CreateHarness(string? workspaceRoot = null)
+    private static CommandHarness CreateHarness(string? workspaceRoot = null, string? appDataRoot = null)
     {
-        var root = Path.Combine(Path.GetTempPath(), $".athlon-agent-exec-{Guid.NewGuid():N}");
+        var root = appDataRoot
+            ?? Path.Combine(Path.GetTempPath(), $".athlon-agent-exec-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         var paths = new TestPathProvider(root);
         var logger = new NoOpLogger();

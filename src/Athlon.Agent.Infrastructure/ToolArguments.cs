@@ -90,7 +90,9 @@ public static class ToolArguments
                 }
 
                 fullPath = guard.Normalize(normalized);
-                if (!guard.IsInsideWorkspace(fullPath))
+                // Skills files-root may sit under ~/.athlon-agent/skills; allow that cwd explicitly
+                // so execute_command can run skill scripts without forcing workspace-only cwd.
+                if (!guard.IsAllowedExecuteCommandWorkingDirectory(fullPath))
                 {
                     error = ToolResult.Failure("Outside workspace", fullPath);
                     fullPath = string.Empty;

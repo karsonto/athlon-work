@@ -118,6 +118,27 @@ public sealed class WorkspaceGuardTests
     }
 
     [Fact]
+    public void IsAllowedExecuteCommandWorkingDirectory_AllowsExternalSkillsRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-guard-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        var skillsRoot = Path.Combine(root, "external-skills", "demo-skill");
+        Directory.CreateDirectory(workspaceRoot);
+        Directory.CreateDirectory(appDataRoot);
+        Directory.CreateDirectory(skillsRoot);
+
+        var context = new ActiveWorkspaceContext();
+        context.SetWorkspace(workspaceRoot);
+        var paths = new SplitSkillsPathProvider(appDataRoot, Path.Combine(root, "external-skills"));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), paths);
+
+        Assert.False(guard.IsInsideWorkspace(skillsRoot));
+        Assert.True(guard.IsAllowedExecuteCommandWorkingDirectory(skillsRoot));
+        Assert.False(guard.IsAllowedExecuteCommandWorkingDirectory(Path.Combine(root, "other")));
+    }
+
+    [Fact]
     public void Normalize_WithoutConfiguredWorkspace_ResolvesRelativeAndAbsolutePaths()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-guard-{Guid.NewGuid():N}");
@@ -172,5 +193,19 @@ public sealed class WorkspaceGuardTests
         public void Warning(string messageTemplate, params object[] values) { }
         public void Error(Exception exception, string messageTemplate, params object[] values) { }
         public IAppLogger ForContext(string sourceContext) => this;
+    }
+
+    private sealed class SplitSkillsPathProvider(string rootPath, string skillsPath) : IAppPathProvider
+    {
+        public string RootPath { get; } = rootPath;
+        public string ConfigPath => Path.Combine(rootPath, "config");
+        public string SessionsPath => Path.Combine(rootPath, "sessions");
+        public string AuditPath => Path.Combine(rootPath, "audit");
+        public string LogsPath => Path.Combine(rootPath, "logs");
+        public string CredentialsPath => Path.Combine(rootPath, "credentials");
+        public string SkillsPath { get; } = skillsPath;
+        public void EnsureCreated() => Directory.CreateDirectory(rootPath);
+        public string ResolveSkillPath(string path) =>
+            string.IsNullOrWhiteSpace(path) ? path : Path.Combine(SkillsPath, path);
     }
 }

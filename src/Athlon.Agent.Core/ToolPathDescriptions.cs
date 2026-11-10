@@ -16,5 +16,6 @@ public static class ToolPathDescriptions
     public const string OptionalWorkspaceRelativeCwd =
         "Optional working directory. Prefer workspace-relative (forward slashes); absolute paths are allowed. "
         + "When workspace is configured, omitted cwd defaults to workspace root. "
+        + "cwd may also be a skill <files-root> under the skills install directory. "
         + "Quote paths with spaces or non-ASCII characters in cmd commands.";
 }

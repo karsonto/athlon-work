@@ -53,6 +53,30 @@ public sealed class WorkspaceGuard(
         return GetAllowedRoots().Any(root => IsPathUnderRoot(fullPath, root));
     }
 
+    /// <summary>
+    /// Working directories allowed for <c>execute_command</c>: active workspace, Athlon app-data,
+    /// and the skills install tree (so skill scripts can set cwd to their files-root).
+    /// </summary>
+    public bool IsAllowedExecuteCommandWorkingDirectory(string path)
+    {
+        if (IsInsideWorkspace(path))
+        {
+            return true;
+        }
+
+        if (CurrentKind == WorkspaceKind.Ssh || string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(paths.SkillsPath))
+        {
+            return false;
+        }
+
+        return IsPathUnderRoot(Path.GetFullPath(path), paths.SkillsPath);
+    }
+
     public string Normalize(string path, string? cwd = null)
     {
         if (CurrentKind == WorkspaceKind.Ssh)

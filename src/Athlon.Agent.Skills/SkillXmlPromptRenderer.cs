@@ -75,7 +75,7 @@ public static class SkillXmlPromptRenderer
         builder.AppendLine("Workflow:");
         builder.AppendLine("1. After loading a skill, use its <files-root> (or the Files root line in the load response).");
         builder.AppendLine("2. List its files:    dir \"<files-root>\"");
-        builder.AppendLine("3. Run scripts via absolute paths under <files-root> (cwd stays the workspace root); never invent paths.");
+        builder.AppendLine("3. Run scripts under <files-root>: either set execute_command cwd to that files-root, or keep cwd at the workspace root and pass absolute paths under <files-root>; never invent paths.");
         builder.AppendLine("</code_execution>");
         builder.AppendLine();
     }
