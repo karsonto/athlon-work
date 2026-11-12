@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Athlon · 右侧技能页设计稿</title>
+  <style>
+    :root {
+      --bg: #0B0C0F;
+      --chrome: #12141A;
+      --panel: #171A21;
+      --panel-2: #1C2029;
+      --hover: #232834;
+      --selected: #243041;
+      --border: #2A3140;
+      --border-strong: #3A4458;
+      --text: #EEF1F6;
+      --text-2: #B5BECB;
+      --muted: #8791A1;
+      --accent: #3B82F6;
+      --accent-soft: rgba(59, 130, 246, 0.16);
+      --ok: #22C55E;
+      --ok-soft: rgba(34, 197, 94, 0.16);
+      --warn: #F59E0B;
+      --font: "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+      --mono: "Cascadia Code", Consolas, monospace;
+      --sidebar: 340px;
+      --pane-h: 740px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(900px 420px at 12% -10%, rgba(59,130,246,0.14), transparent 55%),
+        radial-gradient(700px 380px at 90% 0%, rgba(20,184,166,0.10), transparent 50%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+    }
+    .page { max-width: 1280px; margin: 0 auto; padding: 28px 24px 48px; }
+    .hero h1 { margin: 0 0 8px; font-size: 28px; font-weight: 650; letter-spacing: -0.02em; }
+    .hero p { margin: 0 0 18px; color: var(--text-2); font-size: 14px; line-height: 1.55; max-width: 70ch; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .seg {
+      display: inline-flex; padding: 3px; border: 1px solid var(--border);
+      border-radius: 999px; background: rgba(255,255,255,0.03);
+    }
+    .seg button {
+      border: 0; background: transparent; color: var(--muted); font: inherit;
+      font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 999px; cursor: pointer;
+    }
+    .seg button.active { background: var(--accent-soft); color: #BFDBFE; }
+
+    .stage {
+      display: grid; grid-template-columns: 1fr var(--sidebar); min-height: var(--pane-h);
+      border: 1px solid var(--border); border-radius: 16px; overflow: hidden;
+      background: var(--chrome); box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+    }
+    .chat-mock {
+      border-right: 1px solid var(--border);
+      background: linear-gradient(180deg, #141820 0%, #10131A 100%);
+      padding: 18px; display: flex; flex-direction: column; gap: 14px;
+    }
+    .chat-top { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+    .bubble {
+      max-width: 78%; padding: 12px 14px; border-radius: 14px; background: var(--panel);
+      border: 1px solid var(--border); color: var(--text-2); font-size: 13px; line-height: 1.5;
+    }
+    .bubble.user { align-self: flex-end; background: #1E293B; color: var(--text); }
+    .chat-note {
+      margin-top: auto; color: var(--muted); font-size: 12px; line-height: 1.55;
+      border-top: 1px dashed var(--border); padding-top: 12px;
+    }
+
+    .skills-pane { display: flex; flex-direction: column; background: var(--panel); min-width: 0; height: var(--pane-h); }
+    .tabs {
+      display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+      border-bottom: 1px solid var(--border); background: var(--chrome); flex-shrink: 0;
+    }
+    .tab {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
+      border-radius: 8px; font-size: 12px; color: var(--muted);
+    }
+    .tab.active { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+
+    /* Sub-tabs: Skills | MCP */
+    .subtabs {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 8px 10px 0;
+      flex-shrink: 0;
+    }
+    .subtab {
+      border: 1px solid var(--border); background: var(--chrome); color: var(--muted);
+      border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 12px; font-weight: 650;
+      cursor: pointer;
+    }
+    .subtab.active {
+      background: var(--accent-soft);
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+      color: #BFDBFE;
+    }
+    .subtab .n {
+      font-weight: 600; opacity: 0.75; font-variant-numeric: tabular-nums;
+    }
+
+    .pane-header {
+      padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      background: color-mix(in srgb, var(--panel) 94%, transparent);
+    }
+    .count-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+    .count-row .title { font-size: 12px; font-weight: 650; color: var(--text-2); }
+    .count-row .meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .search {
+      width: 100%; border: 1px solid var(--border); background: var(--chrome); color: var(--text);
+      border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 12px; outline: none; margin-bottom: 8px;
+    }
+    .search:focus {
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .search::placeholder { color: var(--muted); }
+    .filters { display: flex; gap: 6px; }
+    .chip {
+      border: 1px solid var(--border); background: transparent; color: var(--muted);
+      border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .chip.active {
+      background: var(--accent-soft);
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+      color: #BFDBFE;
+    }
+
+    /* ONLY the list scrolls */
+    .list-scroll {
+      flex: 1; min-height: 0; overflow: auto; padding: 8px 8px 10px;
+      scrollbar-width: thin; scrollbar-color: #3A4458 transparent;
+    }
+    .list-scroll::-webkit-scrollbar { width: 10px; }
+    .list-scroll::-webkit-scrollbar-thumb {
+      background: #3A4458; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box;
+    }
+
+    .skill-list, .mcp-list { display: flex; flex-direction: column; gap: 3px; }
+    .skill-row {
+      display: grid; grid-template-columns: 36px 1fr; gap: 8px; align-items: start;
+      padding: 9px 10px; border: 1px solid transparent; border-radius: 10px;
+      cursor: pointer; background: transparent; text-align: left; color: inherit; font: inherit; width: 100%;
+    }
+    .skill-row:hover { background: var(--hover); }
+    .skill-row.selected {
+      background: var(--selected);
+      border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+    }
+    .skill-row.disabled .name, .skill-row.disabled .desc { opacity: 0.55; }
+    .toggle {
+      width: 34px; height: 20px; border-radius: 999px; border: 1px solid var(--border-strong);
+      background: #2A3140; position: relative; margin-top: 1px; flex-shrink: 0;
+    }
+    .toggle::after {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+      border-radius: 50%; background: #D1D5DB; transition: transform 140ms ease;
+    }
+    .toggle.on {
+      background: color-mix(in srgb, var(--ok) 55%, #14532D);
+      border-color: color-mix(in srgb, var(--ok) 45%, var(--border));
+    }
+    .toggle.on::after { transform: translateX(14px); background: #ECFDF5; }
+    .name { font-size: 13px; font-weight: 650; color: var(--text); line-height: 1.25; margin-bottom: 2px; }
+    .desc {
+      font-size: 11.5px; color: var(--muted); line-height: 1.35;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+
+    /* Detail pinned at bottom — does not live inside the long scroll */
+    .detail {
+      flex-shrink: 0; border-top: 1px solid var(--border); background: var(--panel-2);
+      padding: 10px 12px 12px; max-height: 160px; overflow: auto;
+    }
+    .detail h3 { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
+    .detail .full { margin: 0 0 8px; font-size: 12px; color: var(--text-2); line-height: 1.45; }
+    .detail .path {
+      margin: 0 0 8px; font-family: var(--mono); font-size: 10.5px; color: var(--muted); word-break: break-all;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .btn {
+      border: 1px solid var(--border); background: var(--chrome); color: var(--text-2);
+      border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;
+    }
+    .btn.primary {
+      background: var(--accent-soft);
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+      color: #BFDBFE;
+    }
+
+    .mcp-row {
+      border: 1px solid var(--border); background: var(--chrome); border-radius: 10px; padding: 10px;
+    }
+    .mcp-head { display: flex; align-items: center; gap: 8px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+    .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(245,158,11,0.16); }
+    .dot.off { background: #64748B; box-shadow: none; }
+    .mcp-name { font-size: 12.5px; font-weight: 650; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mcp-tools { margin: 8px 0 0 16px; padding: 0; list-style: none; color: var(--muted); font-size: 11px; line-height: 1.55; }
+
+    .empty {
+      border: 1px dashed var(--border-strong); border-radius: 12px; padding: 22px 16px;
+      text-align: center; margin: 12px 8px; background: rgba(255,255,255,0.02);
+    }
+    .empty h3 { margin: 0 0 6px; font-size: 14px; }
+    .empty p { margin: 0 0 14px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .empty .actions { justify-content: center; }
+
+    .before-hint { color: var(--muted); font-size: 11px; margin: 0 0 10px; padding: 0 4px; }
+    .before-wrap {
+      display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; border: 1px solid var(--border);
+      border-radius: 10px; background: var(--chrome); margin: 0 8px 12px;
+    }
+    .old-chip {
+      border: 1px solid var(--border); background: var(--panel-2); border-radius: 999px;
+      padding: 7px 11px; font-size: 12px; font-weight: 650; max-width: 160px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .old-chip.off { opacity: 0.45; }
+
+    .legend { margin-top: 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .card { border: 1px solid var(--border); background: rgba(255,255,255,0.02); border-radius: 12px; padding: 12px 14px; }
+    .card h4 { margin: 0 0 6px; font-size: 13px; }
+    .card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+    .fill { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    [hidden] { display: none !important; }
+
+    @media (max-width: 960px) {
+      .stage { grid-template-columns: 1fr; }
+      .chat-mock { display: none; }
+      .legend { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <h1>右侧技能页 · 设计稿</h1>
+      <p>
+        几十个技能 / MCP 时：<strong>页内子标签拆分</strong>，各自独立滚动；搜索栏固定不跟着滚。
+        不要把技能和 MCP 塞进同一条超长滚动条。
+      </p>
+      <div class="toolbar">
+        <div class="seg" id="mode-seg">
+          <button type="button" class="active" data-mode="after">优化后</button>
+          <button type="button" data-mode="dense">大量数据</button>
+          <button type="button" data-mode="before">现状对比</button>
+          <button type="button" data-mode="empty">空状态</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <aside class="chat-mock" aria-hidden="true">
+        <div class="chat-top"><span>Chat</span><span>右栏 · 固定高度</span></div>
+        <div class="bubble user">帮我启用 release-notes，并关掉不用的 MCP。</div>
+        <div class="bubble">右侧用「技能 / MCP」子标签分开找，列表区域自己滚动，详情钉在技能页底部。</div>
+        <div class="chat-note">
+          <strong>排版结论</strong><br />
+          · 顶：工作区标签（文件 / 技能 / 终端）<br />
+          · 中：子标签 技能(n) | MCP(m)<br />
+          · 下：固定工具条 + <em>仅列表滚动</em> + 详情条（技能页）
+        </div>
+      </aside>
+
+      <section class="skills-pane">
+        <div class="tabs">
+          <div class="tab">文件</div>
+          <div class="tab active">技能 <span>×</span></div>
+          <div class="tab">终端</div>
+        </div>
+
+        <!-- AFTER / DENSE -->
+        <div id="view-after" class="fill">
+          <div class="subtabs">
+            <button type="button" class="subtab active" data-section="skills">
+              技能 <span class="n" id="skill-n">(5)</span>
+            </button>
+            <button type="button" class="subtab" data-section="mcp">
+              MCP <span class="n" id="mcp-n">(3)</span>
+            </button>
+          </div>
+
+          <div id="section-skills" class="fill">
+            <div class="pane-header">
+              <div class="count-row">
+                <div class="title">已安装技能</div>
+                <div class="meta" id="count-meta">已启用 4 / 共 5</div>
+              </div>
+              <input class="search" id="search" type="search" placeholder="搜索技能名称或描述…" />
+              <div class="filters" id="filters">
+                <button type="button" class="chip active" data-filter="all">全部</button>
+                <button type="button" class="chip" data-filter="on">已启用</button>
+                <button type="button" class="chip" data-filter="off">已关闭</button>
+              </div>
+            </div>
+            <div class="list-scroll" id="skill-scroll">
+              <div class="skill-list" id="skill-list"></div>
+            </div>
+            <div class="detail" id="detail"></div>
+          </div>
+
+          <div id="section-mcp" class="fill" hidden>
+            <div class="pane-header">
+              <div class="count-row">
+                <div class="title">MCP 服务器</div>
+                <div class="meta" id="mcp-meta">已连接 2 / 共 3</div>
+              </div>
+              <input class="search" id="mcp-search" type="search" placeholder="搜索 MCP 名称或工具…" />
+            </div>
+            <div class="list-scroll" id="mcp-scroll">
+              <div class="mcp-list" id="mcp-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BEFORE -->
+        <div id="view-before" class="fill" hidden>
+          <div class="list-scroll" style="padding-top:14px">
+            <p class="before-hint">现状：技能 + MCP 挤在同一滚动里，芯片换行；几十项时 MCP 被顶没。</p>
+            <div class="before-wrap" id="before-skills"></div>
+            <p class="before-hint">继续往下滚才到 MCP…</p>
+            <div class="before-wrap" id="before-mcp"></div>
+          </div>
+        </div>
+
+        <!-- EMPTY -->
+        <div id="view-empty" class="fill" hidden>
+          <div class="list-scroll" style="padding-top:8px">
+            <div class="empty">
+              <h3>还没有安装技能</h3>
+              <p>从 Skill Hub 安装，或把技能包放到本机技能目录。</p>
+              <div class="actions">
+                <button class="btn primary" type="button">打开 Skill Hub</button>
+                <button class="btn" type="button">打开技能目录</button>
+              </div>
+            </div>
+            <div class="empty">
+              <h3>未配置 MCP 服务器</h3>
+              <p>在设置中添加 MCP 后，可在此启停并查看工具列表。</p>
+              <div class="actions"><button class="btn" type="button">前往设置</button></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="legend">
+      <div class="card">
+        <h4>为什么不用一条长滚动？</h4>
+        <p>40 个技能把 MCP 顶出首屏；用户要记住「MCP 在最底下」。子标签把两套目录分开。</p>
+      </div>
+      <div class="card">
+        <h4>滚动条用在哪？</h4>
+        <p>只用在列表区。搜索 / 筛选 / 子标签 / 详情条固定，滚列表时工具不丢。</p>
+      </div>
+      <div class="card">
+        <h4>详情怎么放？</h4>
+        <p>钉在技能子页底部（约 160px），列表吃剩余高度。不做成左右分栏（侧栏太窄）。</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const baseSkills = [
+      ["taste-skill", "审查落地页与品牌层级：首屏预算、字体与视觉锚点。", true],
+      ["release-notes", "根据提交记录整理版本说明与用户可读变更。", true],
+      ["pdf-extract", "从 PDF 抽取文本、表格与附图说明。", true],
+      ["browser-aria", "浏览器可达性树操作与页面断言。", true],
+      ["legacy-migrate", "旧配置迁移助手（默认关闭）。", false],
+    ];
+
+    const baseMcps = [
+      ["github", "ok", ["create_issue", "list_pull_requests", "search_code"], true],
+      ["filesystem", "warn", ["read_file", "write_file"], true],
+      ["jira", "off", ["create_ticket"], false],
+    ];
+
+    function makeDenseSkills() {
+      const out = baseSkills.map(([name, desc, enabled], i) => ({
+        id: name, name, desc, full: desc + " 完整说明用于侧栏详情预览。",
+        path: `~/.athlon-agent/skills/${name}`, enabled
+      }));
+      for (let i = 1; i <= 36; i++) {
+        const enabled = i % 5 !== 0;
+        const name = `skill-pack-${String(i).padStart(2, "0")}`;
+        out.push({
+          id: name,
+          name,
+          desc: `示例技能 #${i}：用于演示几十项时的独立滚动与筛选。`,
+          full: `这是 ${name} 的完整描述。侧栏详情钉在底部，列表区域单独滚动。`,
+          path: `~/.athlon-agent/skills/${name}`,
+          enabled
+        });
+      }
+      return out;
+    }
+
+    function makeDenseMcps() {
+      const out = baseMcps.map(([name, status, tools, expanded]) => ({ name, status, tools, expanded }));
+      for (let i = 1; i <= 18; i++) {
+        out.push({
+          name: `mcp-server-${String(i).padStart(2, "0")}`,
+          status: i % 4 === 0 ? "off" : i % 3 === 0 ? "warn" : "ok",
+          tools: [`tool_a_${i}`, `tool_b_${i}`, `tool_c_${i}`],
+          expanded: false
+        });
+      }
+      return out;
+    }
+
+    let dense = false;
+    let skills = [];
+    let mcps = [];
+    let filter = "all";
+    let query = "";
+    let mcpQuery = "";
+    let selectedId = "taste-skill";
+    let section = "skills";
+
+    const skillList = document.getElementById("skill-list");
+    const mcpList = document.getElementById("mcp-list");
+    const detailEl = document.getElementById("detail");
+    const countEl = document.getElementById("count-meta");
+    const mcpMeta = document.getElementById("mcp-meta");
+    const skillN = document.getElementById("skill-n");
+    const mcpN = document.getElementById("mcp-n");
+
+    function resetData() {
+      skills = dense ? makeDenseSkills() : baseSkills.map(([name, desc, enabled]) => ({
+        id: name, name, desc, full: desc + " 完整说明用于侧栏详情预览。",
+        path: `~/.athlon-agent/skills/${name}`, enabled
+      }));
+      mcps = dense ? makeDenseMcps() : baseMcps.map(([name, status, tools, expanded]) => ({ name, status, tools, expanded }));
+      if (!skills.some((s) => s.id === selectedId)) selectedId = skills[0]?.id;
+    }
+
+    function visibleSkills() {
+      return skills.filter((s) => {
+        if (filter === "on" && !s.enabled) return false;
+        if (filter === "off" && s.enabled) return false;
+        if (!query) return true;
+        const q = query.toLowerCase();
+        return s.name.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q);
+      });
+    }
+
+    function visibleMcps() {
+      return mcps.filter((m) => {
+        if (!mcpQuery) return true;
+        const q = mcpQuery.toLowerCase();
+        return m.name.toLowerCase().includes(q) || m.tools.some((t) => t.toLowerCase().includes(q));
+      });
+    }
+
+    function renderSkills() {
+      const enabledCount = skills.filter((s) => s.enabled).length;
+      countEl.textContent = `已启用 ${enabledCount} / 共 ${skills.length}`;
+      skillN.textContent = `(${skills.length})`;
+
+      const items = visibleSkills();
+      skillList.innerHTML = "";
+      if (!items.length) {
+        skillList.innerHTML = '<div class="empty" style="padding:14px"><p style="margin:0">没有匹配的技能</p></div>';
+      } else {
+        items.forEach((s) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "skill-row" + (s.id === selectedId ? " selected" : "") + (s.enabled ? "" : " disabled");
+          btn.innerHTML =
+            `<span class="toggle ${s.enabled ? "on" : ""}" data-toggle="${s.id}" title="启停"></span>`
+            + `<span><div class="name">${s.name}</div><div class="desc">${s.desc}</div></span>`;
+          btn.addEventListener("click", (e) => {
+            if (e.target.closest("[data-toggle]")) {
+              s.enabled = !s.enabled;
+              renderSkills();
+              return;
+            }
+            selectedId = s.id;
+            renderSkills();
+          });
+          skillList.appendChild(btn);
+        });
+      }
+
+      const selected = skills.find((s) => s.id === selectedId) || items[0];
+      if (!selected) { detailEl.hidden = true; return; }
+      detailEl.hidden = false;
+      detailEl.innerHTML =
+        `<h3>${selected.name}</h3>`
+        + `<p class="full">${selected.full}</p>`
+        + `<p class="path">${selected.path}</p>`
+        + `<div class="actions">`
+        + `<button class="btn primary" type="button">打开 Skill Hub</button>`
+        + `<button class="btn" type="button">打开技能目录</button>`
+        + `</div>`;
+    }
+
+    function renderMcps() {
+      const connected = mcps.filter((m) => m.status !== "off").length;
+      mcpMeta.textContent = `已连接 ${connected} / 共 ${mcps.length}`;
+      mcpN.textContent = `(${mcps.length})`;
+
+      const items = visibleMcps();
+      mcpList.innerHTML = "";
+      items.forEach((m) => {
+        const row = document.createElement("div");
+        row.className = "mcp-row";
+        const dot = m.status === "ok" ? "" : m.status === "warn" ? " warn" : " off";
+        row.innerHTML =
+          `<div class="mcp-head">`
+          + `<span class="dot${dot}"></span>`
+          + `<span class="mcp-name">${m.name}</span>`
+          + `<button class="btn" type="button" data-exp="${m.name}">${m.expanded ? "收起" : "展开"}</button>`
+          + `</div>`
+          + (m.expanded
+            ? `<ul class="mcp-tools">${m.tools.map((t) => `<li>${t}</li>`).join("")}</ul>`
+            : "");
+        row.querySelector("[data-exp]")?.addEventListener("click", () => {
+          m.expanded = !m.expanded;
+          renderMcps();
+        });
+        mcpList.appendChild(row);
+      });
+    }
+
+    function renderBefore() {
+      const sk = document.getElementById("before-skills");
+      const mp = document.getElementById("before-mcp");
+      sk.innerHTML = makeDenseSkills().slice(0, 24).map((s) =>
+        `<div class="old-chip${s.enabled ? "" : " off"}">${s.name}</div>`
+      ).join("");
+      mp.innerHTML = makeDenseMcps().slice(0, 12).map((m) =>
+        `<div class="old-chip${m.status === "off" ? " off" : ""}">● ${m.name}</div>`
+      ).join("");
+    }
+
+    function showSection(name) {
+      section = name;
+      document.querySelectorAll(".subtab").forEach((b) => {
+        b.classList.toggle("active", b.dataset.section === name);
+      });
+      document.getElementById("section-skills").hidden = name !== "skills";
+      document.getElementById("section-mcp").hidden = name !== "mcp";
+    }
+
+    document.querySelectorAll(".subtab").forEach((b) => {
+      b.addEventListener("click", () => showSection(b.dataset.section));
+    });
+
+    document.getElementById("search").addEventListener("input", (e) => {
+      query = e.target.value.trim();
+      renderSkills();
+    });
+    document.getElementById("mcp-search").addEventListener("input", (e) => {
+      mcpQuery = e.target.value.trim();
+      renderMcps();
+    });
+    document.getElementById("filters").addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-filter]");
+      if (!chip) return;
+      filter = chip.dataset.filter;
+      document.querySelectorAll("#filters .chip").forEach((c) => c.classList.toggle("active", c === chip));
+      renderSkills();
+    });
+
+    document.getElementById("mode-seg").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-mode]");
+      if (!btn) return;
+      document.querySelectorAll("#mode-seg button").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const mode = btn.dataset.mode;
+      dense = mode === "dense";
+      document.getElementById("view-after").hidden = !(mode === "after" || mode === "dense");
+      document.getElementById("view-before").hidden = mode !== "before";
+      document.getElementById("view-empty").hidden = mode !== "empty";
+      if (mode === "before") renderBefore();
+      if (mode === "after" || mode === "dense") {
+        resetData();
+        showSection("skills");
+        renderSkills();
+        renderMcps();
+        if (mode === "dense") {
+          // Jump mid-list so scrollbar is obvious
+          requestAnimationFrame(() => {
+            document.getElementById("skill-scroll").scrollTop = 220;
+          });
+        }
+      }
+    });
+
+    resetData();
+    renderSkills();
+    renderMcps();
+  </script>
+</body>
+</html>

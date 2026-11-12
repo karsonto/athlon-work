@@ -265,6 +265,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         Settings.SettingsSaved += _onSettingsSaved;
         Sidebar = sidebar;
         Sidebar.SetActivateHandlers(ToggleSkillFromSidebarAsync, ActivateMcpFromSidebarAsync);
+        Sidebar.SetNavigationHandlers(OpenSkillsFolderFromSidebar, () => CurrentPage = AppPage.SkillHub);
         Sidebar.Refresh(_appSettings);
         FileEditor = fileEditor;
         WorkspacePane = workspacePane;
@@ -476,7 +477,31 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         await _storage.SaveSettingsAsync(_appSettings).ConfigureAwait(true);
         Settings.SyncSkillsFromCatalog();
-        OnSkillConfigurationChanged();
+        // Local update avoids full catalog rebuild flash while keeping SkillFilter in sync.
+        Sidebar.ApplySkillEnabled(skillName, enabled);
+        RefreshAtCompletionSources();
+        OnPropertyChanged(nameof(Sidebar));
+    }
+
+    private void OpenSkillsFolderFromSidebar(string? preferredPath)
+    {
+        var path = !string.IsNullOrWhiteSpace(preferredPath) && Directory.Exists(preferredPath)
+            ? preferredPath!
+            : Sidebar.SkillsDirectoryPath;
+        try
+        {
+            Directory.CreateDirectory(path);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("Failed to open skills folder {Path}: {Error}", path, ex.Message);
+            ShowShellToast(ex.Message, ShellToastKind.Error);
+        }
     }
 
     private async Task ActivateMcpFromSidebarAsync(string serverName)

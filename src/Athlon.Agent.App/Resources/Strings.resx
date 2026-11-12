@@ -540,16 +540,82 @@
     <value>下载到本地…</value>
   </data>
   <data name="Context_SkillsMcpHint" xml:space="preserve">
-    <value>双击标签启停</value>
+    <value>单击开关启停；点行查看详情</value>
   </data>
   <data name="Context_McpTagTooltip" xml:space="preserve">
     <value>双击启停 MCP 服务器</value>
   </data>
   <data name="Context_SkillTagTooltip" xml:space="preserve">
-    <value>双击启停技能</value>
+    <value>单击开关启停技能</value>
   </data>
   <data name="Context_McpExpandTooltip" xml:space="preserve">
     <value>展开或收起工具列表</value>
+  </data>
+  <data name="Context_SkillsEmpty" xml:space="preserve">
+    <value>还没有安装技能</value>
+  </data>
+  <data name="Context_SkillsEmptyHint" xml:space="preserve">
+    <value>从 Skill Hub 安装，或把技能包放到本机技能目录。</value>
+  </data>
+  <data name="Context_McpEmpty" xml:space="preserve">
+    <value>未配置 MCP 服务器</value>
+  </data>
+  <data name="Context_McpEmptyHint" xml:space="preserve">
+    <value>在设置中添加 MCP 后，可在此启停并查看工具列表。</value>
+  </data>
+  <data name="Context_SkillsSearchPlaceholder" xml:space="preserve">
+    <value>搜索技能名称或描述…</value>
+  </data>
+  <data name="Context_McpSearchPlaceholder" xml:space="preserve">
+    <value>搜索 MCP 名称或工具…</value>
+  </data>
+  <data name="Context_SkillsFilterAll" xml:space="preserve">
+    <value>全部</value>
+  </data>
+  <data name="Context_SkillsFilterEnabled" xml:space="preserve">
+    <value>已启用</value>
+  </data>
+  <data name="Context_SkillsFilterDisabled" xml:space="preserve">
+    <value>已关闭</value>
+  </data>
+  <data name="Context_SkillsCount" xml:space="preserve">
+    <value>已启用 {0} / 共 {1}</value>
+  </data>
+  <data name="Context_McpCount" xml:space="preserve">
+    <value>已连接 {0} / 共 {1}</value>
+  </data>
+  <data name="Context_SkillsSectionTab" xml:space="preserve">
+    <value>技能 ({0})</value>
+  </data>
+  <data name="Context_McpSectionTab" xml:space="preserve">
+    <value>MCP ({0})</value>
+  </data>
+  <data name="Context_SkillsInstalledLabel" xml:space="preserve">
+    <value>已安装技能</value>
+  </data>
+  <data name="Context_OpenSkillHub" xml:space="preserve">
+    <value>打开 Skill Hub</value>
+  </data>
+  <data name="Context_OpenSkillsFolder" xml:space="preserve">
+    <value>打开技能目录</value>
+  </data>
+  <data name="Context_OpenSettings" xml:space="preserve">
+    <value>前往设置</value>
+  </data>
+  <data name="Context_NoSkillDescription" xml:space="preserve">
+    <value>暂无描述</value>
+  </data>
+  <data name="Context_NoMatchingSkills" xml:space="preserve">
+    <value>没有匹配的技能</value>
+  </data>
+  <data name="Context_NoMatchingMcp" xml:space="preserve">
+    <value>没有匹配的 MCP</value>
+  </data>
+  <data name="Context_McpExpand" xml:space="preserve">
+    <value>展开</value>
+  </data>
+  <data name="Context_McpCollapse" xml:space="preserve">
+    <value>收起</value>
   </data>
   <data name="Context_OpenInEditor" xml:space="preserve">
     <value>在编辑器中打开</value>

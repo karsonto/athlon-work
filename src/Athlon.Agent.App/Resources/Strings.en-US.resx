@@ -540,16 +540,82 @@ Hold to talk</value>
     <value>Download to local…</value>
   </data>
   <data name="Context_SkillsMcpHint" xml:space="preserve">
-    <value>Double-click a tag to enable or disable</value>
+    <value>Use the switch to toggle; click a row for details</value>
   </data>
   <data name="Context_McpTagTooltip" xml:space="preserve">
     <value>Double-click to enable or disable this MCP server</value>
   </data>
   <data name="Context_SkillTagTooltip" xml:space="preserve">
-    <value>Double-click to enable or disable this skill</value>
+    <value>Use the switch to enable or disable this skill</value>
   </data>
   <data name="Context_McpExpandTooltip" xml:space="preserve">
     <value>Expand or collapse tool list</value>
+  </data>
+  <data name="Context_SkillsEmpty" xml:space="preserve">
+    <value>No skills installed</value>
+  </data>
+  <data name="Context_SkillsEmptyHint" xml:space="preserve">
+    <value>Install from Skill Hub, or place skill packages in the local skills folder.</value>
+  </data>
+  <data name="Context_McpEmpty" xml:space="preserve">
+    <value>No MCP servers configured</value>
+  </data>
+  <data name="Context_McpEmptyHint" xml:space="preserve">
+    <value>Add MCP servers in Settings to enable, disable, and inspect tools here.</value>
+  </data>
+  <data name="Context_SkillsSearchPlaceholder" xml:space="preserve">
+    <value>Search skills by name or description…</value>
+  </data>
+  <data name="Context_McpSearchPlaceholder" xml:space="preserve">
+    <value>Search MCP by name or tool…</value>
+  </data>
+  <data name="Context_SkillsFilterAll" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="Context_SkillsFilterEnabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="Context_SkillsFilterDisabled" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
+  <data name="Context_SkillsCount" xml:space="preserve">
+    <value>Enabled {0} / {1} total</value>
+  </data>
+  <data name="Context_McpCount" xml:space="preserve">
+    <value>Connected {0} / {1} total</value>
+  </data>
+  <data name="Context_SkillsSectionTab" xml:space="preserve">
+    <value>Skills ({0})</value>
+  </data>
+  <data name="Context_McpSectionTab" xml:space="preserve">
+    <value>MCP ({0})</value>
+  </data>
+  <data name="Context_SkillsInstalledLabel" xml:space="preserve">
+    <value>Installed skills</value>
+  </data>
+  <data name="Context_OpenSkillHub" xml:space="preserve">
+    <value>Open Skill Hub</value>
+  </data>
+  <data name="Context_OpenSkillsFolder" xml:space="preserve">
+    <value>Open skills folder</value>
+  </data>
+  <data name="Context_OpenSettings" xml:space="preserve">
+    <value>Open Settings</value>
+  </data>
+  <data name="Context_NoSkillDescription" xml:space="preserve">
+    <value>No description</value>
+  </data>
+  <data name="Context_NoMatchingSkills" xml:space="preserve">
+    <value>No matching skills</value>
+  </data>
+  <data name="Context_NoMatchingMcp" xml:space="preserve">
+    <value>No matching MCP servers</value>
+  </data>
+  <data name="Context_McpExpand" xml:space="preserve">
+    <value>Expand</value>
+  </data>
+  <data name="Context_McpCollapse" xml:space="preserve">
+    <value>Collapse</value>
   </data>
   <data name="Context_OpenInEditor" xml:space="preserve">
     <value>Open in editor</value>

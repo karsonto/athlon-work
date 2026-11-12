@@ -230,7 +230,7 @@
                                             <Border Style="{StaticResource SkillTagChipStyle}"
                                                     ToolTip="{loc:Localize Key=Context_SkillTagTooltip}">
                                                 <i:Interaction.Behaviors>
-                                                    <behaviors:CommandDoubleClickBehavior Command="{Binding ActivateCommand}" />
+                                                    <behaviors:CommandDoubleClickBehavior Command="{Binding ToggleCommand}" />
                                                 </i:Interaction.Behaviors>
                                                 <TextBlock Text="{Binding Name}"
                                                            FontSize="12"

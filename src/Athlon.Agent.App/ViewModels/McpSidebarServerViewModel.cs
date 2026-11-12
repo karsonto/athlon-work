@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Mcp;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -38,9 +39,13 @@ public sealed partial class McpSidebarServerViewModel : ObservableObject
     public bool IsHealthy => Enabled && RuntimeState == McpConnectionState.Connected;
     public bool IsWarning => Enabled && RuntimeState != McpConnectionState.Connected;
     public string Chevron => IsExpanded ? "▾" : "▸";
+    public string ExpandLabel => IsExpanded
+        ? Strings.Get("Context_McpCollapse")
+        : Strings.Get("Context_McpExpand");
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Chevron))]
+    [NotifyPropertyChangedFor(nameof(ExpandLabel))]
     private bool isExpanded;
 
     [RelayCommand]
