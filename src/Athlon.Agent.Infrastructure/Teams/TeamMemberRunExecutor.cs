@@ -138,8 +138,11 @@ public sealed class TeamMemberRunExecutor(
                 workspaceKind);
 
         var completePrompt = BuildCompletePrompt(profile, isLeader, task);
-        var maxRounds = profile.MaxModelToolRounds
-            ?? settings.Teams.MaxModelToolRounds;
+        // Workers: no MaxModelToolRounds cap — stop via wall-clock timeout / cancel instead.
+        // Leaders still use profile/settings so orchestration cannot spin forever on tools.
+        int? maxRounds = isLeader
+            ? profile.MaxModelToolRounds ?? settings.Teams.MaxModelToolRounds
+            : null;
         var childContext = parentContext.CreateTeamMember(
             memberSessionId,
             task.TaskId,

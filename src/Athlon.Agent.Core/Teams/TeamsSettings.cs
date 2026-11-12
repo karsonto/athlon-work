@@ -18,6 +18,10 @@ public sealed class TeamsSettings
     [Obsolete("Ignored at runtime. Redispatch uses MaxRepairRounds only.")]
     public int AbsoluteMaxIterations { get; set; } = 10;
 
+    /// <summary>
+    /// Cap for Leader model↔tool rounds only. Workers ignore this and run without a round limit
+    /// (wall-clock <see cref="WorkerRunTimeoutSeconds"/> still applies).
+    /// </summary>
     public int MaxModelToolRounds { get; set; } = 24;
 
     /// <summary>
