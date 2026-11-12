@@ -386,6 +386,49 @@ html.replaying .message-row { animation: none; }
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+.message-content.md-root.team-trace-card,
+.md-root.team-trace-card {
+  display: block;
+  margin: 2px 0 4px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border, rgba(127,127,127,0.35));
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--user-bubble, rgba(127,127,127,0.14)) 70%, transparent),
+      transparent 70%
+    );
+  cursor: pointer;
+  max-width: min(560px, 100%);
+  box-sizing: border-box;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+.message-content.md-root.team-trace-card:hover,
+.md-root.team-trace-card:hover {
+  border-color: var(--md-link, #6366f1);
+  transform: translateY(-1px);
+}
+.message-content.md-root.team-trace-card > h3:first-child,
+.md-root.team-trace-card > h3:first-child {
+  margin-top: 0;
+}
+.message-content.md-root.team-trace-card.is-running,
+.md-root.team-trace-card.is-running {
+  border-color: color-mix(in srgb, var(--md-link, #6366f1) 55%, var(--border, rgba(127,127,127,0.35)));
+}
+.message-content.md-root.team-trace-card.is-done,
+.md-root.team-trace-card.is-done {
+  border-color: color-mix(in srgb, #22c55e 45%, var(--border, rgba(127,127,127,0.35)));
+}
+.message-content.md-root.team-trace-card.is-failed,
+.md-root.team-trace-card.is-failed {
+  border-color: color-mix(in srgb, #ef4444 45%, var(--border, rgba(127,127,127,0.35)));
+}
+.message-content.md-root.team-trace-card.is-waiting,
+.md-root.team-trace-card.is-waiting {
+  border-color: color-mix(in srgb, #f59e0b 45%, var(--border, rgba(127,127,127,0.35)));
+}
 .message-content.md-root a.team-trace-bubble,
 a.team-trace-bubble {
   display: inline-flex;
@@ -417,6 +460,14 @@ a.team-trace-bubble::before {
   border-radius: 50%;
   background: var(--md-link, #6366f1);
   flex-shrink: 0;
+}
+.message-content.md-root.team-trace-card.is-running a.team-trace-bubble::before,
+.md-root.team-trace-card.is-running a.team-trace-bubble::before {
+  animation: team-trace-pulse 1.4s ease-in-out infinite;
+}
+@keyframes team-trace-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
 }
 .message-content.md-root code:not(pre code),
 .tool-result-html.md-root code:not(pre code) {

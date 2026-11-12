@@ -803,18 +803,18 @@
   <data name="Teams_ChatSummaryOk" xml:space="preserve">
     <value>{0}
 
-[查看 Trace](athlon://team-trace?taskId={1})</value>
+[放大 Trace](athlon://team-trace?taskId={1})</value>
   </data>
   <data name="Teams_ChatSummaryFail" xml:space="preserve">
     <value>{0}
 
-[查看 Trace](athlon://team-trace?taskId={1})</value>
+[放大 Trace](athlon://team-trace?taskId={1})</value>
   </data>
   <data name="Teams_ChatSummaryFailNoTrace" xml:space="preserve">
     <value>{0}</value>
   </data>
   <data name="Teams_TraceBubbleLabel" xml:space="preserve">
-    <value>查看 Trace</value>
+    <value>放大 Trace</value>
   </data>
   <data name="Debug_PhaseLabel" xml:space="preserve">
     <value>Debug 阶段：{0}</value>

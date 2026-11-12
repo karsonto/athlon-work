@@ -809,18 +809,18 @@ Hold to talk</value>
   <data name="Teams_ChatSummaryOk" xml:space="preserve">
     <value>{0}
 
-[View Trace](athlon://team-trace?taskId={1})</value>
+[Expand Trace](athlon://team-trace?taskId={1})</value>
   </data>
   <data name="Teams_ChatSummaryFail" xml:space="preserve">
     <value>{0}
 
-[View Trace](athlon://team-trace?taskId={1})</value>
+[Expand Trace](athlon://team-trace?taskId={1})</value>
   </data>
   <data name="Teams_ChatSummaryFailNoTrace" xml:space="preserve">
     <value>{0}</value>
   </data>
   <data name="Teams_TraceBubbleLabel" xml:space="preserve">
-    <value>View Trace</value>
+    <value>Expand Trace</value>
   </data>
   <data name="Debug_PhaseLabel" xml:space="preserve">
     <value>Debug phase: {0}</value>

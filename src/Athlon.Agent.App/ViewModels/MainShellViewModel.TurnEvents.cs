@@ -156,12 +156,12 @@ public partial class MainShellViewModel
             SetComposerStatus("Teams · resume");
         }
 
-        var progress = CreateTeamChatProgress(captureSessionId, captureUi, turnAnchorId);
+        var runUi = CreateTeamChatProgress(captureSessionId, captureUi, turnAnchorId);
         RequestRefreshSessionHistory();
         try
         {
             var runTask = TeamsPageVm.ResumeTeamAskAsync(
-                captureSessionId, text, openTrace: true, progress: progress);
+                captureSessionId, text, openTrace: false, progress: runUi.Progress);
             SyncSessionUiPin(captureSessionId);
             UpdateDisplayedBusyState();
             RequestRefreshSessionHistory();
@@ -173,7 +173,8 @@ public partial class MainShellViewModel
                     ok,
                     message,
                     task,
-                    turnAnchorId)
+                    turnAnchorId,
+                    runUi)
                 .ConfigureAwait(true);
         }
         finally

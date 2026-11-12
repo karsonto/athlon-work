@@ -942,7 +942,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     public Task<(bool Ok, string Message, TeamTask? Task)> ResumeTeamAskAsync(
         string rootSessionId,
         string humanAnswer,
-        bool openTrace = true,
+        bool openTrace = false,
         CancellationToken cancellationToken = default,
         IProgress<TeamRunProgress>? progress = null) =>
         _runController.ResumeTeamAskAsync(rootSessionId, humanAnswer, openTrace, cancellationToken, progress);
@@ -955,7 +955,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         string rootSessionId,
         string goal,
         string? teamId = null,
-        bool openTrace = true,
+        bool openTrace = false,
         CancellationToken cancellationToken = default,
         IProgress<TeamRunProgress>? progress = null)
     {

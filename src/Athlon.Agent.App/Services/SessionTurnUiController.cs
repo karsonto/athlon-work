@@ -758,6 +758,48 @@ public sealed partial class SessionTurnUiController
     }
 
     /// <summary>
+    /// Updates an existing local assistant bubble in place (used for the live Team Trace preview card).
+    /// </summary>
+    public ChatMessage? UpdateLocalAssistantMessage(string messageId, string assistantMarkdown)
+    {
+        if (string.IsNullOrWhiteSpace(messageId))
+        {
+            return null;
+        }
+
+        ChatMessage? updated = null;
+        RunOnUiSync(() =>
+        {
+            var viewModel = Messages.FirstOrDefault(message =>
+                string.Equals(message.MessageId, messageId, StringComparison.Ordinal));
+            if (viewModel is null)
+            {
+                return;
+            }
+
+            viewModel.Content = assistantMarkdown ?? string.Empty;
+            updated = new ChatMessage(
+                viewModel.MessageId,
+                MessageRole.Assistant,
+                viewModel.Content,
+                viewModel.CreatedAtUtc);
+
+            if (CanTouchChatView && !string.IsNullOrWhiteSpace(viewModel.Content))
+            {
+                _ = ChatView!.ApplyAssistantMarkdownAsync(viewModel);
+            }
+            else
+            {
+                SyncChatView(immediate: true, authoritative: true);
+            }
+
+            RequestScrollImmediate();
+        });
+
+        return updated;
+    }
+
+    /// <summary>
     /// Publishes (or seals) a FilesChanged card for a local Teams turn that never ran a live agent stream.
     /// </summary>
     public void PublishLocalFilesChanged(

@@ -48,7 +48,7 @@ public sealed class TeamRunController
         string rootSessionId,
         string goal,
         string? teamId = null,
-        bool openTrace = true,
+        bool openTrace = false,
         CancellationToken cancellationToken = default,
         IProgress<TeamRunProgress>? progress = null,
         Func<string, string?>? teamNameLookup = null)
@@ -88,21 +88,13 @@ public sealed class TeamRunController
                 Goal = goal.Trim()
             };
 
-            // Open Trace immediately so the user can watch Leader/Workers live.
             var began = await _orchestrator.BeginAsync(request, runCts.Token).ConfigureAwait(true);
             if (!began.Ok)
             {
                 return (false, began.Error ?? "Failed", began.Task);
             }
 
-            if (openTrace)
-            {
-                TraceRequested?.Invoke(this, (began.Task, live: true));
-                // Let the Trace window paint before the Leader turn blocks the UI thread.
-                await Application.Current.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
-            }
-
-            // Chat Trace bubble at kickoff so closing the window still leaves a deep link.
+            // Chat Trace preview bubble at kickoff; full Trace window opens only when requested.
             ReportTeamProgress(progress, new TeamRunProgress
             {
                 Kind = TeamRunProgressKind.TaskStarted,
@@ -112,6 +104,13 @@ public sealed class TeamRunController
                 StatusLabel = "Running",
                 ResponseText = began.Task.Goal
             });
+
+            if (openTrace)
+            {
+                TraceRequested?.Invoke(this, (began.Task, live: true));
+                // Let the Trace window paint before the Leader turn blocks the UI thread.
+                await Application.Current.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+            }
 
             var completed = await _orchestrator
                 .RunToCompletionAsync(
@@ -144,7 +143,7 @@ public sealed class TeamRunController
     public async Task<(bool Ok, string Message, TeamTask? Task)> ResumeTeamAskAsync(
         string rootSessionId,
         string humanAnswer,
-        bool openTrace = true,
+        bool openTrace = false,
         CancellationToken cancellationToken = default,
         IProgress<TeamRunProgress>? progress = null)
     {

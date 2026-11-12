@@ -1046,7 +1046,7 @@ function enhanceTeamTraceBubbles(root) {
     anchor.dataset.traceBubble = '1';
     anchor.classList.add('team-trace-bubble');
     if (!anchor.textContent || !String(anchor.textContent).trim()) {
-      anchor.textContent = t('teamsTraceOpen') || 'View Trace';
+      anchor.textContent = t('teamsTraceOpen') || 'Expand Trace';
     }
     var parent = anchor.parentElement;
     if (parent
@@ -1055,6 +1055,43 @@ function enhanceTeamTraceBubbles(root) {
       && parent.parentElement) {
       parent.replaceWith(anchor);
     }
+
+    var host = anchor.closest('.message-content') || anchor.closest('.md-root') || anchor.parentElement;
+    if (!host || host.dataset.traceCard === '1') return;
+    // Promote live Trace preview bubbles (marker or Teams heading) into a clickable card.
+    // Final summary bubbles keep a compact CTA only.
+    var hasPreviewMarker = false;
+    for (var i = 0; i < host.childNodes.length; i++) {
+      var node = host.childNodes[i];
+      if (node.nodeType === 8 && node.nodeValue && node.nodeValue.indexOf('athlon-team-trace:') >= 0) {
+        hasPreviewMarker = true;
+        break;
+      }
+    }
+    var heading = host.querySelector('h1, h2, h3, h4');
+    var headingText = heading && heading.textContent ? String(heading.textContent).trim() : '';
+    var looksLikePreview = hasPreviewMarker
+      || host.innerHTML.indexOf('athlon-team-trace:') >= 0
+      || /^Teams\s*·/.test(headingText);
+    if (!looksLikePreview) return;
+
+    host.dataset.traceCard = '1';
+    host.classList.add('team-trace-card');
+    var statusText = '';
+    var strong = host.querySelector('strong, b');
+    if (strong && strong.textContent) statusText = String(strong.textContent).trim().toLowerCase();
+    if (statusText.indexOf('running') >= 0) host.classList.add('is-running');
+    else if (statusText.indexOf('fail') >= 0 || statusText.indexOf('cancel') >= 0) host.classList.add('is-failed');
+    else if (statusText.indexOf('succeed') >= 0 || statusText.indexOf('completed') >= 0) host.classList.add('is-done');
+    else if (statusText.indexOf('await') >= 0) host.classList.add('is-waiting');
+
+    host.addEventListener('click', function (event) {
+      var target = event.target;
+      if (target && target.closest && target.closest('a')) return;
+      event.preventDefault();
+      if (typeof anchor.click === 'function') anchor.click();
+      else window.location.href = anchor.getAttribute('href');
+    });
   });
 }
 

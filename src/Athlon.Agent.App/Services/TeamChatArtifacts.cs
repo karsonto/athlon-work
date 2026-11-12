@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Teams;
@@ -10,6 +12,9 @@ namespace Athlon.Agent.App.Services;
 internal static class TeamChatArtifacts
 {
     private static ITeamTaskStore? _taskStore;
+
+    /// <summary>HTML comment marker so Chat JS can promote the bubble into a Trace preview card.</summary>
+    public const string TracePreviewMarkerPrefix = "<!-- athlon-team-trace:";
 
     /// <summary>Wired once from TeamsPageViewModel so Chat replay can rebuild FilesChanged cards.</summary>
     public static void ConfigureTaskStore(ITeamTaskStore taskStore) =>
@@ -55,7 +60,13 @@ internal static class TeamChatArtifacts
     {
         if (step.Kind == TeamRunProgressKind.TaskStarted)
         {
-            return FormatTraceStartedMarkdown(step.TaskId, step.Title, step.ResponseText);
+            return FormatTracePreviewMarkdown(new TeamTracePreviewState
+            {
+                TaskId = step.TaskId,
+                Title = step.Title,
+                StatusLabel = string.IsNullOrWhiteSpace(step.StatusLabel) ? "Running" : step.StatusLabel,
+                GoalPreview = step.ResponseText
+            });
         }
 
         var role = step.Kind switch
@@ -82,19 +93,28 @@ internal static class TeamChatArtifacts
         return $"### Teams · {title} · {status}{iter}\n\n{body}";
     }
 
-    /// <summary>Early Chat bubble so users can reopen Trace if the window was closed.</summary>
-    public static string FormatTraceStartedMarkdown(
-        string taskId,
-        string? teamOrTitle = null,
-        string? goalPreview = null)
+    /// <summary>Live Trace preview card in Chat — click expands the full Trace window.</summary>
+    public static string FormatTracePreviewMarkdown(TeamTracePreviewState state)
     {
-        var title = string.IsNullOrWhiteSpace(teamOrTitle) ? "Teams" : teamOrTitle.Trim();
-        var sb = new System.Text.StringBuilder();
-        sb.Append("### Teams · ").Append(title).AppendLine(" · Running");
+        var taskId = (state.TaskId ?? "").Trim();
+        var title = string.IsNullOrWhiteSpace(state.Title) ? "Teams" : state.Title.Trim();
+        var status = string.IsNullOrWhiteSpace(state.StatusLabel) ? "Running" : state.StatusLabel.Trim();
+        var sb = new StringBuilder();
+        sb.Append(TracePreviewMarkerPrefix).Append(WebUtility.HtmlEncode(taskId)).AppendLine(" -->");
+        sb.Append("### Teams · ").Append(title).AppendLine();
         sb.AppendLine();
-        if (!string.IsNullOrWhiteSpace(goalPreview))
+        sb.Append("**").Append(status).Append("**");
+        if (state.RecentLines.Count > 0)
         {
-            var preview = goalPreview.Trim();
+            sb.Append(" · ").Append(state.RecentLines.Count).Append(state.RecentLines.Count == 1 ? " update" : " updates");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(state.GoalPreview))
+        {
+            var preview = state.GoalPreview.Trim();
             if (preview.Length > 200)
             {
                 preview = preview[..200].TrimEnd() + "…";
@@ -104,9 +124,59 @@ internal static class TeamChatArtifacts
             sb.AppendLine();
         }
 
-        sb.Append("[查看 Trace](athlon://team-trace?taskId=").Append(taskId.Trim()).Append(')');
+        if (state.RecentLines.Count > 0)
+        {
+            foreach (var line in state.RecentLines.TakeLast(3))
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                sb.Append("- ").AppendLine(line.Trim());
+            }
+
+            sb.AppendLine();
+        }
+
+        sb.Append("[放大 Trace](athlon://team-trace?taskId=").Append(taskId).Append(')');
         return sb.ToString();
     }
+
+    public static string FormatRecentProgressLine(TeamRunProgress step)
+    {
+        var role = step.Kind switch
+        {
+            TeamRunProgressKind.LeaderTurnCompleted => "Leader",
+            TeamRunProgressKind.WorkerFailed => "Worker",
+            TeamRunProgressKind.WorkerCancelled => "Worker",
+            TeamRunProgressKind.WorkerCompleted => "Worker",
+            _ => "Teams"
+        };
+        var title = string.IsNullOrWhiteSpace(step.Title) ? role : step.Title.Trim();
+        var status = string.IsNullOrWhiteSpace(step.StatusLabel) ? step.Kind.ToString() : step.StatusLabel.Trim();
+        if (step.Kind is TeamRunProgressKind.WorkerCompleted
+            or TeamRunProgressKind.WorkerFailed
+            or TeamRunProgressKind.WorkerCancelled)
+        {
+            return $"{title} · {status} · iter {Math.Max(1, step.Iteration)}";
+        }
+
+        return $"{title} · {status}";
+    }
+
+    /// <summary>Early Chat bubble so users can reopen Trace if the window was closed.</summary>
+    public static string FormatTraceStartedMarkdown(
+        string taskId,
+        string? teamOrTitle = null,
+        string? goalPreview = null) =>
+        FormatTracePreviewMarkdown(new TeamTracePreviewState
+        {
+            TaskId = taskId,
+            Title = teamOrTitle ?? "Teams",
+            StatusLabel = "Running",
+            GoalPreview = goalPreview
+        });
 
     /// <summary>
     /// Loads a Team task from the configured store and collects member file edits (safe for
@@ -195,5 +265,33 @@ internal static class TeamChatArtifacts
         var end = slice.IndexOfAny([' ', ')', ']', '"', '\'', '\r', '\n', '&', '?']);
         taskId = end >= 0 ? slice[..end] : slice;
         return !string.IsNullOrWhiteSpace(taskId);
+    }
+}
+
+/// <summary>Mutable state for the in-chat Trace preview bubble while a Team run is live.</summary>
+internal sealed class TeamTracePreviewState
+{
+    public string TaskId { get; set; } = "";
+
+    public string Title { get; set; } = "Teams";
+
+    public string StatusLabel { get; set; } = "Running";
+
+    public string? GoalPreview { get; set; }
+
+    public List<string> RecentLines { get; } = new();
+
+    public void RememberLine(string line, int maxLines = 3)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return;
+        }
+
+        RecentLines.Add(line.Trim());
+        while (RecentLines.Count > maxLines)
+        {
+            RecentLines.RemoveAt(0);
+        }
     }
 }

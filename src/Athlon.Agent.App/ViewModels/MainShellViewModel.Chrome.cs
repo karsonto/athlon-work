@@ -126,7 +126,7 @@ public partial class MainShellViewModel
         var turnAnchorId = userMessage.Id;
         await PersistTeamChatMessageAsync(captureSessionId, userMessage).ConfigureAwait(true);
 
-        var progress = CreateTeamChatProgress(captureSessionId, captureUi, turnAnchorId);
+        var runUi = CreateTeamChatProgress(captureSessionId, captureUi, turnAnchorId);
         // Register CTS inside RunTeamGoal before first await — refresh Busy/sidebar after kickoff starts.
         RequestRefreshSessionHistory();
 
@@ -134,12 +134,13 @@ public partial class MainShellViewModel
         {
             // Run via orchestrator path without mutating Teams config page (no new Team / no list refresh).
             // Multiple sessions may run Teams concurrently; Busy is always derived from the displayed session.
+            // Keep Trace in the chat preview bubble; open the full window only on click.
             var runTask = TeamsPageVm.RunTeamGoalAsync(
                 captureSessionId,
                 goal,
                 team.Id,
-                openTrace: true,
-                progress: progress);
+                openTrace: false,
+                progress: runUi.Progress);
             SyncSessionUiPin(captureSessionId);
             UpdateDisplayedBusyState();
             RequestRefreshSessionHistory();
@@ -152,7 +153,8 @@ public partial class MainShellViewModel
                     ok,
                     message,
                     task,
-                    turnAnchorId)
+                    turnAnchorId,
+                    runUi)
                 .ConfigureAwait(true);
         }
         finally
@@ -171,17 +173,24 @@ public partial class MainShellViewModel
         return true;
     }
 
-    private IProgress<Athlon.Agent.Core.Teams.TeamRunProgress> CreateTeamChatProgress(
+    private TeamChatRunUiState CreateTeamChatProgress(
         string captureSessionId,
         SessionTurnUiController captureUi,
-        string turnAnchorId) =>
-        new Progress<Athlon.Agent.Core.Teams.TeamRunProgress>(step =>
+        string turnAnchorId)
+    {
+        var state = new TeamChatRunUiState();
+        state.Progress = new Progress<Athlon.Agent.Core.Teams.TeamRunProgress>(step =>
         {
             _ = Application.Current.Dispatcher.InvokeAsync(async () =>
             {
                 try
                 {
-                    await ApplyTeamStepProgressToChatAsync(captureSessionId, captureUi, turnAnchorId, step)
+                    await ApplyTeamStepProgressToChatAsync(
+                            captureSessionId,
+                            captureUi,
+                            turnAnchorId,
+                            step,
+                            state)
                         .ConfigureAwait(true);
                 }
                 catch (Exception ex)
@@ -190,22 +199,62 @@ public partial class MainShellViewModel
                 }
             });
         });
+        return state;
+    }
 
     private async Task ApplyTeamStepProgressToChatAsync(
         string captureSessionId,
         SessionTurnUiController captureUi,
         string turnAnchorId,
-        Athlon.Agent.Core.Teams.TeamRunProgress step)
+        Athlon.Agent.Core.Teams.TeamRunProgress step,
+        TeamChatRunUiState runUi)
     {
-        var markdown = TeamChatArtifacts.FormatStepMarkdown(step);
-        var assistantMessage = captureUi.AppendLocalAssistantMessage(markdown);
-        await PersistTeamChatMessageAsync(captureSessionId, assistantMessage).ConfigureAwait(true);
-
-        // Kickoff Trace bubble has no file edits yet — skip FilesChanged churn.
         if (step.Kind == Athlon.Agent.Core.Teams.TeamRunProgressKind.TaskStarted)
         {
+            runUi.Preview.TaskId = step.TaskId;
+            runUi.Preview.Title = string.IsNullOrWhiteSpace(step.Title) ? "Teams" : step.Title;
+            runUi.Preview.StatusLabel = string.IsNullOrWhiteSpace(step.StatusLabel) ? "Running" : step.StatusLabel;
+            runUi.Preview.GoalPreview = step.ResponseText;
+            var previewMarkdown = TeamChatArtifacts.FormatTracePreviewMarkdown(runUi.Preview);
+            var previewMessage = captureUi.AppendLocalAssistantMessage(previewMarkdown);
+            runUi.PreviewMessageId = previewMessage.Id;
+            await PersistTeamChatMessageAsync(captureSessionId, previewMessage).ConfigureAwait(true);
             return;
         }
+
+        runUi.Preview.TaskId = string.IsNullOrWhiteSpace(runUi.Preview.TaskId) ? step.TaskId : runUi.Preview.TaskId;
+        if (!string.IsNullOrWhiteSpace(step.Title)
+            && string.Equals(runUi.Preview.Title, "Teams", StringComparison.Ordinal))
+        {
+            runUi.Preview.Title = step.Title;
+        }
+
+        runUi.Preview.StatusLabel = string.IsNullOrWhiteSpace(step.StatusLabel)
+            ? step.Kind.ToString()
+            : step.StatusLabel;
+        runUi.Preview.RememberLine(TeamChatArtifacts.FormatRecentProgressLine(step));
+
+        if (!string.IsNullOrWhiteSpace(runUi.PreviewMessageId))
+        {
+            var previewMarkdown = TeamChatArtifacts.FormatTracePreviewMarkdown(runUi.Preview);
+            var updated = captureUi.UpdateLocalAssistantMessage(runUi.PreviewMessageId, previewMarkdown);
+            if (updated is not null)
+            {
+                await PersistTeamChatMessageAsync(captureSessionId, updated, upsert: true).ConfigureAwait(true);
+            }
+        }
+        else
+        {
+            var previewMarkdown = TeamChatArtifacts.FormatTracePreviewMarkdown(runUi.Preview);
+            var previewMessage = captureUi.AppendLocalAssistantMessage(previewMarkdown);
+            runUi.PreviewMessageId = previewMessage.Id;
+            await PersistTeamChatMessageAsync(captureSessionId, previewMessage).ConfigureAwait(true);
+        }
+
+        // Keep step narrative bubbles so Chat still shows Worker/Leader outputs without opening Trace.
+        var stepMarkdown = TeamChatArtifacts.FormatStepMarkdown(step);
+        var assistantMessage = captureUi.AppendLocalAssistantMessage(stepMarkdown);
+        await PersistTeamChatMessageAsync(captureSessionId, assistantMessage).ConfigureAwait(true);
 
         await PublishTeamFilesChangedAsync(
                 captureSessionId,
@@ -255,9 +304,11 @@ public partial class MainShellViewModel
         bool ok,
         string message,
         Athlon.Agent.Core.Teams.TeamTask? task,
-        string? turnAnchorId = null)
+        string? turnAnchorId = null,
+        TeamChatRunUiState? runUi = null)
     {
         string summaryMarkdown;
+        string previewStatus;
         if (string.Equals(message, "cancelled", StringComparison.OrdinalIgnoreCase)
             || task?.Status == Athlon.Agent.Core.Teams.TeamTaskStatus.Cancelled)
         {
@@ -265,6 +316,7 @@ public partial class MainShellViewModel
                 _loc["Teams_CancelledReason"],
                 task?.TaskId,
                 failed: true);
+            previewStatus = "Cancelled";
             ShowShellToast(_loc["Teams_CancelledToast"], ShellToastKind.Info);
         }
         else if (task?.Status == Athlon.Agent.Core.Teams.TeamTaskStatus.AwaitingHuman)
@@ -274,6 +326,7 @@ public partial class MainShellViewModel
                 _loc.Format("Teams_AwaitingHumanSummary", task.PendingHumanQuestion ?? message),
                 task.TaskId,
                 failed: false);
+            previewStatus = "Awaiting human";
             ShowShellToast(_loc["Teams_AwaitingHumanToast"], ShellToastKind.Info);
         }
         else if (ok && task is not null)
@@ -284,6 +337,7 @@ public partial class MainShellViewModel
                 ? "Teams run finished. See steps above for details."
                 : resultText;
             summaryMarkdown = FormatTeamsChatSummary(finalBody, task.TaskId, failed: false);
+            previewStatus = task.Status.ToString();
             ShowShellToast(
                 _loc.Format("Teams_CompletedToast", task.Status.ToString()),
                 ShellToastKind.Success);
@@ -294,9 +348,32 @@ public partial class MainShellViewModel
                 ? task!.Error!
                 : message;
             summaryMarkdown = FormatTeamsChatSummary(failText, task?.TaskId, failed: true);
+            previewStatus = "Failed";
             ShowShellToast(
                 _loc.Format("Teams_FailedToast", failText),
                 ShellToastKind.Error);
+        }
+
+        if (runUi is not null && !string.IsNullOrWhiteSpace(runUi.PreviewMessageId))
+        {
+            if (task is not null)
+            {
+                runUi.Preview.TaskId = task.TaskId;
+                if (!string.IsNullOrWhiteSpace(task.TeamId)
+                    && string.Equals(runUi.Preview.Title, "Teams", StringComparison.Ordinal))
+                {
+                    runUi.Preview.Title = task.TeamId;
+                }
+            }
+
+            runUi.Preview.StatusLabel = previewStatus;
+            var previewMarkdown = TeamChatArtifacts.FormatTracePreviewMarkdown(runUi.Preview);
+            var updatedPreview = captureUi.UpdateLocalAssistantMessage(runUi.PreviewMessageId, previewMarkdown);
+            if (updatedPreview is not null)
+            {
+                await PersistTeamChatMessageAsync(captureSessionId, updatedPreview, upsert: true)
+                    .ConfigureAwait(true);
+            }
         }
 
         var assistantMessage = captureUi.AppendLocalAssistantMessage(summaryMarkdown);
@@ -319,11 +396,16 @@ public partial class MainShellViewModel
         }
     }
 
-    private async Task PersistTeamChatMessageAsync(string sessionId, ChatMessage message)
+    private async Task PersistTeamChatMessageAsync(
+        string sessionId,
+        ChatMessage message,
+        bool upsert = false)
     {
         if (string.Equals(_displayedSessionId, sessionId, StringComparison.Ordinal))
         {
-            _session = _session.WithMessage(message);
+            _session = upsert
+                ? _session.WithUpsertedMessage(message)
+                : _session.WithMessage(message);
             await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
             return;
         }
@@ -338,6 +420,16 @@ public partial class MainShellViewModel
         {
             _logger.Warning("Failed to persist Teams chat message for {SessionId}: {Error}", sessionId, ex.Message);
         }
+    }
+
+    private sealed class TeamChatRunUiState
+    {
+        public IProgress<Athlon.Agent.Core.Teams.TeamRunProgress> Progress { get; set; } =
+            new Progress<Athlon.Agent.Core.Teams.TeamRunProgress>(_ => { });
+
+        public string? PreviewMessageId { get; set; }
+
+        public TeamTracePreviewState Preview { get; } = new();
     }
 
     private void SyncSessionUiPin(string sessionId) =>

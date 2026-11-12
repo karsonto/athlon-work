@@ -83,9 +83,32 @@ public sealed class TeamChatArtifactsTests : IDisposable
             ResponseText = "optimize the layering"
         });
 
-        Assert.Contains("### Teams · Architecture Optimizer · Running", md, StringComparison.Ordinal);
+        Assert.Contains("<!-- athlon-team-trace:tm_abc123 -->", md, StringComparison.Ordinal);
+        Assert.Contains("### Teams · Architecture Optimizer", md, StringComparison.Ordinal);
+        Assert.Contains("**Running**", md, StringComparison.Ordinal);
         Assert.Contains("athlon://team-trace?taskId=tm_abc123", md, StringComparison.Ordinal);
         Assert.Contains("optimize the layering", md, StringComparison.Ordinal);
+        Assert.Contains("放大 Trace", md, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatTracePreviewMarkdown_IncludesRecentLines()
+    {
+        var state = new TeamTracePreviewState
+        {
+            TaskId = "tm_1",
+            Title = "Demo",
+            StatusLabel = "Running",
+            GoalPreview = "ship it"
+        };
+        state.RememberLine("Leader · Running");
+        state.RememberLine("Worker A · Succeeded · iter 1");
+
+        var md = TeamChatArtifacts.FormatTracePreviewMarkdown(state);
+
+        Assert.Contains("- Leader · Running", md, StringComparison.Ordinal);
+        Assert.Contains("- Worker A · Succeeded · iter 1", md, StringComparison.Ordinal);
+        Assert.Contains("2 updates", md, StringComparison.Ordinal);
     }
 
     [Fact]
