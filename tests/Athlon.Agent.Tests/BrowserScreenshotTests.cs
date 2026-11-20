@@ -19,7 +19,8 @@ public sealed class BrowserScreenshotTests
         var image = new ImageAttachment(
             "browser-frame-abc.png",
             "image/png",
-            DataUrl: "data:image/png;base64,AQID");
+            DataUrl: "data:image/png;base64,AQID",
+            LocalPath: "/tmp/sessions/s1/attachments/browser-frame-abc.png");
         var host = new FakeBrowserHost
         {
             Capture = new BrowserScreenshotCapture(image, "https://example.com/login", "Login")
@@ -30,6 +31,10 @@ public sealed class BrowserScreenshotTests
 
         Assert.True(result.Succeeded);
         Assert.Contains("screenshot_file: browser-frame-abc.png", result.Content, StringComparison.Ordinal);
+        Assert.Contains(
+            "screenshot_path: /tmp/sessions/s1/attachments/browser-frame-abc.png",
+            result.Content,
+            StringComparison.Ordinal);
         Assert.Contains("url: https://example.com/login", result.Content, StringComparison.Ordinal);
         Assert.Contains("title: Login", result.Content, StringComparison.Ordinal);
         Assert.Contains("capture: viewport", result.Content, StringComparison.Ordinal);

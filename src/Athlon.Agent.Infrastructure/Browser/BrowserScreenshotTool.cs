@@ -29,7 +29,11 @@ public sealed class BrowserScreenshotTool(IBrowserAutomationHost host) : IAgentT
 
             var capture = shot.FullPage ? "full_page" : "viewport";
             var content =
-                $"screenshot_file: {shot.Image.FileName}\nurl: {shot.Url}\ntitle: {shot.Title}\ncapture: {capture}";
+                $"screenshot_file: {shot.Image.FileName}\n"
+                + (string.IsNullOrWhiteSpace(shot.Image.LocalPath)
+                    ? ""
+                    : $"screenshot_path: {shot.Image.LocalPath}\n")
+                + $"url: {shot.Url}\ntitle: {shot.Title}\ncapture: {capture}";
             if (shot.Clipped)
             {
                 content += "\nclipped: true";

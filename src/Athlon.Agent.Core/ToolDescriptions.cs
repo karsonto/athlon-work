@@ -80,5 +80,5 @@ public static class ToolDescriptions
     public const string BrowserScreenshot =
         "Capture the open Browser tab (visible area by default). "
         + "Set full_page true for the whole document (clipped at 16384 CSS pixels). "
-        + "Result includes screenshot_file for citing the capture.";
+        + "Result includes screenshot_file (cite name) and screenshot_path (on-disk absolute path).";
 }
