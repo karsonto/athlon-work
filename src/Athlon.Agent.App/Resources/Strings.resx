@@ -540,13 +540,13 @@
     <value>下载到本地…</value>
   </data>
   <data name="Context_SkillsMcpHint" xml:space="preserve">
-    <value>单击开关启停；点行查看详情</value>
+    <value>双击启停；单击查看详情</value>
   </data>
   <data name="Context_McpTagTooltip" xml:space="preserve">
     <value>双击启停 MCP 服务器</value>
   </data>
   <data name="Context_SkillTagTooltip" xml:space="preserve">
-    <value>单击开关启停技能</value>
+    <value>双击启停技能</value>
   </data>
   <data name="Context_McpExpandTooltip" xml:space="preserve">
     <value>展开或收起工具列表</value>

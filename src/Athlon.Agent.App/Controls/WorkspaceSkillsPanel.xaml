@@ -191,47 +191,48 @@
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <ToggleButton Grid.Column="0"
-                                              Style="{StaticResource SkillsPanelToggleStyle}"
-                                              IsChecked="{Binding IsEnabled, Mode=OneWay}"
-                                              Command="{Binding ToggleCommand}"
-                                              ToolTip="{loc:Localize Key=Context_SkillTagTooltip}"
-                                              VerticalAlignment="Top"
-                                              Margin="0,1,8,0" />
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Text="{Binding Name}"
-                                               FontSize="13"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource Brush.Text}"
-                                               TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{Binding Description}"
-                                               FontSize="11.5"
-                                               Foreground="{DynamicResource Brush.SubtleText}"
-                                               TextWrapping="Wrap"
-                                               MaxHeight="34"
-                                               TextTrimming="CharacterEllipsis"
-                                               Margin="0,2,0,0">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding HasDescription}" Value="False">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding IsDisabled}" Value="True">
-                                                        <Setter Property="Opacity" Value="0.7" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </StackPanel>
-                            </Grid>
+                            <StackPanel ToolTip="{loc:Localize Key=Context_SkillTagTooltip}">
+                                <i:Interaction.Behaviors>
+                                    <behaviors:CommandDoubleClickBehavior Command="{Binding ToggleCommand}" />
+                                </i:Interaction.Behaviors>
+                                <TextBlock Text="{Binding Name}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsDisabled}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
+                                                    <Setter Property="Opacity" Value="0.75" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="{Binding Description}"
+                                           FontSize="11.5"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           TextWrapping="Wrap"
+                                           MaxHeight="34"
+                                           TextTrimming="CharacterEllipsis"
+                                           Margin="0,2,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasDescription}" Value="False">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsDisabled}" Value="True">
+                                                    <Setter Property="Opacity" Value="0.7" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -284,9 +285,19 @@
                         <TextBlock Text="{Binding Name}"
                                    FontSize="13"
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Brush.Text}"
                                    TextTrimming="CharacterEllipsis"
-                                   Margin="0,0,0,4" />
+                                   Margin="0,0,0,4">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDisabled}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <TextBlock FontSize="12"
                                    Foreground="{DynamicResource Brush.SubtleText}"
                                    TextWrapping="Wrap"
@@ -306,8 +317,7 @@
                                    FontSize="10.5"
                                    FontFamily="Consolas"
                                    Foreground="{DynamicResource Brush.SubtleText}"
-                                   TextWrapping="Wrap"
-                                   Margin="0,0,0,8">
+                                   TextWrapping="Wrap">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Visibility" Value="Visible" />
@@ -319,15 +329,6 @@
                                 </Style>
                             </TextBlock.Style>
                         </TextBlock>
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="{loc:Localize Key=Context_OpenSkillHub}"
-                                    Command="{Binding DataContext.Sidebar.NavigateToSkillHubCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    Style="{StaticResource SkillsPanelPrimaryButtonStyle}"
-                                    Margin="0,0,6,0" />
-                            <Button Content="{loc:Localize Key=Context_OpenSkillsFolder}"
-                                    Command="{Binding DataContext.Sidebar.OpenSelectedSkillFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    Style="{StaticResource SkillsPanelSecondaryButtonStyle}" />
-                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </Border>

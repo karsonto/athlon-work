@@ -540,13 +540,13 @@ Hold to talk</value>
     <value>Download to local…</value>
   </data>
   <data name="Context_SkillsMcpHint" xml:space="preserve">
-    <value>Use the switch to toggle; click a row for details</value>
+    <value>Double-click to toggle; click for details</value>
   </data>
   <data name="Context_McpTagTooltip" xml:space="preserve">
     <value>Double-click to enable or disable this MCP server</value>
   </data>
   <data name="Context_SkillTagTooltip" xml:space="preserve">
-    <value>Use the switch to enable or disable this skill</value>
+    <value>Double-click to enable or disable this skill</value>
   </data>
   <data name="Context_McpExpandTooltip" xml:space="preserve">
     <value>Expand or collapse tool list</value>
