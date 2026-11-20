@@ -139,11 +139,12 @@ public sealed class TeamMemberRunExecutor(
                 workspaceKind);
 
         var completePrompt = BuildCompletePrompt(profile, isLeader, task);
-        // Workers: no MaxModelToolRounds cap — stop via wall-clock timeout / cancel instead.
-        // Leaders still use profile/settings so orchestration cannot spin forever on tools.
+        // Leaders: MaxModelToolRounds. Workers: MaxWorkerModelToolRounds (0 = unlimited).
         int? maxRounds = isLeader
             ? profile.MaxModelToolRounds ?? settings.Teams.MaxModelToolRounds
-            : null;
+            : settings.Teams.MaxWorkerModelToolRounds > 0
+                ? settings.Teams.MaxWorkerModelToolRounds
+                : null;
         var childContext = parentContext.CreateTeamMember(
             memberSessionId,
             task.TaskId,
@@ -158,6 +159,10 @@ public sealed class TeamMemberRunExecutor(
             teamId: task.TeamId,
             isLeader: isLeader);
 
+        var subTaskId = task.SubTasks.FirstOrDefault(s =>
+                string.Equals(s.MemberSessionId, memberSessionId, StringComparison.OrdinalIgnoreCase))
+            ?.Id;
+
         // Leaders orchestrate only — strip skills / MCP / knowledge so they cannot do Worker work.
         var profileOptions = new AgentProfileTurnOptions(
             ProfileId: profile.Id,
@@ -169,9 +174,11 @@ public sealed class TeamMemberRunExecutor(
             KnowledgeModuleIds: isLeader ? Array.Empty<string>() : profile.KnowledgeModuleIds,
             IsLeader: isLeader,
             TeamTaskId: task.TaskId,
-            RootSessionId: task.RootSessionId);
+            RootSessionId: task.RootSessionId,
+            SubTaskId: isLeader ? null : subTaskId);
 
         using var profileScope = AgentProfileTurnScope.Enter(profileOptions);
+        using var reportBufferScope = TeamWorkerReportBuffer.Enter();
         using var runScope = runContextAccessor.Push(childContext);
         // Knowledge must be written after Push so ResolveSessionDirectory targets
         // teams/.../members/... rather than a top-level sessions/{memberId} folder.
@@ -229,6 +236,50 @@ public sealed class TeamMemberRunExecutor(
                 .ConfigureAwait(false);
 
             var responseText = SubAgentResultFormatter.ExtractLastAssistantText(session) ?? "";
+            var assistantToolRounds = session.Messages.Count(m =>
+                m.Role == MessageRole.Assistant && !string.IsNullOrWhiteSpace(m.ToolCallsJson));
+            var hitRoundCap = maxRounds is int cap && assistantToolRounds >= cap;
+
+            // Prefer team_report_result when the Worker invoked it this turn.
+            if (!isLeader && TeamWorkerReportBuffer.Current?.Report is { } reported)
+            {
+                var ok = reported.Status == TeamMemberResultStatus.Completed;
+                await traceStore.AppendAsync(
+                    task.RootSessionId,
+                    task.TaskId,
+                    new TeamTraceEvent
+                    {
+                        Type = "worker.reported",
+                        NodeId = subTaskId ?? memberSessionId,
+                        SubTaskId = subTaskId,
+                        Message = $"accepted tool report status={reported.Status}"
+                    },
+                    cancellationToken).ConfigureAwait(false);
+
+                if (ok)
+                {
+                    return new TeamMemberRunOutcome
+                    {
+                        Ok = true,
+                        ResponseText = reported.ResponseText,
+                        Session = session,
+                        UsedReportTool = true,
+                        HitToolRoundCap = hitRoundCap
+                    };
+                }
+
+                return new TeamMemberRunOutcome
+                {
+                    Ok = false,
+                    ResponseText = reported.ResponseText,
+                    Error =
+                        $"status={reported.Status}; verdict={reported.Verdict ?? "-"}; {TeamWorkerHelpers.Truncate(reported.ResponseText, 500)}",
+                    Session = session,
+                    UsedReportTool = true,
+                    HitToolRoundCap = hitRoundCap
+                };
+            }
+
             var parsed = TeamMemberResultParser.Parse(responseText);
 
             // Leader handoff: success is decided by tool side effects in the orchestrator.
@@ -319,7 +370,8 @@ public sealed class TeamMemberRunExecutor(
                         $"status={TeamMemberResultStatus.NeedsLeader}; Worker did not emit a valid ## Result after {nudgeCount} nudge(s).",
                     Session = session,
                     ResultNudgeCount = nudgeCount,
-                    SynthesizedNeedsLeader = true
+                    SynthesizedNeedsLeader = true,
+                    HitToolRoundCap = hitRoundCap
                 };
             }
 
@@ -334,7 +386,8 @@ public sealed class TeamMemberRunExecutor(
                     Error =
                         $"status={parsed.Status}; verdict={parsed.Verdict ?? "-"}; {TeamWorkerHelpers.Truncate(parsed.FindingsSummary ?? responseText, 500)}",
                     Session = session,
-                    ResultNudgeCount = nudgeCount
+                    ResultNudgeCount = nudgeCount,
+                    HitToolRoundCap = hitRoundCap
                 };
             }
 
@@ -343,7 +396,8 @@ public sealed class TeamMemberRunExecutor(
                 Ok = true,
                 ResponseText = responseText,
                 Session = session,
-                ResultNudgeCount = nudgeCount
+                ResultNudgeCount = nudgeCount,
+                HitToolRoundCap = hitRoundCap
             };
         }
         catch (OperationCanceledException)
@@ -580,11 +634,12 @@ public sealed class TeamMemberRunExecutor(
 
         sb.AppendLine(
             "You are a Worker with an independent context. Do not call team_dispatch, team_submit_result, team_create_subtask, or sessions_*. "
-            + "You may call team_progress and team_memory. "
-            + "Your FINAL assistant message must be the ## Result block below (not a progress note like \"build green, next…\"). "
-            + "A status: line is REQUIRED. Do not end with a preamble-only plan.");
+            + "You may call team_progress, team_memory, and team_report_result. "
+            + "Prefer team_report_result when finished. Otherwise your FINAL assistant message must be a ## Result block "
+            + "with a required status: line (not a progress note).");
         sb.AppendLine();
-        sb.AppendLine("## Result");
+        sb.AppendLine("Preferred: call team_report_result(status, findings, …).");
+        sb.AppendLine("Fallback ## Result:");
         sb.AppendLine("status: completed | failed | blocked | needs_leader");
         sb.AppendLine("verdict: pass | fail   # optional; for verification workers");
         sb.AppendLine("fix_target_subtask_id: sub_xxx   # optional when verdict=fail");
@@ -598,7 +653,8 @@ public sealed class TeamMemberRunExecutor(
     private static string BuildResultFormatNudge() =>
         """
         Your previous final message was rejected as empty / preamble-only / invalid.
-        Do not continue mid-task chatter. Reply NOW with ONLY a structured handoff (no tool calls unless absolutely required to finish):
+        Prefer calling team_report_result(status, findings, …) now.
+        Or reply with ONLY a structured ## Result block (no mid-task chatter):
 
         ## Result
         status: completed

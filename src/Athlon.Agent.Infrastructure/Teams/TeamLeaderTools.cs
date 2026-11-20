@@ -213,7 +213,9 @@ public sealed class TeamCreateSubtaskTool(
                 "What done means for this subtask (checklist / measurable outcomes)",
                 required: true,
                 minLength: 1)
-            .String("handoff", "Handoff payload (goal / facts / todos / refs)")
+            .String("handoff", "Goal and instructions for the Worker", required: true, minLength: 1)
+            .String("facts", "Optional known facts for the Worker")
+            .String("constraints", "Optional hard constraints for the Worker")
             .String("artifacts", "Optional comma/newline-separated artifact refs (paths, URLs, keys)")
             .String("depends_on", "Comma-separated subtask ids this depends on")
             .Build(),
@@ -235,6 +237,8 @@ public sealed class TeamCreateSubtaskTool(
         invocation.Arguments.TryGetString("title", out var title);
         invocation.Arguments.TryGetString("acceptance_criteria", out var acceptance);
         invocation.Arguments.TryGetString("handoff", out var handoff);
+        invocation.Arguments.TryGetString("facts", out var facts);
+        invocation.Arguments.TryGetString("constraints", out var constraints);
         invocation.Arguments.TryGetString("artifacts", out var artifactsRaw);
         invocation.Arguments.TryGetString("depends_on", out var dependsRaw);
 
@@ -248,6 +252,13 @@ public sealed class TeamCreateSubtaskTool(
             return ToolResult.Failure(
                 "Invalid args",
                 "acceptance_criteria is required so the Worker knows what done means.");
+        }
+
+        if (string.IsNullOrWhiteSpace(handoff))
+        {
+            return ToolResult.Failure(
+                "Invalid args",
+                "handoff is required (goal and instructions for the Worker).");
         }
 
         var profile = await profileStore.GetAsync(assignee.Trim(), cancellationToken).ConfigureAwait(false);
@@ -321,7 +332,9 @@ public sealed class TeamCreateSubtaskTool(
                     Title = title.Trim(),
                     AssigneeProfileId = profile.Id,
                     DependsOn = depends,
-                    Handoff = handoff?.Trim() ?? "",
+                    Handoff = handoff.Trim(),
+                    Facts = facts?.Trim() ?? "",
+                    Constraints = constraints?.Trim() ?? "",
                     AcceptanceCriteria = acceptance.Trim(),
                     ArtifactRefs = TeamToolHelpers.ParseArtifactRefs(artifactsRaw),
                     Status = depends.Count == 0 ? TeamSubTaskStatus.Ready : TeamSubTaskStatus.Pending,
@@ -486,6 +499,8 @@ public sealed class TeamRedispatchTool(
                 "What done means for this attempt (required; may match prior criteria)",
                 required: true,
                 minLength: 1)
+            .String("facts", "Optional known facts override for the Worker")
+            .String("constraints", "Optional hard constraints override for the Worker")
             .String("artifacts", "Optional comma/newline-separated artifact refs to replace prior list")
             .Boolean("confirm_repair", "Required true when redistributing a Succeeded subtask")
             .Build(),
@@ -502,6 +517,8 @@ public sealed class TeamRedispatchTool(
         invocation.Arguments.TryGetString("reason", out var reason);
         invocation.Arguments.TryGetString("handoff", out var handoff);
         invocation.Arguments.TryGetString("acceptance_criteria", out var acceptance);
+        invocation.Arguments.TryGetString("facts", out var facts);
+        invocation.Arguments.TryGetString("constraints", out var constraints);
         invocation.Arguments.TryGetString("artifacts", out var artifactsRaw);
         var confirmRepair = invocation.Arguments.GetBoolean("confirm_repair", false);
         if (string.IsNullOrWhiteSpace(subId) || string.IsNullOrWhiteSpace(reason))
@@ -562,9 +579,27 @@ public sealed class TeamRedispatchTool(
                 sub.Iteration += 1;
                 sub.Handoff = handoff.Trim();
                 sub.AcceptanceCriteria = acceptance.Trim();
+                if (facts is not null)
+                {
+                    sub.Facts = facts.Trim();
+                }
+
+                if (constraints is not null)
+                {
+                    sub.Constraints = constraints.Trim();
+                }
+
                 if (artifactsRaw is not null)
                 {
                     sub.ArtifactRefs = TeamToolHelpers.ParseArtifactRefs(artifactsRaw);
+                }
+
+                // Preserve full prior result for the next Worker attempt (not just a 1200-char summary).
+                var prior = sub.Result ?? sub.Error;
+                if (!string.IsNullOrWhiteSpace(prior))
+                {
+                    sub.PrevFindings = TeamWorkerHelpers.Truncate(prior, 6000);
+                    sub.PrevResultSummary = TeamWorkerHelpers.Truncate(prior, 1200);
                 }
 
                 sub.Status = TeamSubTaskStatus.Queued;
@@ -747,6 +782,17 @@ public sealed class TeamSubmitResultTool(
                         + string.Join(", ", failed.Select(s => s.Id)));
                 }
 
+                if (disposition == "completed"
+                    && settings.Teams.RequireVerifyPassForCodeGoals
+                    && TeamVerifyGates.RequiresVerifyPass(live)
+                    && !TeamVerifyGates.HasSucceededVerifyPass(live))
+                {
+                    return ToolResult.Failure(
+                        "Verify required",
+                        "Code-like goals (or tasks with verdict semantics) require a Succeeded subtask with verdict: pass "
+                        + "before disposition=completed. Dispatch a verify Worker, or submit disposition=partial|failed.");
+                }
+
                 live.FinalResult = result.Trim();
                 live.Status = disposition == "failed" ? TeamTaskStatus.Failed : TeamTaskStatus.Succeeded;
                 if (disposition == "failed")
@@ -834,5 +880,91 @@ public sealed class TeamAskUserTool(
         return ToolResult.Success(
             "awaiting human",
             $"ATHLON_TEAM_ASK_USER\n{trimmed}");
+    }
+}
+
+public sealed class TeamCancelSubtaskTool(
+    AppSettings settings,
+    ITeamTaskStore taskStore,
+    ITeamTraceStore traceStore) : IAgentTool, ITeamLeaderTool, IExcludedFromChildAgentToolkit
+{
+    public ToolDefinition Definition => new(
+        "team_cancel_subtask",
+        "Cancel a Queued or Running sibling subtask (e.g. after another Worker failed and the work is obsolete).",
+        ToolSchema.Object()
+            .String("subtask_id", "Subtask id to cancel", required: true, minLength: 1)
+            .String("reason", "Why this work should stop")
+            .Build(),
+        Group: ToolGroup.Builtin);
+
+    public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
+    {
+        if (!settings.Teams.Enabled)
+        {
+            return ToolResult.Failure("Teams disabled", "Teams feature is disabled.");
+        }
+
+        invocation.Arguments.TryGetString("subtask_id", out var subId);
+        invocation.Arguments.TryGetString("reason", out var reason);
+        if (string.IsNullOrWhiteSpace(subId))
+        {
+            return ToolResult.Failure("Invalid args", "subtask_id is required.");
+        }
+
+        var reasonText = string.IsNullOrWhiteSpace(reason) ? "cancelled by leader" : reason.Trim();
+        string? cancelledId = null;
+        var wasRunning = false;
+
+        var (task, error) = await TeamToolHelpers.MutateLockedAsync(
+            taskStore,
+            live =>
+            {
+                var sub = live.SubTasks.FirstOrDefault(s =>
+                    string.Equals(s.Id, subId.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (sub is null)
+                {
+                    return ToolResult.Failure("Not found", $"Subtask '{subId}' not found.");
+                }
+
+                if (sub.Status is not (TeamSubTaskStatus.Queued or TeamSubTaskStatus.Running))
+                {
+                    return ToolResult.Failure(
+                        "Not cancellable",
+                        $"Subtask '{sub.Id}' is {sub.Status}; only Queued/Running can be cancelled.");
+                }
+
+                wasRunning = sub.Status == TeamSubTaskStatus.Running;
+                sub.Status = TeamSubTaskStatus.Cancelled;
+                sub.Error = reasonText;
+                sub.CompletedAt = DateTimeOffset.UtcNow;
+                cancelledId = sub.Id;
+                TeamWorkerHelpers.RefreshReady(live);
+                return null;
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (error is not null)
+        {
+            return error;
+        }
+
+        if (wasRunning)
+        {
+            TeamWorkerCancellation.TryCancel(task!.RootSessionId, task.TaskId, cancelledId!);
+        }
+
+        await traceStore.AppendAsync(
+            task!.RootSessionId,
+            task.TaskId,
+            new TeamTraceEvent
+            {
+                Type = "worker.cancelled",
+                NodeId = cancelledId,
+                SubTaskId = cancelledId,
+                Message = reasonText
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return ToolResult.Success("cancelled", $"Cancelled {cancelledId}: {reasonText}");
     }
 }

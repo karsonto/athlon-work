@@ -85,6 +85,12 @@ public sealed class TeamMemberRunOutcome
     /// <summary>True when Invalid output was rewritten as status: needs_leader after nudges.</summary>
     public bool SynthesizedNeedsLeader { get; init; }
 
+    /// <summary>True when the Worker submitted via <c>team_report_result</c>.</summary>
+    public bool UsedReportTool { get; init; }
+
+    /// <summary>True when Worker hit MaxWorkerModelToolRounds soft cap.</summary>
+    public bool HitToolRoundCap { get; init; }
+
     public static TeamMemberRunOutcome Success(string text, AgentSession session) =>
         new() { Ok = true, ResponseText = text, Session = session };
 

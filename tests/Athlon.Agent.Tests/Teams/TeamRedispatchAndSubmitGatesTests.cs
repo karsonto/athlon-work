@@ -162,6 +162,7 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                     ["assignee_profile_id"] = "worker",
                     ["title"] = "qa check",
                     ["acceptance_criteria"] = "qa notes written",
+                    ["handoff"] = "write qa notes",
                     ["depends_on"] = "sub-placeholder"
                 })),
             default);
@@ -183,7 +184,8 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                 ToolCallArguments.FromStrings(new Dictionary<string, string>
                 {
                     ["assignee_profile_id"] = "worker",
-                    ["title"] = "qa check"
+                    ["title"] = "qa check",
+                    ["handoff"] = "do qa"
                 })),
             default);
         Assert.False(result.Succeeded);
@@ -205,6 +207,9 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                     ["assignee_profile_id"] = "worker",
                     ["title"] = "qa check",
                     ["acceptance_criteria"] = "qa notes written",
+                    ["handoff"] = "write qa notes",
+                    ["facts"] = "repo builds",
+                    ["constraints"] = "no new deps",
                     ["artifacts"] = "docs/qa.md",
                     ["depends_on"] = "sub_a"
                 })),
@@ -214,7 +219,86 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
         var created = Assert.Single(task!.SubTasks, s => s.Title == "qa check");
         Assert.Equal(TeamSubTaskStatus.Pending, created.Status);
         Assert.Equal("qa notes written", created.AcceptanceCriteria);
+        Assert.Equal("repo builds", created.Facts);
+        Assert.Equal("no new deps", created.Constraints);
         Assert.Contains("docs/qa.md", created.ArtifactRefs);
+    }
+
+    [Fact]
+    public async Task Submit_Completed_WithoutVerifyPass_DeniedForCodeGoal()
+    {
+        await SeedAsync(TeamSubTaskStatus.Succeeded);
+        var task = (await _tasks.GetAsync("sess", "tm_1"))!;
+        task.Goal = "implement the fix and add unit tests";
+        task.SubTasks[0].Result = """
+            ## Result
+            status: completed
+            accomplished:
+            - changed code
+            """;
+        await _tasks.SaveAsync(task);
+        var tool = new TeamSubmitResultTool(_settings, _tasks, _traces);
+        using var scope = TeamTaskExecutionScope.Enter((await _tasks.GetAsync("sess", "tm_1"))!);
+        var result = await tool.InvokeAsync(
+            new ToolInvocation(
+                "team_submit_result",
+                ToolCallArguments.FromStrings(new Dictionary<string, string>
+                {
+                    ["result"] = "shipped",
+                    ["disposition"] = "completed"
+                })),
+            default);
+        Assert.False(result.Succeeded);
+        var text = $"{result.Summary}\n{result.Error}\n{result.Content}";
+        Assert.Contains("Verify required", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Submit_Completed_WithVerifyPass_Allowed()
+    {
+        await SeedAsync(TeamSubTaskStatus.Succeeded);
+        var task = (await _tasks.GetAsync("sess", "tm_1"))!;
+        task.Goal = "implement the fix";
+        task.SubTasks[0].Result = """
+            ## Result
+            status: completed
+            verdict: pass
+            findings:
+            - green
+            """;
+        await _tasks.SaveAsync(task);
+        var tool = new TeamSubmitResultTool(_settings, _tasks, _traces);
+        using var scope = TeamTaskExecutionScope.Enter((await _tasks.GetAsync("sess", "tm_1"))!);
+        var result = await tool.InvokeAsync(
+            new ToolInvocation(
+                "team_submit_result",
+                ToolCallArguments.FromStrings(new Dictionary<string, string>
+                {
+                    ["result"] = "shipped",
+                    ["disposition"] = "completed"
+                })),
+            default);
+        Assert.True(result.Succeeded, result.Error ?? result.Content ?? result.Summary);
+    }
+
+    [Fact]
+    public async Task CancelSubtask_Queued_Allowed()
+    {
+        await SeedAsync(TeamSubTaskStatus.Queued);
+        var tool = new TeamCancelSubtaskTool(_settings, _tasks, _traces);
+        using var scope = TeamTaskExecutionScope.Enter((await _tasks.GetAsync("sess", "tm_1"))!);
+        var result = await tool.InvokeAsync(
+            new ToolInvocation(
+                "team_cancel_subtask",
+                ToolCallArguments.FromStrings(new Dictionary<string, string>
+                {
+                    ["subtask_id"] = "sub_a",
+                    ["reason"] = "obsolete after failure"
+                })),
+            default);
+        Assert.True(result.Succeeded, result.Error ?? result.Content ?? result.Summary);
+        var task = await _tasks.GetAsync("sess", "tm_1");
+        Assert.Equal(TeamSubTaskStatus.Cancelled, task!.SubTasks[0].Status);
     }
 
     [Fact]

@@ -10,7 +10,8 @@ public sealed record AgentProfileTurnOptions(
     IReadOnlyList<string>? KnowledgeModuleIds = null,
     bool IsLeader = false,
     string? TeamTaskId = null,
-    string? RootSessionId = null);
+    string? RootSessionId = null,
+    string? SubTaskId = null);
 
 /// <summary>
 /// Ambient profile capability filter for Team member turns.

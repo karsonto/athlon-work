@@ -79,6 +79,12 @@ public sealed class TeamSubTask
     /// <summary>What "done" means for this subtask (required on create; optional override on redispatch).</summary>
     public string AcceptanceCriteria { get; set; } = "";
 
+    /// <summary>Known facts for the Worker (optional structured handoff field).</summary>
+    public string Facts { get; set; } = "";
+
+    /// <summary>Hard constraints for the Worker (optional structured handoff field).</summary>
+    public string Constraints { get; set; } = "";
+
     public List<string> ArtifactRefs { get; set; } = new();
 
     /// <summary>Attempt counter for Trace (1-based). Not a user-configured cap.</summary>
@@ -93,6 +99,9 @@ public sealed class TeamSubTask
     public string? RedispatchReason { get; set; }
 
     public string? PrevResultSummary { get; set; }
+
+    /// <summary>Full prior Result / findings retained across redispatch (up to several KB).</summary>
+    public string? PrevFindings { get; set; }
 
     public string? Result { get; set; }
 

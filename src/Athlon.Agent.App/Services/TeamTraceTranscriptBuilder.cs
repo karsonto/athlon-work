@@ -98,6 +98,7 @@ internal static class TeamTraceTranscriptBuilder
 
     /// <summary>
     /// Shared Leader transcripts span multiple Team Tasks; keep only this task's window.
+    /// Prefer the kickoff boundary marker; fall back to CreatedAt when the marker is missing.
     /// </summary>
     private static List<ChatMessage> FilterForTaskWindow(
         IReadOnlyList<ChatMessage> messages,
@@ -107,6 +108,20 @@ internal static class TeamTraceTranscriptBuilder
         if (!isLeader || messages.Count == 0)
         {
             return messages as List<ChatMessage> ?? messages.ToList();
+        }
+
+        var boundary = $"--- TeamTask boundary: {task.TaskId} ---";
+        for (var i = 0; i < messages.Count; i++)
+        {
+            var message = messages[i];
+            if (message.Role != MessageRole.User
+                || string.IsNullOrWhiteSpace(message.Content)
+                || !message.Content.Contains(boundary, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return messages.Skip(i).ToList();
         }
 
         var start = task.CreatedAt == default

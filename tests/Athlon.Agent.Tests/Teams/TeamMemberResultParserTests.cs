@@ -147,4 +147,19 @@ public sealed class TeamMemberResultParserTests
         Assert.False(TeamMemberResultParser.IsSuccessful(parsed));
         Assert.Contains("inspecting", synthesized, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void ReportResultToolMarkdown_IsParseable()
+    {
+        var markdown = Athlon.Agent.Infrastructure.Teams.TeamReportResultTool.BuildResultMarkdown(
+            "completed",
+            "pass",
+            null,
+            "did the work",
+            "no risks");
+        var parsed = TeamMemberResultParser.Parse(markdown);
+        Assert.Equal(TeamMemberResultStatus.Completed, parsed.Status);
+        Assert.Equal("pass", parsed.Verdict);
+        Assert.True(TeamMemberResultParser.IsSuccessful(parsed));
+    }
 }

@@ -736,6 +736,10 @@ public sealed partial class SessionTurnUiController
         RunOnUiSync(() =>
         {
             assistant = ChatMessage.Create(MessageRole.Assistant, assistantMarkdown);
+            // Teams / local bubbles must enter the replay activity source; otherwise a later
+            // SyncChatView RESET (common on the 2nd Teams turn once the source is hydrated)
+            // rebuilds only from activity source and drops these Messages-only rows.
+            AppendActivitySourceMessage(assistant);
             var viewModel = new ChatMessageViewModel(assistant);
             Messages.Add(viewModel);
             TrimMessagesIfNeeded();
@@ -783,6 +787,7 @@ public sealed partial class SessionTurnUiController
                 MessageRole.Assistant,
                 viewModel.Content,
                 viewModel.CreatedAtUtc);
+            AppendActivitySourceMessage(updated);
 
             if (CanTouchChatView && !string.IsNullOrWhiteSpace(viewModel.Content))
             {
@@ -839,6 +844,7 @@ public sealed partial class SessionTurnUiController
         RunOnUiSync(() =>
         {
             user = ChatMessage.Create(MessageRole.User, userText);
+            AppendActivitySourceMessage(user);
             Messages.Add(new ChatMessageViewModel(user));
             TrimMessagesIfNeeded();
             RequestScrollImmediate();

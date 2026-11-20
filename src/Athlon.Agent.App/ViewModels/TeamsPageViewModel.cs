@@ -76,8 +76,8 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         _logger = logger.ForContext("TeamsPage");
         _runController = runController;
         _runController.BusyChanged += (_, busy) => IsBusy = busy;
-        // Avoid lambda tuple-deconstruction (`(_, (task, live))`) — WPF temp compile hits CS1001.
-        _runController.TraceRequested += (_, args) => _ = OpenTraceAsync(args.Task, args.Live);
+        // Avoid lambda tuple-deconstruction — WPF temp compile hits CS1001.
+        _runController.TraceRequested += (_, args) => _ = HandleTraceRequestedAsync(args);
         _runController.TraceStatusChanged += (_, message) => StatusMessage = message;
         TeamsEnabled = settings.Teams.Enabled;
         TeamChatArtifacts.ConfigureTaskStore(taskStore);
@@ -975,19 +975,20 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     [RelayCommand]
     private Task OpenSelectedTraceAsync() => OpenLatestTraceAsync();
 
-    public async Task OpenLatestTraceAsync()
+    public Task OpenLatestTraceAsync() => OpenLatestTraceAsync(rootSessionId: null);
+
+    /// <param name="rootSessionId">
+    /// Chat root session id. Prefer this over <see cref="IActiveAgentSessionContext"/> which may be a
+    /// Leader AsyncLocal id (ldr_…) during a Team run.
+    /// </param>
+    public async Task OpenLatestTraceAsync(string? rootSessionId)
     {
-        if (RecentTasks.Count == 0)
+        var sessionId = !string.IsNullOrWhiteSpace(rootSessionId)
+            ? rootSessionId!
+            : ResolveChatRootSessionId();
+        if (!string.IsNullOrWhiteSpace(sessionId))
         {
-            var sessionId = _activeSession.SessionId;
-            if (!string.IsNullOrWhiteSpace(sessionId))
-            {
-                RecentTasks.Clear();
-                foreach (var task in await _taskStore.ListForRootSessionAsync(sessionId).ConfigureAwait(true))
-                {
-                    RecentTasks.Add(task);
-                }
-            }
+            await RefreshRecentTasksForSessionAsync(sessionId).ConfigureAwait(true);
         }
 
         var latest = RecentTasks.FirstOrDefault();
@@ -1005,18 +1006,7 @@ public sealed partial class TeamsPageViewModel : ObservableObject
     {
         var events = await _traceStore.ReadAsync(task.RootSessionId, task.TaskId).ConfigureAwait(true);
         var owner = Application.Current?.MainWindow;
-        var teamName = TeamItems.FirstOrDefault(t => t.Team.Id == task.TeamId)?.Name
-            ?? SelectedTeamItem?.Name
-            ?? task.TeamId;
-        if (string.IsNullOrWhiteSpace(teamName) || teamName == task.TeamId)
-        {
-            var team = await _teamStore.GetAsync(task.TeamId).ConfigureAwait(true);
-            if (!string.IsNullOrWhiteSpace(team?.Name))
-            {
-                teamName = team.Name;
-            }
-        }
-
+        var teamName = await ResolveTeamDisplayNameAsync(task.TeamId).ConfigureAwait(true);
         var shouldLive = live
             || task.Status is TeamTaskStatus.Running or TeamTaskStatus.AwaitingHuman;
 
@@ -1028,6 +1018,79 @@ public sealed partial class TeamsPageViewModel : ObservableObject
             teamName,
             _taskStore,
             shouldLive);
+    }
+
+    private async Task HandleTraceRequestedAsync(TeamTraceRequest request)
+    {
+        UpsertRecentTask(request.Task);
+        if (request.OpenWindow)
+        {
+            await OpenTraceAsync(request.Task, request.Live).ConfigureAwait(true);
+            return;
+        }
+
+        await AdoptTraceIfOpenAsync(request.Task, request.Live).ConfigureAwait(true);
+    }
+
+    private async Task AdoptTraceIfOpenAsync(TeamTask task, bool live)
+    {
+        var events = await _traceStore.ReadAsync(task.RootSessionId, task.TaskId).ConfigureAwait(true);
+        var teamName = await ResolveTeamDisplayNameAsync(task.TeamId).ConfigureAwait(true);
+        var shouldLive = live
+            || task.Status is TeamTaskStatus.Running or TeamTaskStatus.AwaitingHuman;
+        TeamTraceWindow.TryAdoptIfOpen(task, events, _traceStore, teamName, _taskStore, shouldLive);
+    }
+
+    private async Task<string> ResolveTeamDisplayNameAsync(string teamId)
+    {
+        var teamName = TeamItems.FirstOrDefault(t => t.Team.Id == teamId)?.Name
+            ?? SelectedTeamItem?.Name
+            ?? teamId;
+        if (string.IsNullOrWhiteSpace(teamName) || teamName == teamId)
+        {
+            var team = await _teamStore.GetAsync(teamId).ConfigureAwait(true);
+            if (!string.IsNullOrWhiteSpace(team?.Name))
+            {
+                teamName = team.Name;
+            }
+        }
+
+        return teamName;
+    }
+
+    private void UpsertRecentTask(TeamTask task)
+    {
+        for (var i = RecentTasks.Count - 1; i >= 0; i--)
+        {
+            if (string.Equals(RecentTasks[i].TaskId, task.TaskId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    RecentTasks[i].RootSessionId,
+                    task.RootSessionId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                RecentTasks.RemoveAt(i);
+            }
+        }
+
+        RecentTasks.Insert(0, task);
+    }
+
+    private string? ResolveChatRootSessionId()
+    {
+        // Prefer a RecentTasks root when the active context is a Leader nested session.
+        var fromRecent = RecentTasks.FirstOrDefault()?.RootSessionId;
+        if (!string.IsNullOrWhiteSpace(fromRecent))
+        {
+            return fromRecent;
+        }
+
+        var active = _activeSession.SessionId;
+        if (string.IsNullOrWhiteSpace(active) || active.StartsWith("ldr_", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return active;
     }
 
     public IReadOnlyList<ModifiedFileViewModel> CollectChatFiles(TeamTask task) =>
@@ -1073,11 +1136,14 @@ public sealed partial class TeamsPageViewModel : ObservableObject
         RebuildOrgPreview();
     }
 
-    private async Task RefreshRecentTasksAsync()
+    private Task RefreshRecentTasksAsync() =>
+        RefreshRecentTasksForSessionAsync(ResolveChatRootSessionId());
+
+    private async Task RefreshRecentTasksForSessionAsync(string? sessionId)
     {
         RecentTasks.Clear();
-        var sessionId = _activeSession.SessionId;
-        if (string.IsNullOrWhiteSpace(sessionId))
+        if (string.IsNullOrWhiteSpace(sessionId)
+            || sessionId.StartsWith("ldr_", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }

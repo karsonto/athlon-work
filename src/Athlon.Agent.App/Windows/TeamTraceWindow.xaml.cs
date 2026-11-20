@@ -103,6 +103,35 @@ public partial class TeamTraceWindow : Window
         window.Activate();
     }
 
+    /// <summary>
+    /// If a Trace window is already open for this Chat root session, switch it to the new task
+    /// without forcing activation. Used for multi-turn Teams when Chat keeps openTrace=false.
+    /// </summary>
+    public static bool TryAdoptIfOpen(
+        TeamTask task,
+        IReadOnlyList<TeamTraceEvent> events,
+        ITeamTraceStore? traceStore = null,
+        string? teamName = null,
+        ITeamTaskStore? taskStore = null,
+        bool live = false)
+    {
+        if (_singleton is not { IsLoaded: true } existing)
+        {
+            return false;
+        }
+
+        if (!string.Equals(
+                existing._task.RootSessionId,
+                task.RootSessionId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        existing.Adopt(task, events, traceStore, teamName, taskStore, live);
+        return true;
+    }
+
     private void Adopt(
         TeamTask task,
         IReadOnlyList<TeamTraceEvent> events,

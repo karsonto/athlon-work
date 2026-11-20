@@ -23,7 +23,7 @@ public sealed class TeamRunController
         new(StringComparer.OrdinalIgnoreCase);
 
     public event EventHandler<bool>? BusyChanged;
-    public event EventHandler<(TeamTask Task, bool Live)>? TraceRequested;
+    public event EventHandler<TeamTraceRequest>? TraceRequested;
     public event EventHandler<string>? TraceStatusChanged;
 
     public TeamRunController(
@@ -105,9 +105,11 @@ public sealed class TeamRunController
                 ResponseText = began.Task.Goal
             });
 
+            // Always notify so an already-open Trace window can Adopt the new taskId
+            // (multi-turn Chat keeps openTrace=false but must not stay parked on task 1).
+            TraceRequested?.Invoke(this, new TeamTraceRequest(began.Task, Live: true, OpenWindow: openTrace));
             if (openTrace)
             {
-                TraceRequested?.Invoke(this, (began.Task, live: true));
                 // Let the Trace window paint before the Leader turn blocks the UI thread.
                 await Application.Current.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
             }
@@ -163,13 +165,15 @@ public sealed class TeamRunController
         RefreshBusyFromActiveRuns();
         try
         {
-            if (openTrace)
+            var existing = await _taskStore.GetAsync(pending.RootSessionId, pending.TaskId, runCts.Token)
+                .ConfigureAwait(true);
+            if (existing is not null)
             {
-                var existing = await _taskStore.GetAsync(pending.RootSessionId, pending.TaskId, runCts.Token)
-                    .ConfigureAwait(true);
-                if (existing is not null)
+                TraceRequested?.Invoke(
+                    this,
+                    new TeamTraceRequest(existing, Live: true, OpenWindow: openTrace));
+                if (openTrace)
                 {
-                    TraceRequested?.Invoke(this, (existing, live: true));
                     await Application.Current.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
                 }
             }
@@ -279,7 +283,7 @@ public sealed class TeamRunController
         }
 
         var live = task.Status is TeamTaskStatus.Running or TeamTaskStatus.AwaitingHuman;
-        TraceRequested?.Invoke(this, (task, live));
+        TraceRequested?.Invoke(this, new TeamTraceRequest(task, Live: live, OpenWindow: true));
     }
 
     private void RefreshBusyFromActiveRuns() =>
@@ -349,3 +353,6 @@ public sealed class TeamRunController
         runCts.Dispose();
     }
 }
+
+/// <summary>Trace open / adopt request from a Team run or deep link.</summary>
+public readonly record struct TeamTraceRequest(TeamTask Task, bool Live, bool OpenWindow);

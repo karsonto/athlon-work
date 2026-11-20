@@ -9,6 +9,9 @@ public static class TeamToolDefaults
         "team_memory"
     ];
 
+    /// <summary>Worker-only structured handoff (auto-attached for Workers; not on Leader allow-list).</summary>
+    public const string ReportResultTool = "team_report_result";
+
     /// <summary>Auto-attached when a Worker has any Skill selected (not user-configurable).</summary>
     public const string LoadSkillThroughPathTool = "load_skill_through_path";
 
@@ -35,7 +38,8 @@ public static class TeamToolDefaults
         "team_redispatch",
         "team_collect",
         "team_submit_result",
-        "team_ask_user"
+        "team_ask_user",
+        "team_cancel_subtask"
     ];
 
     public static IReadOnlyList<string> DefaultWorkerAllowList =>
@@ -78,7 +82,8 @@ public static class TeamToolDefaults
             .Where(t =>
                 !string.IsNullOrWhiteSpace(t)
                 && !string.Equals(t, LoadSkillThroughPathTool, StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(t, KnowledgeSearchTool, StringComparison.OrdinalIgnoreCase))
+                && !string.Equals(t, KnowledgeSearchTool, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(t, ReportResultTool, StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         foreach (var shared in SharedTeamTools)
@@ -87,6 +92,11 @@ public static class TeamToolDefaults
             {
                 list.Add(shared);
             }
+        }
+
+        if (!list.Contains(ReportResultTool, StringComparer.OrdinalIgnoreCase))
+        {
+            list.Add(ReportResultTool);
         }
 
         if (skillNames?.Any(s => !string.IsNullOrWhiteSpace(s)) == true)

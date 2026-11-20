@@ -19,9 +19,12 @@ public sealed class TeamWorkerMessageTests
             Title = "Implement",
             Iteration = 2,
             Handoff = "Touch Foo.cs",
+            Facts = "API stable",
+            Constraints = "no new deps",
             AcceptanceCriteria = "build green + unit tests",
             ArtifactRefs = ["src/Foo.cs", "tests/FooTests.cs"],
             PrevResultSummary = "previous attempt missed tests",
+            PrevFindings = "full prior findings block",
             RedispatchReason = "verification failed"
         };
 
@@ -31,11 +34,16 @@ public sealed class TeamWorkerMessageTests
         Assert.Contains("Ship the feature", message);
         Assert.Contains("## Handoff", message);
         Assert.Contains("Touch Foo.cs", message);
+        Assert.Contains("## Facts", message);
+        Assert.Contains("API stable", message);
+        Assert.Contains("## Constraints", message);
         Assert.Contains("## Acceptance", message);
         Assert.Contains("build green + unit tests", message);
         Assert.Contains("## Artifacts", message);
         Assert.Contains("src/Foo.cs", message);
         Assert.Contains("## PrevSummary", message);
+        Assert.Contains("## FullFindings", message);
+        Assert.Contains("team_report_result", message);
         Assert.Contains("## Result format", message);
     }
 }

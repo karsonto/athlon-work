@@ -86,9 +86,9 @@ public sealed partial class SessionTurnUiController
 
         if (existingIndex >= 0)
         {
-            // A running tool placeholder and its final result share one id. Keep the later body so
-            // Review can read the succeeded file_write content instead of the placeholder.
-            if (message.Role == MessageRole.Tool)
+            // Tool placeholders and local Teams preview cards share one id across updates.
+            // Keep the later body so replay/reload does not revive a stale draft.
+            if (message.Role is MessageRole.Tool or MessageRole.Assistant or MessageRole.User)
             {
                 _activitySourceMessages[existingIndex] = message;
             }
@@ -106,10 +106,18 @@ public sealed partial class SessionTurnUiController
     /// </summary>
     private void SyncDisplayModelWithAppend(ChatMessage message)
     {
-        if (_displayMessages.Count == 0
-            || _displayMessages.Any(existing => string.Equals(existing.Id, message.Id, StringComparison.Ordinal)))
+        if (_displayMessages.Count == 0)
         {
             return;
+        }
+
+        for (var i = 0; i < _displayMessages.Count; i++)
+        {
+            if (string.Equals(_displayMessages[i].Id, message.Id, StringComparison.Ordinal))
+            {
+                _displayMessages[i] = message;
+                return;
+            }
         }
 
         _displayMessages.Add(message);

@@ -140,12 +140,31 @@ public sealed class TeamTaskOrchestrator(
         var runStartedAt = DateTimeOffset.UtcNow;
         var metricsAcc = new RunMetricsAccumulator();
         var consecutiveSynthesizedNeedsLeader = 0;
+        var pauseNewWorkersForLeader = false;
+        var taskBudgetSeconds = ResolveTaskBudgetSeconds(team);
 
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                // Phase 1: start queued workers up to parallel cap.
+                if (taskBudgetSeconds > 0
+                    && (DateTimeOffset.UtcNow - runStartedAt).TotalSeconds >= taskBudgetSeconds)
+                {
+                    var budgetEscalated = await TryEscalateBudgetExceededAsync(
+                            rootSessionId,
+                            taskId,
+                            runStartedAt,
+                            taskBudgetSeconds)
+                        .ConfigureAwait(false);
+                    if (budgetEscalated is not null)
+                    {
+                        metricsAcc.TimedOut = true;
+                        return await FinishRunAsync(budgetEscalated, runStartedAt, leaderTurns, metricsAcc)
+                            .ConfigureAwait(false);
+                    }
+                }
+
+                // Phase 1: start queued workers up to parallel cap (skipped when a failure needs Leader now).
                 using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false))
                 {
                     var task = await taskStore.GetAsync(rootSessionId, taskId, cancellationToken).ConfigureAwait(false)
@@ -165,19 +184,22 @@ public sealed class TeamTaskOrchestrator(
                         orphan.Status = TeamSubTaskStatus.Queued;
                     }
 
-                    var runningCount = inFlight.Count;
-                    foreach (var sub in task.SubTasks.Where(s => s.Status == TeamSubTaskStatus.Queued).ToList())
+                    if (!pauseNewWorkersForLeader)
                     {
-                        if (inFlight.ContainsKey(sub.Id) || runningCount >= maxParallel)
+                        var runningCount = inFlight.Count;
+                        foreach (var sub in task.SubTasks.Where(s => s.Status == TeamSubTaskStatus.Queued).ToList())
                         {
-                            continue;
-                        }
+                            if (inFlight.ContainsKey(sub.Id) || runningCount >= maxParallel)
+                            {
+                                continue;
+                            }
 
-                        var started = await TryStartWorkerAsync(task, sub, cancellationToken).ConfigureAwait(false);
-                        if (started is not null)
-                        {
-                            inFlight[sub.Id] = started;
-                            runningCount++;
+                            var started = await TryStartWorkerAsync(task, sub, cancellationToken).ConfigureAwait(false);
+                            if (started is not null)
+                            {
+                                inFlight[sub.Id] = started;
+                                runningCount++;
+                            }
                         }
                     }
 
@@ -185,11 +207,12 @@ public sealed class TeamTaskOrchestrator(
                     await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
                 }
 
-                // Phase 2: wait for any in-flight worker (no lock held).
-                if (inFlight.Count > 0)
+                // Phase 2: wait for any in-flight worker (no lock held), unless failure already needs Leader.
+                if (inFlight.Count > 0 && !(pauseNewWorkersForLeader && needsLeader))
                 {
                     var finished = await WaitForAnyWorkerAsync(inFlight.Values, cancellationToken).ConfigureAwait(false);
                     inFlight.Remove(finished.SubTaskId);
+                    TeamWorkerCancellation.Unregister(rootSessionId, taskId, finished.SubTaskId);
                     await ApplyWorkerResultAsync(rootSessionId, taskId, finished, progress, metricsAcc)
                         .ConfigureAwait(false);
 
@@ -220,6 +243,11 @@ public sealed class TeamTaskOrchestrator(
                     }
 
                     needsLeader = true;
+                    if (RequiresImmediateLeader(finished) && inFlight.Count > 0)
+                    {
+                        pauseNewWorkersForLeader = true;
+                    }
+
                     continue;
                 }
 
@@ -236,13 +264,17 @@ public sealed class TeamTaskOrchestrator(
                             .ConfigureAwait(false);
                     }
 
-                    if (snapshot.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Queued) && inFlight.Count > 0)
+                    if (snapshot.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Queued)
+                        && inFlight.Count > 0
+                        && !pauseNewWorkersForLeader)
                     {
                         // Slot was full earlier; wait for capacity then start more.
                         continue;
                     }
 
-                    if (snapshot.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Queued) && inFlight.Count == 0)
+                    if (snapshot.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Queued)
+                        && inFlight.Count == 0
+                        && !pauseNewWorkersForLeader)
                     {
                         // Orphaned Running on disk blocked starts; reclaim then retry.
                         foreach (var orphan in snapshot.SubTasks.Where(s =>
@@ -306,6 +338,7 @@ public sealed class TeamTaskOrchestrator(
 
                 leaderTurns++;
                 useInitialKickoff = false;
+                pauseNewWorkersForLeader = false;
 
                 using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false))
                 {
@@ -534,10 +567,16 @@ public sealed class TeamTaskOrchestrator(
 
             diskSub.Title = scopedSub.Title;
             diskSub.Handoff = scopedSub.Handoff;
+            diskSub.Facts = scopedSub.Facts;
+            diskSub.Constraints = scopedSub.Constraints;
             diskSub.AcceptanceCriteria = scopedSub.AcceptanceCriteria;
             diskSub.ArtifactRefs = scopedSub.ArtifactRefs.ToList();
             diskSub.DependsOn = scopedSub.DependsOn.ToList();
             diskSub.Iteration = scopedSub.Iteration;
+            if (!string.IsNullOrWhiteSpace(scopedSub.PrevFindings))
+            {
+                diskSub.PrevFindings = scopedSub.PrevFindings;
+            }
 #pragma warning disable CS0618
             diskSub.MaxIterations = scopedSub.MaxIterations;
 #pragma warning restore CS0618
@@ -569,6 +608,8 @@ public sealed class TeamTaskOrchestrator(
         DependsOn = s.DependsOn.ToList(),
         Status = s.Status,
         Handoff = s.Handoff,
+        Facts = s.Facts,
+        Constraints = s.Constraints,
         AcceptanceCriteria = s.AcceptanceCriteria,
         ArtifactRefs = s.ArtifactRefs.ToList(),
         Iteration = s.Iteration,
@@ -577,6 +618,7 @@ public sealed class TeamTaskOrchestrator(
 #pragma warning restore CS0618
         RedispatchReason = s.RedispatchReason,
         PrevResultSummary = s.PrevResultSummary,
+        PrevFindings = s.PrevFindings,
         Result = s.Result,
         Error = s.Error,
         StartedAt = s.StartedAt,
@@ -695,44 +737,55 @@ public sealed class TeamTaskOrchestrator(
         var iteration = sub.Iteration;
         var taskForExec = task;
         var timeoutSeconds = Math.Max(30, settings.Teams.WorkerRunTimeoutSeconds);
+        var rootId = task.RootSessionId;
+        var taskIdForWorker = task.TaskId;
+        var workerCts = TeamWorkerCancellation.Register(rootId, taskIdForWorker, subId, cancellationToken);
 
         return Task.Run(async () =>
         {
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
             try
             {
-                var outcome = await memberExecutor.ExecuteAsync(
-                    taskForExec,
-                    profile,
-                    memberSessionId,
-                    message,
-                    isLeader: false,
-                    timeoutCts.Token).ConfigureAwait(false);
-                return new WorkerRunResult(subId, profileId, iteration, outcome);
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(workerCts.Token);
+                timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+                try
+                {
+                    var outcome = await memberExecutor.ExecuteAsync(
+                        taskForExec,
+                        profile,
+                        memberSessionId,
+                        message,
+                        isLeader: false,
+                        timeoutCts.Token).ConfigureAwait(false);
+                    return new WorkerRunResult(subId, profileId, iteration, outcome);
+                }
+                catch (OperationCanceledException) when (
+                    cancellationToken.IsCancellationRequested || workerCts.IsCancellationRequested)
+                {
+                    return new WorkerRunResult(
+                        subId,
+                        profileId,
+                        iteration,
+                        TeamMemberRunOutcome.Fail("cancelled"),
+                        Cancelled: true);
+                }
+                catch (OperationCanceledException)
+                {
+                    return new WorkerRunResult(
+                        subId,
+                        profileId,
+                        iteration,
+                        TeamMemberRunOutcome.Fail($"Worker timed out after {timeoutSeconds}s"),
+                        TimedOut: true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Worker run crashed sub={SubTaskId}", subId);
+                    return new WorkerRunResult(subId, profileId, iteration, TeamMemberRunOutcome.Fail(ex.Message));
+                }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            finally
             {
-                return new WorkerRunResult(
-                    subId,
-                    profileId,
-                    iteration,
-                    TeamMemberRunOutcome.Fail("cancelled"),
-                    Cancelled: true);
-            }
-            catch (OperationCanceledException)
-            {
-                return new WorkerRunResult(
-                    subId,
-                    profileId,
-                    iteration,
-                    TeamMemberRunOutcome.Fail($"Worker timed out after {timeoutSeconds}s"),
-                    TimedOut: true);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Worker run crashed sub={SubTaskId}", subId);
-                return new WorkerRunResult(subId, profileId, iteration, TeamMemberRunOutcome.Fail(ex.Message));
+                TeamWorkerCancellation.Unregister(rootId, taskIdForWorker, subId);
             }
         }, cancellationToken);
     }
@@ -760,6 +813,16 @@ public sealed class TeamTaskOrchestrator(
             if (result.Outcome.SynthesizedNeedsLeader)
             {
                 metricsAcc.ResultInvalidCount++;
+            }
+
+            if (result.Outcome.UsedReportTool)
+            {
+                metricsAcc.ReportToolCount++;
+            }
+
+            if (result.Outcome.HitToolRoundCap)
+            {
+                metricsAcc.WorkerToolRoundCapHits++;
             }
 
             sub.CompletedAt = DateTimeOffset.UtcNow;
@@ -1013,6 +1076,26 @@ public sealed class TeamTaskOrchestrator(
                 + "If more specialized help is needed: create/dispatch only that Worker. Do not blind-redispatch or fan-out to unused Workers.");
         }
 
+        var verifyFails = task.SubTasks
+            .Where(s => !string.IsNullOrWhiteSpace(s.Result))
+            .Select(s => (Sub: s, Parsed: TeamMemberResultParser.Parse(s.Result!)))
+            .Where(x => string.Equals(x.Parsed.Verdict, "fail", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (verifyFails.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Verification failures (prefer team_redispatch of the implementer with findings):");
+            foreach (var item in verifyFails.Take(5))
+            {
+                sb.AppendLine(
+                    $"- {item.Sub.Id} fix_target={item.Parsed.FixTargetSubtaskId ?? "(none)"} "
+                    + TeamWorkerHelpers.Truncate(item.Parsed.FindingsSummary, 240));
+            }
+
+            sb.AppendLine(
+                "You may team_cancel_subtask on obsolete Queued/Running siblings while repairing.");
+        }
+
         AppendImplementVerifyWaveHint(sb);
         return sb.ToString();
     }
@@ -1037,7 +1120,9 @@ public sealed class TeamTaskOrchestrator(
     {
         var sb = new StringBuilder();
         sb.AppendLine("URGENT: you stopped without dispatching / redistributing / submitting, but actionable work remains.");
-        sb.AppendLine("You MUST call one of: team_dispatch, team_redispatch, team_create_subtask+team_dispatch, team_submit_result, or team_ask_user.");
+        sb.AppendLine(
+            "You MUST call one of: team_dispatch, team_redispatch, team_create_subtask+team_dispatch, "
+            + "team_cancel_subtask, team_submit_result, or team_ask_user.");
         sb.AppendLine("Do not reply with text only.");
         sb.AppendLine();
         sb.AppendLine(BuildLeaderFollowUp(task));
@@ -1149,7 +1234,83 @@ public sealed class TeamTaskOrchestrator(
 
         public int ResultNudgeCount { get; set; }
 
+        public int ReportToolCount { get; set; }
+
         public int MaxParallelObserved { get; set; }
+
+        public bool TimedOut { get; set; }
+
+        public int WorkerToolRoundCapHits { get; set; }
+    }
+
+    private static bool RequiresImmediateLeader(WorkerRunResult finished)
+    {
+        if (finished.Cancelled || finished.TimedOut || !finished.Outcome.Ok)
+        {
+            return true;
+        }
+
+        if (finished.Outcome.SynthesizedNeedsLeader)
+        {
+            return true;
+        }
+
+        var parsed = TeamMemberResultParser.Parse(finished.Outcome.ResponseText ?? "");
+        return string.Equals(parsed.Verdict, "fail", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private int ResolveTaskBudgetSeconds(TeamDefinition? team)
+    {
+        var fromSettings = Math.Max(0, settings.Teams.MaxTaskDurationSeconds);
+        var fromTeam = team?.MaxTaskDurationSeconds ?? 0;
+        if (fromSettings <= 0)
+        {
+            return Math.Max(0, fromTeam);
+        }
+
+        if (fromTeam <= 0)
+        {
+            return fromSettings;
+        }
+
+        return Math.Min(fromSettings, fromTeam);
+    }
+
+    private async Task<TeamTask?> TryEscalateBudgetExceededAsync(
+        string rootSessionId,
+        string taskId,
+        DateTimeOffset startedAt,
+        int budgetSeconds)
+    {
+        using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false))
+        {
+            var task = await taskStore.GetAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false);
+            if (task is null
+                || task.Status == TeamTaskStatus.AwaitingHuman
+                || TeamWorkerHelpers.IsTerminal(task.Status))
+            {
+                return null;
+            }
+
+            var elapsed = (long)(DateTimeOffset.UtcNow - startedAt).TotalSeconds;
+            var question =
+                $"Task budget exceeded ({elapsed}s >= {budgetSeconds}s). "
+                + "Use team_collect / team_memory on resume, then submit partial/failed, redispatch, or give new instructions.";
+            TeamToolHelpers.ApplyAwaitingHuman(task, question);
+            await taskStore.SaveAsync(task, CancellationToken.None).ConfigureAwait(false);
+            await traceStore.AppendAsync(
+                task.RootSessionId,
+                task.TaskId,
+                new TeamTraceEvent
+                {
+                    Type = "task.budget_exceeded",
+                    NodeId = "auto",
+                    Message = $"elapsedSec={elapsed}; budgetSec={budgetSeconds}"
+                },
+                CancellationToken.None).ConfigureAwait(false);
+            await AppendAwaitingHumanTraceAsync(task).ConfigureAwait(false);
+            return task;
+        }
     }
 
     private async Task<TeamTask> FinishRunAsync(
@@ -1184,7 +1345,12 @@ public sealed class TeamTaskOrchestrator(
                 CancelledSubtasks = task.SubTasks.Count(s => s.Status == TeamSubTaskStatus.Cancelled),
                 ResultInvalidCount = acc.ResultInvalidCount,
                 ResultNudgeCount = acc.ResultNudgeCount,
+                ReportToolCount = acc.ReportToolCount,
                 MaxParallelObserved = acc.MaxParallelObserved,
+                TimedOut = acc.TimedOut,
+                WorkerToolRoundCapHits = acc.WorkerToolRoundCapHits,
+                PromptTokens = 0,
+                CompletionTokens = 0,
                 DurationMs = Math.Max(0, (long)(completedAt - startedAt).TotalMilliseconds),
                 StartedAt = startedAt,
                 CompletedAt = completedAt

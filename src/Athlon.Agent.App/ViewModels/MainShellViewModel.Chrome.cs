@@ -66,7 +66,7 @@ public partial class MainShellViewModel
     [RelayCommand]
     private async Task OpenLatestTeamTraceAsync()
     {
-        await TeamsPageVm.OpenLatestTraceAsync().ConfigureAwait(true);
+        await TeamsPageVm.OpenLatestTraceAsync(_displayedSessionId).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -401,16 +401,18 @@ public partial class MainShellViewModel
         ChatMessage message,
         bool upsert = false)
     {
+        // Keep the displayed in-memory session aligned for composer / ask-user state.
         if (string.Equals(_displayedSessionId, sessionId, StringComparison.Ordinal))
         {
             _session = upsert
                 ? _session.WithUpsertedMessage(message)
                 : _session.WithMessage(message);
-            await SaveSessionInBackgroundAsync(_session).ConfigureAwait(true);
-            return;
+            _runtime.UpdateSession(_session);
         }
 
-        // Background Teams runs must still land in session.json so a later switch reload is complete.
+        // Always append/upsert conversation.jsonl. UpdateSession+Flush alone only rewrites
+        // session.json and leaves the display log (replay activity source) without Teams bubbles —
+        // the 2nd Teams turn then RESET-replays turn-1-only and wipes the new chat rows.
         try
         {
             await _runtime.UpsertAsync(sessionId, message).ConfigureAwait(true);

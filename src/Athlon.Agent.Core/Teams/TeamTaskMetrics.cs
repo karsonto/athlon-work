@@ -25,7 +25,17 @@ public sealed class TeamTaskMetrics
 
     public int ResultNudgeCount { get; set; }
 
+    public int ReportToolCount { get; set; }
+
     public int MaxParallelObserved { get; set; }
+
+    public bool TimedOut { get; set; }
+
+    public int WorkerToolRoundCapHits { get; set; }
+
+    public long PromptTokens { get; set; }
+
+    public long CompletionTokens { get; set; }
 
     public long DurationMs { get; set; }
 

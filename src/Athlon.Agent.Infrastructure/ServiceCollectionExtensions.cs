@@ -356,6 +356,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamCollectTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamSubmitResultTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamAskUserTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamCancelSubtaskTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Teams.TeamReportResultTool>();
     }
 
     private static void RegisterCompactionMemoryAndMiddleware(IServiceCollection services)

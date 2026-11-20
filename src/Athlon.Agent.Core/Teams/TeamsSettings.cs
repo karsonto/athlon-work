@@ -19,10 +19,21 @@ public sealed class TeamsSettings
     public int AbsoluteMaxIterations { get; set; } = 10;
 
     /// <summary>
-    /// Cap for Leader model↔tool rounds only. Workers ignore this and run without a round limit
-    /// (wall-clock <see cref="WorkerRunTimeoutSeconds"/> still applies).
+    /// Cap for Leader model↔tool rounds. Workers use <see cref="MaxWorkerModelToolRounds"/> instead.
     /// </summary>
     public int MaxModelToolRounds { get; set; } = 24;
+
+    /// <summary>
+    /// Soft cap for Worker model↔tool rounds. 0 = unlimited (wall-clock
+    /// <see cref="WorkerRunTimeoutSeconds"/> still applies). Default 32.
+    /// </summary>
+    public int MaxWorkerModelToolRounds { get; set; } = 32;
+
+    /// <summary>
+    /// Global task wall-clock budget in seconds (0 = unlimited). Combined with
+    /// <c>TeamDefinition.MaxTaskDurationSeconds</c> via min of positive values.
+    /// </summary>
+    public int MaxTaskDurationSeconds { get; set; }
 
     /// <summary>
     /// Silent global safety valve: max Leader-driven create/redispatch scheduling waves per task.
@@ -49,6 +60,12 @@ public sealed class TeamsSettings
     /// When true, Leader kickoff/follow-up prompts suggest an implement → verify wave for code goals.
     /// </summary>
     public bool SuggestImplementVerifyWave { get; set; } = true;
+
+    /// <summary>
+    /// When true, <c>team_submit_result(disposition=completed)</c> requires a Succeeded subtask with
+    /// <c>verdict: pass</c> for code-like goals (or any task that already used verdict semantics).
+    /// </summary>
+    public bool RequireVerifyPassForCodeGoals { get; set; } = true;
 
     /// <summary>When true, orchestrator writes subtask result summaries into team memory.</summary>
     public bool AutoWriteTeamMemory { get; set; } = true;

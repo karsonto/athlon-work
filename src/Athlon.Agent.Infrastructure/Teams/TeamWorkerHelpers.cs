@@ -37,10 +37,10 @@ internal static class TeamWorkerHelpers
     public static string BuildWorkerMessage(TeamTask task, TeamSubTask sub)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"## Goal");
+        sb.AppendLine("## Goal");
         sb.AppendLine(task.Goal);
         sb.AppendLine();
-        sb.AppendLine($"## Subtask");
+        sb.AppendLine("## Subtask");
         sb.AppendLine($"{sub.Title} ({sub.Id}) — attempt {sub.Iteration}");
         if (!string.IsNullOrWhiteSpace(sub.RedispatchReason))
         {
@@ -50,6 +50,14 @@ internal static class TeamWorkerHelpers
         sb.AppendLine();
         sb.AppendLine("## Handoff");
         sb.AppendLine(string.IsNullOrWhiteSpace(sub.Handoff) ? "(none — use team goal)" : sub.Handoff);
+
+        sb.AppendLine();
+        sb.AppendLine("## Facts");
+        sb.AppendLine(string.IsNullOrWhiteSpace(sub.Facts) ? "(none)" : sub.Facts);
+
+        sb.AppendLine();
+        sb.AppendLine("## Constraints");
+        sb.AppendLine(string.IsNullOrWhiteSpace(sub.Constraints) ? "(none)" : sub.Constraints);
 
         sb.AppendLine();
         sb.AppendLine("## Acceptance");
@@ -79,13 +87,20 @@ internal static class TeamWorkerHelpers
             sb.AppendLine(sub.PrevResultSummary);
         }
 
+        if (!string.IsNullOrWhiteSpace(sub.PrevFindings) && sub.Iteration > 1)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## FullFindings");
+            sb.AppendLine(sub.PrevFindings);
+        }
+
         sb.AppendLine();
         sb.AppendLine("You may call team_progress / team_memory to inspect shared task state.");
-        sb.AppendLine("Do not call team_dispatch / team_submit_result / sessions_*.");
+        sb.AppendLine("Prefer team_report_result when finished. Do not call team_dispatch / team_submit_result / sessions_*.");
         sb.AppendLine();
-        sb.AppendLine("## Result format (required)");
+        sb.AppendLine("## Result format (required if not using team_report_result)");
         sb.AppendLine(
-            "When finished, your last assistant message MUST be a ## Result block with a status: line "
+            "When finished without team_report_result, your last assistant message MUST be a ## Result block with a status: line "
             + "(completed|failed|blocked|needs_leader). Do not stop on a progress note.");
         return sb.ToString();
     }
