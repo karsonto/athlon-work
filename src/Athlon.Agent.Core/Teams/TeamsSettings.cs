@@ -39,6 +39,17 @@ public sealed class TeamsSettings
     /// <summary>Max empty-stop nudge Leader turns before Incomplete Failed.</summary>
     public int MaxEmptyStopNudges { get; set; } = 3;
 
+    /// <summary>
+    /// How many times a Worker is nudged to emit a structured ## Result before the run synthesizes
+    /// <c>status: needs_leader</c> from the raw text.
+    /// </summary>
+    public int MaxWorkerResultNudges { get; set; } = 2;
+
+    /// <summary>
+    /// When true, Leader kickoff/follow-up prompts suggest an implement → verify wave for code goals.
+    /// </summary>
+    public bool SuggestImplementVerifyWave { get; set; } = true;
+
     /// <summary>When true, orchestrator writes subtask result summaries into team memory.</summary>
     public bool AutoWriteTeamMemory { get; set; } = true;
 }

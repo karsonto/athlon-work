@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Teams;
 
@@ -13,6 +14,7 @@ public sealed class TeamTaskOrchestrator(
     ITeamMemoryStore memoryStore,
     ITeamMemberRunExecutor memberExecutor,
     IFileStorageService storage,
+    IJsonFileStore jsonFileStore,
     IAppLogger logger) : ITeamTaskOrchestrator
 {
     private readonly IAppLogger _logger = logger.ForContext("TeamTaskOrchestrator");
@@ -135,6 +137,9 @@ public sealed class TeamTaskOrchestrator(
         var leaderTurns = 0;
         var maxLeaderTurns = Math.Max(1, settings.Teams.MaxLeaderTurnsPerTask);
         var maxEmptyNudges = Math.Max(1, settings.Teams.MaxEmptyStopNudges);
+        var runStartedAt = DateTimeOffset.UtcNow;
+        var metricsAcc = new RunMetricsAccumulator();
+        var consecutiveSynthesizedNeedsLeader = 0;
 
         try
         {
@@ -148,7 +153,7 @@ public sealed class TeamTaskOrchestrator(
 
                     if (TeamWorkerHelpers.IsTerminal(task.Status) || task.Status == TeamTaskStatus.AwaitingHuman)
                     {
-                        return task;
+                        return await FinishRunAsync(task, runStartedAt, leaderTurns, metricsAcc).ConfigureAwait(false);
                     }
 
                     TeamWorkerHelpers.RefreshReady(task);
@@ -176,6 +181,7 @@ public sealed class TeamTaskOrchestrator(
                         }
                     }
 
+                    metricsAcc.MaxParallelObserved = Math.Max(metricsAcc.MaxParallelObserved, inFlight.Count);
                     await taskStore.SaveAsync(task, cancellationToken).ConfigureAwait(false);
                 }
 
@@ -184,7 +190,35 @@ public sealed class TeamTaskOrchestrator(
                 {
                     var finished = await WaitForAnyWorkerAsync(inFlight.Values, cancellationToken).ConfigureAwait(false);
                     inFlight.Remove(finished.SubTaskId);
-                    await ApplyWorkerResultAsync(rootSessionId, taskId, finished, progress).ConfigureAwait(false);
+                    await ApplyWorkerResultAsync(rootSessionId, taskId, finished, progress, metricsAcc)
+                        .ConfigureAwait(false);
+
+                    if (finished.Outcome.SynthesizedNeedsLeader)
+                    {
+                        consecutiveSynthesizedNeedsLeader++;
+                    }
+                    else if (!finished.Cancelled)
+                    {
+                        consecutiveSynthesizedNeedsLeader = 0;
+                    }
+
+                    if (consecutiveSynthesizedNeedsLeader >= 2
+                        || await ShouldAutoEscalateRepairExhaustedAsync(rootSessionId, taskId).ConfigureAwait(false))
+                    {
+                        var escalated = await TryAutoEscalateToHumanAsync(
+                                rootSessionId,
+                                taskId,
+                                consecutiveSynthesizedNeedsLeader >= 2
+                                    ? BuildConsecutiveNeedsLeaderQuestion()
+                                    : null)
+                            .ConfigureAwait(false);
+                        if (escalated is not null)
+                        {
+                            return await FinishRunAsync(escalated, runStartedAt, leaderTurns, metricsAcc)
+                                .ConfigureAwait(false);
+                        }
+                    }
+
                     needsLeader = true;
                     continue;
                 }
@@ -198,7 +232,8 @@ public sealed class TeamTaskOrchestrator(
 
                     if (TeamWorkerHelpers.IsTerminal(snapshot.Status) || snapshot.Status == TeamTaskStatus.AwaitingHuman)
                     {
-                        return snapshot;
+                        return await FinishRunAsync(snapshot, runStartedAt, leaderTurns, metricsAcc)
+                            .ConfigureAwait(false);
                     }
 
                     if (snapshot.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Queued) && inFlight.Count > 0)
@@ -222,8 +257,18 @@ public sealed class TeamTaskOrchestrator(
 
                     if (!needsLeader)
                     {
+                        if (TryApplyRepairExhaustedEscalation(snapshot))
+                        {
+                            await taskStore.SaveAsync(snapshot, CancellationToken.None).ConfigureAwait(false);
+                            await AppendAwaitingHumanTraceAsync(snapshot).ConfigureAwait(false);
+                            return await FinishRunAsync(snapshot, runStartedAt, leaderTurns, metricsAcc)
+                                .ConfigureAwait(false);
+                        }
+
                         // Finalize while still holding the lock (SaveLocked would deadlock).
-                        return await FinalizeIfIncompleteCoreAsync(snapshot).ConfigureAwait(false);
+                        var finalized = await FinalizeIfIncompleteCoreAsync(snapshot).ConfigureAwait(false);
+                        return await FinishRunAsync(finalized, runStartedAt, leaderTurns, metricsAcc)
+                            .ConfigureAwait(false);
                     }
 
                     if (leaderTurns >= maxLeaderTurns)
@@ -238,7 +283,8 @@ public sealed class TeamTaskOrchestrator(
                             snapshot.TaskId,
                             new TeamTraceEvent { Type = "task.failed", Message = snapshot.Error },
                             CancellationToken.None).ConfigureAwait(false);
-                        return snapshot;
+                        return await FinishRunAsync(snapshot, runStartedAt, leaderTurns, metricsAcc)
+                            .ConfigureAwait(false);
                     }
 
                     // Always rebuild follow-up from latest disk state after the first kickoff/resume.
@@ -267,7 +313,16 @@ public sealed class TeamTaskOrchestrator(
                         ?? snapshot;
                     if (TeamWorkerHelpers.IsTerminal(snapshot.Status) || snapshot.Status == TeamTaskStatus.AwaitingHuman)
                     {
-                        return snapshot;
+                        return await FinishRunAsync(snapshot, runStartedAt, leaderTurns, metricsAcc)
+                            .ConfigureAwait(false);
+                    }
+
+                    if (TryApplyRepairExhaustedEscalation(snapshot))
+                    {
+                        await taskStore.SaveAsync(snapshot, CancellationToken.None).ConfigureAwait(false);
+                        await AppendAwaitingHumanTraceAsync(snapshot).ConfigureAwait(false);
+                        return await FinishRunAsync(snapshot, runStartedAt, leaderTurns, metricsAcc)
+                            .ConfigureAwait(false);
                     }
 
                     // Empty-stop safety: if Leader ended with actionable Ready/Failed and nothing in flight,
@@ -296,7 +351,8 @@ public sealed class TeamTaskOrchestrator(
         catch (OperationCanceledException)
         {
             await DrainInFlightAsync(inFlight, TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-            return await CancelTaskAsync(rootSessionId, taskId).ConfigureAwait(false);
+            var cancelled = await CancelTaskAsync(rootSessionId, taskId).ConfigureAwait(false);
+            return await FinishRunAsync(cancelled, runStartedAt, leaderTurns, metricsAcc).ConfigureAwait(false);
         }
     }
 
@@ -478,6 +534,8 @@ public sealed class TeamTaskOrchestrator(
 
             diskSub.Title = scopedSub.Title;
             diskSub.Handoff = scopedSub.Handoff;
+            diskSub.AcceptanceCriteria = scopedSub.AcceptanceCriteria;
+            diskSub.ArtifactRefs = scopedSub.ArtifactRefs.ToList();
             diskSub.DependsOn = scopedSub.DependsOn.ToList();
             diskSub.Iteration = scopedSub.Iteration;
 #pragma warning disable CS0618
@@ -511,6 +569,7 @@ public sealed class TeamTaskOrchestrator(
         DependsOn = s.DependsOn.ToList(),
         Status = s.Status,
         Handoff = s.Handoff,
+        AcceptanceCriteria = s.AcceptanceCriteria,
         ArtifactRefs = s.ArtifactRefs.ToList(),
         Iteration = s.Iteration,
 #pragma warning disable CS0618
@@ -682,7 +741,8 @@ public sealed class TeamTaskOrchestrator(
         string rootSessionId,
         string taskId,
         WorkerRunResult result,
-        IProgress<TeamRunProgress>? progress)
+        IProgress<TeamRunProgress>? progress,
+        RunMetricsAccumulator metricsAcc)
     {
         using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false))
         {
@@ -693,6 +753,13 @@ public sealed class TeamTaskOrchestrator(
             if (sub is null)
             {
                 return;
+            }
+
+            metricsAcc.WorkerRuns++;
+            metricsAcc.ResultNudgeCount += Math.Max(0, result.Outcome.ResultNudgeCount);
+            if (result.Outcome.SynthesizedNeedsLeader)
+            {
+                metricsAcc.ResultInvalidCount++;
             }
 
             sub.CompletedAt = DateTimeOffset.UtcNow;
@@ -902,6 +969,10 @@ public sealed class TeamTaskOrchestrator(
         sb.AppendLine(
             "You may redispatch / create repair subtasks while repair rounds remain "
             + $"(MaxRepairRounds={Math.Max(1, settings.Teams.MaxRepairRounds)}). There is no per-worker MaxIterations.");
+        sb.AppendLine(
+            "When creating/redispatching subtasks, always set acceptance_criteria (what done means) "
+            + "and optionally artifacts (paths / refs the Worker should use).");
+        AppendImplementVerifyWaveHint(sb);
         return sb.ToString();
     }
 
@@ -924,7 +995,7 @@ public sealed class TeamTaskOrchestrator(
         {
             sb.AppendLine(
                 "One or more subtasks Failed (often verification). Use team_collect / team_memory, then "
-                + "team_redispatch (with handoff findings) or create a targeted fix subtask + dispatch — while repair rounds remain. "
+                + "team_redispatch (with handoff findings + acceptance_criteria) or create a targeted fix subtask + dispatch — while repair rounds remain. "
                 + "Otherwise team_ask_user or submit an explicit partial/failed FinalResult.");
         }
         else if (task.SubTasks.Any(s => s.Status is TeamSubTaskStatus.Ready or TeamSubTaskStatus.Queued))
@@ -942,7 +1013,24 @@ public sealed class TeamTaskOrchestrator(
                 + "If more specialized help is needed: create/dispatch only that Worker. Do not blind-redispatch or fan-out to unused Workers.");
         }
 
+        AppendImplementVerifyWaveHint(sb);
         return sb.ToString();
+    }
+
+    private void AppendImplementVerifyWaveHint(StringBuilder sb)
+    {
+        if (!settings.Teams.SuggestImplementVerifyWave)
+        {
+            return;
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("Implement → Verify wave (suggested for code-change goals; skip for pure Q&A / research):");
+        sb.AppendLine("- First wave: dispatch an implement Worker with clear acceptance_criteria.");
+        sb.AppendLine("- Second wave: dispatch or reuse a verify Worker against those criteria / artifacts.");
+        sb.AppendLine(
+            "- On verify verdict: fail, prefer team_redispatch of the original implementer with findings "
+            + "(and updated acceptance_criteria) before opening unrelated Workers.");
     }
 
     private string BuildLeaderEmptyStopNudge(TeamTask task)
@@ -1052,4 +1140,195 @@ public sealed class TeamTaskOrchestrator(
         TeamMemberRunOutcome Outcome,
         bool Cancelled = false,
         bool TimedOut = false);
+
+    private sealed class RunMetricsAccumulator
+    {
+        public int WorkerRuns { get; set; }
+
+        public int ResultInvalidCount { get; set; }
+
+        public int ResultNudgeCount { get; set; }
+
+        public int MaxParallelObserved { get; set; }
+    }
+
+    private async Task<TeamTask> FinishRunAsync(
+        TeamTask task,
+        DateTimeOffset startedAt,
+        int leaderTurns,
+        RunMetricsAccumulator acc)
+    {
+        await WriteMetricsAsync(task, startedAt, leaderTurns, acc).ConfigureAwait(false);
+        return task;
+    }
+
+    private async Task WriteMetricsAsync(
+        TeamTask task,
+        DateTimeOffset startedAt,
+        int leaderTurns,
+        RunMetricsAccumulator acc)
+    {
+        try
+        {
+            var completedAt = DateTimeOffset.UtcNow;
+            var metrics = new TeamTaskMetrics
+            {
+                TaskId = task.TaskId,
+                RootSessionId = task.RootSessionId,
+                Status = task.Status.ToString(),
+                LeaderTurns = leaderTurns,
+                RepairRoundsUsed = task.RepairRoundsUsed,
+                WorkerRuns = acc.WorkerRuns,
+                SucceededSubtasks = task.SubTasks.Count(s => s.Status == TeamSubTaskStatus.Succeeded),
+                FailedSubtasks = task.SubTasks.Count(s => s.Status == TeamSubTaskStatus.Failed),
+                CancelledSubtasks = task.SubTasks.Count(s => s.Status == TeamSubTaskStatus.Cancelled),
+                ResultInvalidCount = acc.ResultInvalidCount,
+                ResultNudgeCount = acc.ResultNudgeCount,
+                MaxParallelObserved = acc.MaxParallelObserved,
+                DurationMs = Math.Max(0, (long)(completedAt - startedAt).TotalMilliseconds),
+                StartedAt = startedAt,
+                CompletedAt = completedAt
+            };
+
+            var dir = taskStore.ResolveTaskDirectory(task.RootSessionId, task.TaskId);
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, "metrics.json");
+            await jsonFileStore.SaveAsync(path, metrics, CancellationToken.None).ConfigureAwait(false);
+            await traceStore.AppendAsync(
+                task.RootSessionId,
+                task.TaskId,
+                new TeamTraceEvent
+                {
+                    Type = "task.metrics",
+                    Message = JsonSerializer.Serialize(new
+                    {
+                        metrics.LeaderTurns,
+                        metrics.WorkerRuns,
+                        metrics.ResultInvalidCount,
+                        metrics.ResultNudgeCount,
+                        metrics.DurationMs,
+                        metrics.Status
+                    })
+                },
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("Failed to write team metrics for {TaskId}: {Message}", task.TaskId, ex.Message);
+        }
+    }
+
+    private async Task<bool> ShouldAutoEscalateRepairExhaustedAsync(string rootSessionId, string taskId)
+    {
+        using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false))
+        {
+            var task = await taskStore.GetAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false);
+            return task is not null && MeetsRepairExhaustedEscalation(task);
+        }
+    }
+
+    private bool TryApplyRepairExhaustedEscalation(TeamTask task)
+    {
+        if (!MeetsRepairExhaustedEscalation(task))
+        {
+            return false;
+        }
+
+        TeamToolHelpers.ApplyAwaitingHuman(task, BuildRepairExhaustedQuestion(task));
+        return true;
+    }
+
+    private bool MeetsRepairExhaustedEscalation(TeamTask task)
+    {
+        if (task.Status == TeamTaskStatus.AwaitingHuman || TeamWorkerHelpers.IsTerminal(task.Status))
+        {
+            return false;
+        }
+
+        var maxRepair = Math.Max(1, settings.Teams.MaxRepairRounds);
+        if (task.RepairRoundsUsed < maxRepair)
+        {
+            return false;
+        }
+
+        if (!task.SubTasks.Any(s => s.Status == TeamSubTaskStatus.Failed))
+        {
+            return false;
+        }
+
+        return !task.SubTasks.Any(s =>
+            s.Status is TeamSubTaskStatus.Queued or TeamSubTaskStatus.Running);
+    }
+
+    private async Task<TeamTask?> TryAutoEscalateToHumanAsync(
+        string rootSessionId,
+        string taskId,
+        string? questionOverride)
+    {
+        using (await TeamTaskLock.AcquireAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false))
+        {
+            var task = await taskStore.GetAsync(rootSessionId, taskId, CancellationToken.None).ConfigureAwait(false);
+            if (task is null
+                || task.Status == TeamTaskStatus.AwaitingHuman
+                || TeamWorkerHelpers.IsTerminal(task.Status))
+            {
+                return null;
+            }
+
+            var question = questionOverride;
+            if (string.IsNullOrWhiteSpace(question))
+            {
+                if (!MeetsRepairExhaustedEscalation(task))
+                {
+                    return null;
+                }
+
+                question = BuildRepairExhaustedQuestion(task);
+            }
+
+            TeamToolHelpers.ApplyAwaitingHuman(task, question);
+            await taskStore.SaveAsync(task, CancellationToken.None).ConfigureAwait(false);
+            await AppendAwaitingHumanTraceAsync(task).ConfigureAwait(false);
+            return task;
+        }
+    }
+
+    private async Task AppendAwaitingHumanTraceAsync(TeamTask task)
+    {
+        await traceStore.AppendAsync(
+            task.RootSessionId,
+            task.TaskId,
+            new TeamTraceEvent
+            {
+                Type = "task.awaiting_human",
+                NodeId = "auto",
+                Message = TeamWorkerHelpers.Truncate(task.PendingHumanQuestion, 400)
+            },
+            CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private static string BuildConsecutiveNeedsLeaderQuestion() =>
+        "Two Worker runs failed to emit a valid ## Result (synthesized needs_leader). "
+        + "Please clarify the next step, accept a partial outcome, or provide guidance. "
+        + "Use team_collect on resume to inspect worker findings.";
+
+    private static string BuildRepairExhaustedQuestion(TeamTask task)
+    {
+        var failed = task.SubTasks
+            .Where(s => s.Status == TeamSubTaskStatus.Failed)
+            .Select(s =>
+                $"- {s.Id} {s.Title}: {TeamWorkerHelpers.Truncate(s.Error ?? s.PrevResultSummary, 200)}")
+            .ToList();
+        var sb = new StringBuilder();
+        sb.AppendLine(
+            $"Repair rounds are exhausted ({task.RepairRoundsUsed}). Failed subtasks need a human decision.");
+        foreach (var line in failed)
+        {
+            sb.AppendLine(line);
+        }
+
+        sb.AppendLine(
+            "On resume: team_collect / team_memory, then submit partial/failed, redispatch if policy allows, or give new instructions.");
+        return sb.ToString().TrimEnd();
+    }
 }

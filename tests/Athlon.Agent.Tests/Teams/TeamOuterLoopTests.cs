@@ -466,6 +466,107 @@ public sealed class TeamOuterLoopTests : IDisposable
         Assert.Equal(1, executor.WorkerStarts);
     }
 
+    [Fact]
+    public async Task OuterLoop_WritesMetricsJson_OnCompletion()
+    {
+        await SeedTeamAsync(maxParallel: 1);
+        var executor = new ScriptedMemberExecutor();
+        executor.OnLeader = (task, turn) =>
+        {
+            if (turn == 1)
+            {
+                task.SubTasks.Add(MakeQueued("sub_m", "worker"));
+                return TeamMemberRunOutcome.Success("queued", AgentSession.Create("ldr"));
+            }
+
+            task.FinalResult = "metrics ok";
+            task.Status = TeamTaskStatus.Succeeded;
+            task.CompletedAt = DateTimeOffset.UtcNow;
+            return TeamMemberRunOutcome.Success("done", AgentSession.Create("ldr"));
+        };
+
+        var orch = CreateOrchestrator(executor);
+        var began = await orch.BeginAsync(new TeamTaskStartRequest
+        {
+            TeamId = "t1",
+            RootSessionId = "sess_metrics",
+            Goal = "metrics"
+        });
+        var completed = await orch.RunToCompletionAsync(began.Task.RootSessionId, began.Task.TaskId);
+        Assert.Equal(TeamTaskStatus.Succeeded, completed.Status);
+
+        var metricsPath = Path.Combine(
+            _tasks.ResolveTaskDirectory(completed.RootSessionId, completed.TaskId),
+            "metrics.json");
+        Assert.True(File.Exists(metricsPath), metricsPath);
+        var metrics = await _json.LoadAsync<TeamTaskMetrics>(metricsPath);
+        Assert.NotNull(metrics);
+        Assert.Equal(completed.TaskId, metrics!.TaskId);
+        Assert.True(metrics.LeaderTurns >= 2);
+        Assert.Equal(1, metrics.WorkerRuns);
+        Assert.Equal(1, metrics.SucceededSubtasks);
+        Assert.True(metrics.DurationMs >= 0);
+    }
+
+    [Fact]
+    public async Task OuterLoop_AutoEscalates_OnConsecutiveSynthesizedNeedsLeader()
+    {
+        await SeedTeamAsync(maxParallel: 1);
+        var executor = new ScriptedMemberExecutor();
+        executor.OnLeader = (task, turn) =>
+        {
+            task.SubTasks.Add(MakeQueued("sub_a", "worker"));
+            task.SubTasks.Add(MakeQueued("sub_b", "worker"));
+            return TeamMemberRunOutcome.Success("queued two", AgentSession.Create("ldr"));
+        };
+        executor.OnWorker = (_, _) => Task.FromResult(new TeamMemberRunOutcome
+        {
+            Ok = false,
+            ResponseText = TeamMemberRunExecutor.BuildSynthesizedNeedsLeaderResult("progress only"),
+            Error = "status=NeedsLeader; synthesized",
+            SynthesizedNeedsLeader = true,
+            ResultNudgeCount = 2
+        });
+
+        var orch = CreateOrchestrator(executor);
+        var began = await orch.BeginAsync(new TeamTaskStartRequest
+        {
+            TeamId = "t1",
+            RootSessionId = "sess_syn",
+            Goal = "needs leader synth"
+        });
+        var completed = await orch.RunToCompletionAsync(began.Task.RootSessionId, began.Task.TaskId);
+        Assert.Equal(TeamTaskStatus.AwaitingHuman, completed.Status);
+        Assert.Contains("needs_leader", completed.PendingHumanQuestion ?? "", StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, executor.WorkerStarts);
+    }
+
+    [Fact]
+    public async Task OuterLoop_AutoEscalates_WhenRepairRoundsExhausted()
+    {
+        _settings.Teams.MaxRepairRounds = 1;
+        await SeedTeamAsync(maxParallel: 1);
+        var executor = new ScriptedMemberExecutor();
+        executor.OnLeader = (task, turn) =>
+        {
+            task.RepairRoundsUsed = 1;
+            task.SubTasks.Add(MakeQueued("sub_fail", "worker"));
+            return TeamMemberRunOutcome.Success("queued", AgentSession.Create("ldr"));
+        };
+        executor.OnWorker = (_, _) => Task.FromResult(TeamMemberRunOutcome.Fail("worker crashed"));
+
+        var orch = CreateOrchestrator(executor);
+        var began = await orch.BeginAsync(new TeamTaskStartRequest
+        {
+            TeamId = "t1",
+            RootSessionId = "sess_repair",
+            Goal = "repair exhausted"
+        });
+        var completed = await orch.RunToCompletionAsync(began.Task.RootSessionId, began.Task.TaskId);
+        Assert.Equal(TeamTaskStatus.AwaitingHuman, completed.Status);
+        Assert.Contains("Repair rounds are exhausted", completed.PendingHumanQuestion ?? "", StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         try
@@ -491,6 +592,7 @@ public sealed class TeamOuterLoopTests : IDisposable
             new FileTeamMemoryStore(_tasks),
             executor,
             new NoOpStorage(),
+            _json,
             new NoOpLogger());
 
     private async Task SeedTeamAsync(int maxParallel)

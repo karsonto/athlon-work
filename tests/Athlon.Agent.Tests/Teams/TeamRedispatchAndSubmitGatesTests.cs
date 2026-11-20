@@ -50,7 +50,8 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                 {
                     ["subtask_id"] = "sub_a",
                     ["reason"] = "try again please",
-                    ["handoff"] = "do it better"
+                    ["handoff"] = "do it better",
+                    ["acceptance_criteria"] = "same as before"
                 })),
             default);
         Assert.False(result.Succeeded);
@@ -72,6 +73,7 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                     ["subtask_id"] = "sub_a",
                     ["reason"] = "verification failed",
                     ["handoff"] = "fix findings",
+                    ["acceptance_criteria"] = "tests pass",
                     ["confirm_repair"] = "true"
                 })),
             default);
@@ -91,7 +93,8 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                 {
                     ["subtask_id"] = "sub_a",
                     ["reason"] = "verification failed: missing tests",
-                    ["handoff"] = "findings:\n- add unit tests"
+                    ["handoff"] = "findings:\n- add unit tests",
+                    ["acceptance_criteria"] = "unit tests added and green"
                 })),
             default);
         Assert.True(result.Succeeded, result.Error ?? result.Content ?? result.Summary);
@@ -99,6 +102,7 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
         Assert.Equal(TeamSubTaskStatus.Queued, task!.SubTasks[0].Status);
         Assert.Equal(2, task.SubTasks[0].Iteration);
         Assert.Equal(1, task.RepairRoundsUsed);
+        Assert.Equal("unit tests added and green", task.SubTasks[0].AcceptanceCriteria);
     }
 
     [Fact]
@@ -115,7 +119,8 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                 {
                     ["subtask_id"] = "sub_a",
                     ["reason"] = "verification failed",
-                    ["handoff"] = "fix the findings"
+                    ["handoff"] = "fix the findings",
+                    ["acceptance_criteria"] = "findings addressed"
                 })),
             default);
         Assert.True(result.Succeeded, result.Error ?? result.Content ?? result.Summary);
@@ -134,7 +139,8 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                 {
                     ["subtask_id"] = "sub_a",
                     ["reason"] = "verification failed again",
-                    ["handoff"] = "more findings"
+                    ["handoff"] = "more findings",
+                    ["acceptance_criteria"] = "still needs green build"
                 })),
             default);
         Assert.False(result.Succeeded);
@@ -155,6 +161,7 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                 {
                     ["assignee_profile_id"] = "worker",
                     ["title"] = "qa check",
+                    ["acceptance_criteria"] = "qa notes written",
                     ["depends_on"] = "sub-placeholder"
                 })),
             default);
@@ -162,6 +169,26 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
         var text = $"{result.Summary}\n{result.Error}\n{result.Content}";
         Assert.Contains("depends_on", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("sub-placeholder", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CreateSubtask_MissingAcceptanceCriteria_Denied()
+    {
+        await SeedTeamForCreateAsync();
+        var tool = new TeamCreateSubtaskTool(_settings, _tasks, _teams, _profiles, _traces);
+        using var scope = TeamTaskExecutionScope.Enter((await _tasks.GetAsync("sess", "tm_1"))!);
+        var result = await tool.InvokeAsync(
+            new ToolInvocation(
+                "team_create_subtask",
+                ToolCallArguments.FromStrings(new Dictionary<string, string>
+                {
+                    ["assignee_profile_id"] = "worker",
+                    ["title"] = "qa check"
+                })),
+            default);
+        Assert.False(result.Succeeded);
+        var text = $"{result.Summary}\n{result.Error}\n{result.Content}";
+        Assert.Contains("acceptance_criteria", text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -177,12 +204,38 @@ public sealed class TeamRedispatchAndSubmitGatesTests : IDisposable
                 {
                     ["assignee_profile_id"] = "worker",
                     ["title"] = "qa check",
+                    ["acceptance_criteria"] = "qa notes written",
+                    ["artifacts"] = "docs/qa.md",
                     ["depends_on"] = "sub_a"
                 })),
             default);
         Assert.True(result.Succeeded, result.Error ?? result.Content ?? result.Summary);
         var task = await _tasks.GetAsync("sess", "tm_1");
-        Assert.Contains(task!.SubTasks, s => s.Title == "qa check" && s.Status == TeamSubTaskStatus.Pending);
+        var created = Assert.Single(task!.SubTasks, s => s.Title == "qa check");
+        Assert.Equal(TeamSubTaskStatus.Pending, created.Status);
+        Assert.Equal("qa notes written", created.AcceptanceCriteria);
+        Assert.Contains("docs/qa.md", created.ArtifactRefs);
+    }
+
+    [Fact]
+    public async Task Redispatch_MissingAcceptanceCriteria_Denied()
+    {
+        await SeedAsync(TeamSubTaskStatus.Failed);
+        var tool = new TeamRedispatchTool(_settings, _tasks, _profiles, _traces);
+        using var scope = TeamTaskExecutionScope.Enter((await _tasks.GetAsync("sess", "tm_1"))!);
+        var result = await tool.InvokeAsync(
+            new ToolInvocation(
+                "team_redispatch",
+                ToolCallArguments.FromStrings(new Dictionary<string, string>
+                {
+                    ["subtask_id"] = "sub_a",
+                    ["reason"] = "try again",
+                    ["handoff"] = "more context"
+                })),
+            default);
+        Assert.False(result.Succeeded);
+        var text = $"{result.Summary}\n{result.Error}\n{result.Content}";
+        Assert.Contains("acceptance_criteria", text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

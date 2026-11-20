@@ -21,6 +21,27 @@ internal static class TeamToolHelpers
         return true;
     }
 
+    /// <summary>Sets AwaitingHuman + PendingHumanQuestion (shared by team_ask_user and auto-HITL).</summary>
+    public static void ApplyAwaitingHuman(TeamTask task, string question)
+    {
+        task.Status = TeamTaskStatus.AwaitingHuman;
+        task.PendingHumanQuestion = question.Trim();
+    }
+
+    public static List<string> ParseArtifactRefs(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return [];
+        }
+
+        return raw
+            .Split([',', '\n', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     /// <summary>
     /// Reloads task.json under the per-task lock, applies <paramref name="mutate"/>, saves, and
     /// refreshes <see cref="TeamTaskExecutionScope"/>.
@@ -182,11 +203,18 @@ public sealed class TeamCreateSubtaskTool(
 {
     public ToolDefinition Definition => new(
         "team_create_subtask",
-        "Create a subtask for one Worker you chose to schedule now (not every team member). Optionally set depends_on and handoff.",
+        "Create a subtask for one Worker you chose to schedule now (not every team member). "
+        + "Requires acceptance_criteria. Optionally set depends_on, handoff, and artifacts.",
         ToolSchema.Object()
             .String("assignee_profile_id", "Worker profile id to schedule", required: true, minLength: 1)
             .String("title", "Short title", required: true, minLength: 1)
+            .String(
+                "acceptance_criteria",
+                "What done means for this subtask (checklist / measurable outcomes)",
+                required: true,
+                minLength: 1)
             .String("handoff", "Handoff payload (goal / facts / todos / refs)")
+            .String("artifacts", "Optional comma/newline-separated artifact refs (paths, URLs, keys)")
             .String("depends_on", "Comma-separated subtask ids this depends on")
             .Build(),
         Group: ToolGroup.Builtin);
@@ -205,12 +233,21 @@ public sealed class TeamCreateSubtaskTool(
 
         invocation.Arguments.TryGetString("assignee_profile_id", out var assignee);
         invocation.Arguments.TryGetString("title", out var title);
+        invocation.Arguments.TryGetString("acceptance_criteria", out var acceptance);
         invocation.Arguments.TryGetString("handoff", out var handoff);
+        invocation.Arguments.TryGetString("artifacts", out var artifactsRaw);
         invocation.Arguments.TryGetString("depends_on", out var dependsRaw);
 
         if (string.IsNullOrWhiteSpace(assignee) || string.IsNullOrWhiteSpace(title))
         {
             return ToolResult.Failure("Invalid args", "assignee_profile_id and title are required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(acceptance))
+        {
+            return ToolResult.Failure(
+                "Invalid args",
+                "acceptance_criteria is required so the Worker knows what done means.");
         }
 
         var profile = await profileStore.GetAsync(assignee.Trim(), cancellationToken).ConfigureAwait(false);
@@ -285,6 +322,8 @@ public sealed class TeamCreateSubtaskTool(
                     AssigneeProfileId = profile.Id,
                     DependsOn = depends,
                     Handoff = handoff?.Trim() ?? "",
+                    AcceptanceCriteria = acceptance.Trim(),
+                    ArtifactRefs = TeamToolHelpers.ParseArtifactRefs(artifactsRaw),
                     Status = depends.Count == 0 ? TeamSubTaskStatus.Ready : TeamSubTaskStatus.Pending,
                     Iteration = 1,
                     MaxIterations = maxRepair
@@ -323,7 +362,15 @@ public sealed class TeamCreateSubtaskTool(
 
         return ToolResult.Success(
             "subtask created",
-            JsonSerializer.Serialize(new { sub.Id, sub.Title, sub.AssigneeProfileId, sub.Status, attempt = sub.Iteration }));
+            JsonSerializer.Serialize(new
+            {
+                sub.Id,
+                sub.Title,
+                sub.AssigneeProfileId,
+                sub.Status,
+                attempt = sub.Iteration,
+                acceptance_criteria = sub.AcceptanceCriteria
+            }));
     }
 }
 
@@ -428,11 +475,18 @@ public sealed class TeamRedispatchTool(
     public ToolDefinition Definition => new(
         "team_redispatch",
         "Queue another attempt of a finished Worker (Failed or repair of Succeeded). "
-        + "Succeeded repairs require confirm_repair=true. Gated by MaxRepairRounds.",
+        + "Succeeded repairs require confirm_repair=true. Gated by MaxRepairRounds. "
+        + "acceptance_criteria is required (reuse or override prior criteria).",
         ToolSchema.Object()
             .String("subtask_id", "Subtask id", required: true, minLength: 1)
             .String("reason", "Why another attempt is needed", required: true, minLength: 1)
             .String("handoff", "Updated handoff with verification findings / repair instructions", required: true, minLength: 1)
+            .String(
+                "acceptance_criteria",
+                "What done means for this attempt (required; may match prior criteria)",
+                required: true,
+                minLength: 1)
+            .String("artifacts", "Optional comma/newline-separated artifact refs to replace prior list")
             .Boolean("confirm_repair", "Required true when redistributing a Succeeded subtask")
             .Build(),
         Group: ToolGroup.Builtin);
@@ -447,6 +501,8 @@ public sealed class TeamRedispatchTool(
         invocation.Arguments.TryGetString("subtask_id", out var subId);
         invocation.Arguments.TryGetString("reason", out var reason);
         invocation.Arguments.TryGetString("handoff", out var handoff);
+        invocation.Arguments.TryGetString("acceptance_criteria", out var acceptance);
+        invocation.Arguments.TryGetString("artifacts", out var artifactsRaw);
         var confirmRepair = invocation.Arguments.GetBoolean("confirm_repair", false);
         if (string.IsNullOrWhiteSpace(subId) || string.IsNullOrWhiteSpace(reason))
         {
@@ -458,6 +514,13 @@ public sealed class TeamRedispatchTool(
             return ToolResult.Failure(
                 "Invalid args",
                 "handoff is required on redispatch so the worker receives verification findings / repair instructions.");
+        }
+
+        if (string.IsNullOrWhiteSpace(acceptance))
+        {
+            return ToolResult.Failure(
+                "Invalid args",
+                "acceptance_criteria is required on redispatch (reuse or override prior criteria).");
         }
 
         string? profileId = null;
@@ -498,6 +561,12 @@ public sealed class TeamRedispatchTool(
 
                 sub.Iteration += 1;
                 sub.Handoff = handoff.Trim();
+                sub.AcceptanceCriteria = acceptance.Trim();
+                if (artifactsRaw is not null)
+                {
+                    sub.ArtifactRefs = TeamToolHelpers.ParseArtifactRefs(artifactsRaw);
+                }
+
                 sub.Status = TeamSubTaskStatus.Queued;
                 sub.RedispatchReason = reason.Trim();
                 sub.MemberSessionId = "mbr_" + IdGen.NewId()[..10];
@@ -741,8 +810,7 @@ public sealed class TeamAskUserTool(
             taskStore,
             live =>
             {
-                live.Status = TeamTaskStatus.AwaitingHuman;
-                live.PendingHumanQuestion = trimmed;
+                TeamToolHelpers.ApplyAwaitingHuman(live, trimmed);
                 return null;
             },
             cancellationToken).ConfigureAwait(false);

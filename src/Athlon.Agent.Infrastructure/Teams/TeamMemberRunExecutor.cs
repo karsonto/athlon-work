@@ -21,6 +21,7 @@ public sealed class TeamMemberRunExecutor(
     IServiceProvider serviceProvider,
     IFileStorageService storage,
     ITeamTaskStore taskStore,
+    ITeamTraceStore traceStore,
     ISessionKnowledgeState sessionKnowledgeState,
     IJsonFileStore jsonFileStore,
     TeamMemberSystemPromptOrchestrator promptOrchestrator,
@@ -227,18 +228,18 @@ public sealed class TeamMemberRunExecutor(
             await PersistMemberTranscriptAsync(memberDir, sessionPath, session, cancellationToken)
                 .ConfigureAwait(false);
 
-            var responseText = SubAgentResultFormatter.ExtractLastAssistantText(session);
-            if (string.IsNullOrWhiteSpace(responseText))
-            {
-                return TeamMemberRunOutcome.Fail("Team member finished without assistant text.");
-            }
-
+            var responseText = SubAgentResultFormatter.ExtractLastAssistantText(session) ?? "";
             var parsed = TeamMemberResultParser.Parse(responseText);
 
             // Leader handoff: success is decided by tool side effects in the orchestrator.
             // needs_leader / blocked / missing ## Result after dispatch must not fail the task.
             if (isLeader)
             {
+                if (string.IsNullOrWhiteSpace(responseText))
+                {
+                    return TeamMemberRunOutcome.Fail("Team member finished without assistant text.");
+                }
+
                 if (parsed.Status is TeamMemberResultStatus.NeedsLeader
                     or TeamMemberResultStatus.Blocked
                     or TeamMemberResultStatus.Completed
@@ -257,15 +258,33 @@ public sealed class TeamMemberRunExecutor(
                 };
             }
 
-            // Workers often end on a mid-turn progress note after tools succeed. Nudge once for a
-            // structured ## Result instead of counting that as a hard failure / burning a redispatch.
-            if (parsed.Status == TeamMemberResultStatus.Invalid)
+            // Workers often end on a mid-turn progress note after tools succeed. Nudge (default ×2)
+            // for a structured ## Result before synthesizing needs_leader.
+            var maxNudges = Math.Max(0, settings.Teams.MaxWorkerResultNudges);
+            var nudgeCount = 0;
+            while (parsed.Status == TeamMemberResultStatus.Invalid
+                   && nudgeCount < maxNudges
+                   && !cancellationToken.IsCancellationRequested)
             {
+                nudgeCount++;
                 _logger.Warning(
-                    "Worker result format invalid; nudging once for ## Result task={TaskId} member={MemberId} preview={Preview}",
+                    "Worker result format invalid; nudge {Nudge}/{Max} for ## Result task={TaskId} member={MemberId} preview={Preview}",
+                    nudgeCount,
+                    maxNudges,
                     task.TaskId,
                     memberSessionId,
                     TeamWorkerHelpers.Truncate(responseText, 160));
+
+                await traceStore.AppendAsync(
+                    task.RootSessionId,
+                    task.TaskId,
+                    new TeamTraceEvent
+                    {
+                        Type = "worker.result_nudge",
+                        NodeId = memberSessionId,
+                        Message = $"nudge={nudgeCount}/{maxNudges}; preview={TeamWorkerHelpers.Truncate(responseText, 160)}"
+                    },
+                    cancellationToken).ConfigureAwait(false);
 
                 session = await orchestrator
                     .SendAsync(session, BuildResultFormatNudge(), null, callbacks, cancellationToken)
@@ -279,8 +298,29 @@ public sealed class TeamMemberRunExecutor(
 
             if (parsed.Status == TeamMemberResultStatus.Invalid)
             {
-                return TeamMemberRunOutcome.Fail(
-                    "Worker output rejected (empty, preamble-only, or invalid). Produce a full ## Result with status.");
+                var synthesized = BuildSynthesizedNeedsLeaderResult(responseText);
+                await traceStore.AppendAsync(
+                    task.RootSessionId,
+                    task.TaskId,
+                    new TeamTraceEvent
+                    {
+                        Type = "worker.result_invalid",
+                        NodeId = memberSessionId,
+                        Message =
+                            $"nudges={nudgeCount}; synthesized=needs_leader; preview={TeamWorkerHelpers.Truncate(responseText, 200)}"
+                    },
+                    cancellationToken).ConfigureAwait(false);
+
+                return new TeamMemberRunOutcome
+                {
+                    Ok = false,
+                    ResponseText = synthesized,
+                    Error =
+                        $"status={TeamMemberResultStatus.NeedsLeader}; Worker did not emit a valid ## Result after {nudgeCount} nudge(s).",
+                    Session = session,
+                    ResultNudgeCount = nudgeCount,
+                    SynthesizedNeedsLeader = true
+                };
             }
 
             if (!TeamMemberResultParser.IsSuccessful(parsed))
@@ -291,11 +331,20 @@ public sealed class TeamMemberRunExecutor(
                 {
                     Ok = false,
                     ResponseText = responseText,
-                    Error = $"status={parsed.Status}; verdict={parsed.Verdict ?? "-"}; {TeamWorkerHelpers.Truncate(parsed.FindingsSummary ?? responseText, 500)}"
+                    Error =
+                        $"status={parsed.Status}; verdict={parsed.Verdict ?? "-"}; {TeamWorkerHelpers.Truncate(parsed.FindingsSummary ?? responseText, 500)}",
+                    Session = session,
+                    ResultNudgeCount = nudgeCount
                 };
             }
 
-            return TeamMemberRunOutcome.Success(responseText, session);
+            return new TeamMemberRunOutcome
+            {
+                Ok = true,
+                ResponseText = responseText,
+                Session = session,
+                ResultNudgeCount = nudgeCount
+            };
         }
         catch (OperationCanceledException)
         {
@@ -560,4 +609,18 @@ public sealed class TeamMemberRunExecutor(
 
         Use status: failed | blocked | needs_leader when appropriate. Keep status on its own line.
         """;
+
+    internal static string BuildSynthesizedNeedsLeaderResult(string originalText)
+    {
+        var preview = TeamWorkerHelpers.Truncate(
+            string.IsNullOrWhiteSpace(originalText) ? "(empty assistant text)" : originalText,
+            1200);
+        var sb = new StringBuilder();
+        sb.AppendLine("## Result");
+        sb.AppendLine("status: needs_leader");
+        sb.AppendLine("findings:");
+        sb.AppendLine("- Worker did not emit a valid status line after format nudges. Raw output follows.");
+        sb.AppendLine("- " + preview);
+        return sb.ToString();
+    }
 }

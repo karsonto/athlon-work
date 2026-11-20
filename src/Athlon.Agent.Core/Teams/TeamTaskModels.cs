@@ -76,6 +76,9 @@ public sealed class TeamSubTask
 
     public string Handoff { get; set; } = "";
 
+    /// <summary>What "done" means for this subtask (required on create; optional override on redispatch).</summary>
+    public string AcceptanceCriteria { get; set; } = "";
+
     public List<string> ArtifactRefs { get; set; } = new();
 
     /// <summary>Attempt counter for Trace (1-based). Not a user-configured cap.</summary>

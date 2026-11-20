@@ -135,4 +135,16 @@ public sealed class TeamMemberResultParserTests
             """ + new string('y', 200));
         Assert.Equal(TeamMemberResultStatus.Invalid, parsed.Status);
     }
+
+    [Fact]
+    public void SynthesizedNeedsLeader_IsParseableAsNeedsLeader()
+    {
+        var raw = "I'll start by inspecting the shared task state and workspace structure.";
+        var synthesized = Athlon.Agent.Infrastructure.Teams.TeamMemberRunExecutor
+            .BuildSynthesizedNeedsLeaderResult(raw);
+        var parsed = TeamMemberResultParser.Parse(synthesized);
+        Assert.Equal(TeamMemberResultStatus.NeedsLeader, parsed.Status);
+        Assert.False(TeamMemberResultParser.IsSuccessful(parsed));
+        Assert.Contains("inspecting", synthesized, StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -79,6 +79,12 @@ public sealed class TeamMemberRunOutcome
 
     public AgentSession? Session { get; init; }
 
+    /// <summary>How many ## Result format nudges were sent before accepting/synthesizing.</summary>
+    public int ResultNudgeCount { get; init; }
+
+    /// <summary>True when Invalid output was rewritten as status: needs_leader after nudges.</summary>
+    public bool SynthesizedNeedsLeader { get; init; }
+
     public static TeamMemberRunOutcome Success(string text, AgentSession session) =>
         new() { Ok = true, ResponseText = text, Session = session };
 
