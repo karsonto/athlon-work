@@ -95,6 +95,7 @@ export default function App() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
 
+  const [agentTab, setAgentTab] = useState<RoomTab | null>(null);
   const [agentOpen, setAgentOpen] = useState(false);
   const [agentSaving, setAgentSaving] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
@@ -543,11 +544,12 @@ export default function App() {
     }
   };
 
-  const openAgentCaps = async () => {
+  const openAgentCaps = async (tab: RoomTab) => {
+    setAgentTab(tab);
     setAgentError(null);
     setAgentOpen(true);
     try {
-      const data = await fetchRoomAgentProfile();
+      const data = await fetchRoomAgentProfile(tab.id);
       setAgentProfile(data.profile);
       setAgentCatalog(data.catalog);
     } catch (e) {
@@ -558,13 +560,15 @@ export default function App() {
   };
 
   const onSaveAgentCaps = async (profile: RoomAgentProfileData) => {
+    if (!agentTab) return;
     setAgentSaving(true);
     setAgentError(null);
     try {
-      const data = await saveRoomAgentProfile(profile);
+      const data = await saveRoomAgentProfile(agentTab.id, profile);
       setAgentProfile(data.profile);
       setAgentCatalog(data.catalog);
       setAgentOpen(false);
+      setAgentTab(null);
     } catch (e) {
       setAgentError(e instanceof Error ? e.message : "保存失败");
     } finally {
@@ -722,7 +726,7 @@ export default function App() {
         onLeave={onLeave}
         onCloseHost={(t) => void onCloseHost(t)}
         onOpenSettings={(t) => void openRoomSettings(t)}
-        onOpenAgentCaps={() => void openAgentCaps()}
+        onOpenAgentCaps={(t) => void openAgentCaps(t)}
         canCreateLocal={canCreateLocal}
       />
 
@@ -795,6 +799,15 @@ export default function App() {
           setSettingsError(null);
         }}
         onSave={(input) => void onSaveRoomSettings(input)}
+        onOpenAgentCaps={
+          settingsTab
+            ? () => {
+                const tab = settingsTab;
+                setSettingsOpen(false);
+                void openAgentCaps(tab);
+              }
+            : undefined
+        }
       />
 
       <RoomAgentSettingsDialog
@@ -805,6 +818,7 @@ export default function App() {
         error={agentError}
         onClose={() => {
           setAgentOpen(false);
+          setAgentTab(null);
           setAgentError(null);
         }}
         onSave={(profile) => void onSaveAgentCaps(profile)}

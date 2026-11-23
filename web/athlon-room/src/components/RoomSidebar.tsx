@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  Cog,
+  Bot,
   Copy,
   LogOut,
   MessageSquarePlus,
@@ -20,7 +20,7 @@ interface RoomSidebarProps {
   onLeave: (tab: RoomTab) => void;
   onCloseHost: (tab: RoomTab) => void;
   onOpenSettings: (tab: RoomTab) => void;
-  onOpenAgentCaps: () => void;
+  onOpenAgentCaps: (tab: RoomTab) => void;
   canCreateLocal: boolean;
 }
 
@@ -60,15 +60,15 @@ function MenuButton({
       type="button"
       title={label}
       className={[
-        "flex w-full items-center rounded-2xl py-3 text-left text-sm transition",
-        collapsed ? "justify-center gap-0 px-0" : "gap-3 px-4",
+        "flex items-center rounded-2xl text-left text-sm transition",
+        collapsed ? "mx-auto h-9 w-9 shrink-0 justify-center" : "w-full gap-3 px-4 py-3",
         primary
           ? "bg-sky-600 text-white shadow-sm hover:bg-sky-700"
           : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100",
       ].join(" ")}
       onClick={onClick}
     >
-      {icon}
+      <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">{icon}</span>
       {!collapsed ? <span className="min-w-0 truncate">{label}</span> : null}
     </button>
   );
@@ -109,10 +109,10 @@ export function RoomSidebar({
     >
       <aside
         className={[
-          "flex h-full flex-col overflow-hidden border-r border-sky-100 bg-white/95 p-4 transition-[width,box-shadow] duration-200 ease-out dark:border-zinc-800 dark:bg-[#18181b]",
-          collapsed ? "w-14" : "w-80",
+          "flex h-full flex-col overflow-hidden border-r border-sky-100 bg-white/95 transition-[width,box-shadow,padding] duration-200 ease-out dark:border-zinc-800 dark:bg-[#18181b]",
+          collapsed ? "w-14 px-2 py-3" : "w-80 p-4",
           isDesktop && expanded
-            ? "absolute inset-y-0 left-0 z-20 w-80 shadow-xl shadow-sky-100/60 dark:shadow-black/40"
+            ? "absolute inset-y-0 left-0 z-20 w-80 p-4 shadow-xl shadow-sky-100/60 dark:shadow-black/40"
             : "relative w-full",
         ].join(" ")}
       >
@@ -123,13 +123,13 @@ export function RoomSidebar({
               <div className="text-xs text-slate-500 dark:text-zinc-400">局域网多人协作</div>
             </div>
           ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-600 text-sm font-bold text-white">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-sky-600 text-sm font-bold text-white">
               A
             </div>
           )}
         </div>
 
-        <div className="mb-3 space-y-1">
+        <div className={["mb-3", collapsed ? "space-y-2" : "space-y-1"].join(" ")}>
           {canCreateLocal ? (
             <MenuButton
               collapsed={collapsed}
@@ -145,14 +145,6 @@ export function RoomSidebar({
             label="加入房间"
             onClick={onJoin}
           />
-          {canCreateLocal ? (
-            <MenuButton
-              collapsed={collapsed}
-              icon={<Cog size={18} />}
-              label="Agent 能力"
-              onClick={onOpenAgentCaps}
-            />
-          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
@@ -177,8 +169,8 @@ export function RoomSidebar({
                 <button
                   type="button"
                   className={[
-                    "flex w-full items-center rounded-2xl py-2.5 text-left",
-                    collapsed ? "justify-center px-0" : "gap-3 px-3",
+                    "flex w-full items-center rounded-2xl text-left",
+                    collapsed ? "justify-center px-0 py-1.5" : "gap-3 px-3 py-2.5",
                   ].join(" ")}
                   onClick={() => onSelect(tab)}
                   title={tab.title}
@@ -199,7 +191,9 @@ export function RoomSidebar({
                       <div className="truncate text-sm font-medium">{tab.title}</div>
                       <div className="truncate text-[11px] opacity-70">
                         {tab.role === "host" ? "我创建的" : "已加入"}
-                        {tab.workspaceName ? ` · ${tab.workspaceName}` : ""}
+                        {tab.workspaceName || tab.workspaceRoot
+                          ? ` · ${tab.workspaceName || tab.workspaceRoot}`
+                          : ""}
                       </div>
                     </div>
                   ) : null}
@@ -220,6 +214,17 @@ export function RoomSidebar({
                     </button>
                     {tab.role === "host" ? (
                       <>
+                        <button
+                          type="button"
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-sky-700 dark:hover:bg-zinc-700 dark:hover:text-sky-300"
+                          title="Agent 能力"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenAgentCaps(tab);
+                          }}
+                        >
+                          <Bot size={14} />
+                        </button>
                         <button
                           type="button"
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-sky-700 dark:hover:bg-zinc-700 dark:hover:text-sky-300"

@@ -182,9 +182,12 @@ export async function fetchWorkspaces(baseUrl = ""): Promise<WorkspaceItem[]> {
 }
 
 export async function fetchRoomAgentProfile(
+  roomId: string,
   baseUrl = "",
 ): Promise<RoomAgentProfileResponse> {
-  const res = await fetch(apiUrl(baseUrl || localManageBaseUrl(), "/api/room-agent/profile"));
+  const res = await fetch(
+    apiUrl(baseUrl || localManageBaseUrl(), `/api/rooms/${roomId}/agent-profile`),
+  );
   if (!res.ok) {
     throw new Error(await readError(res));
   }
@@ -192,14 +195,18 @@ export async function fetchRoomAgentProfile(
 }
 
 export async function saveRoomAgentProfile(
+  roomId: string,
   profile: RoomAgentProfileData,
   baseUrl = "",
 ): Promise<RoomAgentProfileResponse> {
-  const res = await fetch(apiUrl(baseUrl || localManageBaseUrl(), "/api/room-agent/profile"), {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ profile }),
-  });
+  const res = await fetch(
+    apiUrl(baseUrl || localManageBaseUrl(), `/api/rooms/${roomId}/agent-profile`),
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile }),
+    },
+  );
   if (!res.ok) {
     throw new Error(await readError(res));
   }

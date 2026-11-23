@@ -115,7 +115,7 @@ export function RoomAgentSettingsDialog({
       }
     >
       <p className="mb-4 text-slate-500 dark:text-zinc-400">
-        全局配置房间内 @agent 可用的 Tools、Skills 与 MCP。对所有本机房间生效。
+        为本房间配置 @agent 可用的 Tools、Skills 与 MCP。各房间互相独立。
       </p>
 
       <CheckboxGroup

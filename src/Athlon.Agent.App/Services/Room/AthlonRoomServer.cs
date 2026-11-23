@@ -279,6 +279,25 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         return _store.UpdateWorkspace(roomId, root, id);
     }
 
+    /// <returns>null if ok; otherwise an error code such as workspace_not_found.</returns>
+    public string? ValidateWorkspaceRoot(string? workspaceRoot)
+    {
+        if (string.IsNullOrWhiteSpace(workspaceRoot))
+        {
+            return null;
+        }
+
+        try
+        {
+            var full = Path.GetFullPath(workspaceRoot.Trim());
+            return Directory.Exists(full) ? null : "workspace_not_found";
+        }
+        catch
+        {
+            return "workspace_not_found";
+        }
+    }
+
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -566,32 +585,6 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             return;
         }
 
-        // GET/PUT /api/room-agent/profile — localhost only
-        if (segments.Length == 3
-            && segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
-            && segments[1].Equals("room-agent", StringComparison.OrdinalIgnoreCase)
-            && segments[2].Equals("profile", StringComparison.OrdinalIgnoreCase))
-        {
-            if (!IsLocalRequest(context.Request))
-            {
-                await WriteJsonAsync(context.Response, HttpStatusCode.Forbidden, new { error = "local_only" }).ConfigureAwait(false);
-                return;
-            }
-
-            if (method.Equals("GET", StringComparison.OrdinalIgnoreCase))
-            {
-                await WriteRoomAgentProfileAsync(context.Response).ConfigureAwait(false);
-                return;
-            }
-
-            if (method.Equals("PUT", StringComparison.OrdinalIgnoreCase)
-                || method.Equals("POST", StringComparison.OrdinalIgnoreCase))
-            {
-                await HandleSaveRoomAgentProfileAsync(context).ConfigureAwait(false);
-                return;
-            }
-        }
-
         // GET/POST /api/rooms — local manage (list / create)
         if (segments.Length == 2
             && segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
@@ -737,6 +730,23 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 // ignore
             }
 
+            // Prefer explicit custom root; when only id is set, ResolveWorkspaceInputs fills root.
+            var resolvedRoot = workspaceRoot;
+            if (string.IsNullOrWhiteSpace(resolvedRoot) && !string.IsNullOrWhiteSpace(workspaceId))
+            {
+                var match = _settings.Workspaces.FirstOrDefault(w =>
+                    string.Equals(w.Id, workspaceId.Trim(), StringComparison.OrdinalIgnoreCase));
+                resolvedRoot = match?.RootPath;
+            }
+
+            var workspaceError = ValidateWorkspaceRoot(resolvedRoot);
+            if (workspaceError is not null)
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new { error = workspaceError })
+                    .ConfigureAwait(false);
+                return;
+            }
+
             var updated = SetRoomWorkspace(roomId, workspaceRoot, workspaceId);
             if (updated is null)
             {
@@ -752,6 +762,30 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 workspaceName = ResolveWorkspaceName(updated.WorkspaceId, updated.WorkspaceRoot)
             }).ConfigureAwait(false);
             return;
+        }
+
+        // GET/PUT /api/rooms/{id}/agent-profile — localhost only
+        if (segments.Length == 4
+            && segments[3].Equals("agent-profile", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsLocalRequest(context.Request))
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.Forbidden, new { error = "local_only" }).ConfigureAwait(false);
+                return;
+            }
+
+            if (method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteRoomAgentProfileAsync(context.Response, roomId).ConfigureAwait(false);
+                return;
+            }
+
+            if (method.Equals("PUT", StringComparison.OrdinalIgnoreCase)
+                || method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleSaveRoomAgentProfileAsync(context, roomId).ConfigureAwait(false);
+                return;
+            }
         }
 
         // POST /api/rooms/{id}/title — localhost only
@@ -1311,9 +1345,9 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         return false;
     }
 
-    private async Task WriteRoomAgentProfileAsync(RoomHttpResponse response)
+    private async Task WriteRoomAgentProfileAsync(RoomHttpResponse response, string roomId)
     {
-        var profile = _profileStore.GetOrCreate();
+        var profile = _profileStore.GetOrCreate(roomId);
         var skills = _skillCatalog.Skills
             .Where(s => !string.IsNullOrWhiteSpace(s.Name))
             .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
@@ -1326,6 +1360,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
 
         await WriteJsonAsync(response, HttpStatusCode.OK, new
         {
+            roomId,
             profile = new
             {
                 toolAllowList = profile.ToolAllowList,
@@ -1341,7 +1376,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }).ConfigureAwait(false);
     }
 
-    private async Task HandleSaveRoomAgentProfileAsync(RoomHttpContext context)
+    private async Task HandleSaveRoomAgentProfileAsync(RoomHttpContext context, string roomId)
     {
         try
         {
@@ -1354,7 +1389,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 root = nested;
             }
 
-            var profile = _profileStore.GetOrCreate();
+            var profile = _profileStore.GetOrCreate(roomId);
             if (root.TryGetProperty("toolAllowList", out var tools) && tools.ValueKind == JsonValueKind.Array)
             {
                 profile.ToolAllowList = tools.EnumerateArray()
@@ -1390,8 +1425,8 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 profile.ToolAllowList.Add("room_share_file");
             }
 
-            _profileStore.Save(profile);
-            await WriteRoomAgentProfileAsync(context.Response).ConfigureAwait(false);
+            _profileStore.Save(roomId, profile);
+            await WriteRoomAgentProfileAsync(context.Response, roomId).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

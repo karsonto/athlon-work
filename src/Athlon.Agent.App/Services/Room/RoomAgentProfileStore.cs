@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text.Json;
 using Athlon.Agent.Core.Teams;
@@ -26,34 +27,44 @@ public sealed class RoomAgentProfileStore
         WriteIndented = true
     };
 
-    private readonly string _path;
+    private readonly string _roomsRoot;
+    private readonly string _legacyGlobalPath;
     private readonly object _gate = new();
-    private AgentProfile? _cached;
+    private readonly ConcurrentDictionary<string, AgentProfile> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private AgentProfile? _legacyTemplate;
 
     public RoomAgentProfileStore(IAppPathProvider paths)
     {
         Directory.CreateDirectory(paths.ConfigPath);
-        _path = Path.Combine(paths.ConfigPath, "room-agent-profile.json");
+        _roomsRoot = Path.Combine(paths.RootPath, "rooms");
+        Directory.CreateDirectory(_roomsRoot);
+        _legacyGlobalPath = Path.Combine(paths.ConfigPath, "room-agent-profile.json");
     }
 
-    public AgentProfile GetOrCreate()
+    public AgentProfile GetOrCreate(string roomId)
     {
+        if (!RoomStore.IsSafeId(roomId))
+        {
+            throw new ArgumentException("Invalid room id.", nameof(roomId));
+        }
+
         lock (_gate)
         {
-            if (_cached is not null)
+            if (_cache.TryGetValue(roomId, out var cached))
             {
-                return Clone(_cached);
+                return Clone(cached);
             }
 
-            if (File.Exists(_path))
+            var path = GetProfilePath(roomId);
+            if (File.Exists(path))
             {
                 try
                 {
-                    var loaded = JsonSerializer.Deserialize<AgentProfile>(File.ReadAllText(_path), JsonOptions);
+                    var loaded = JsonSerializer.Deserialize<AgentProfile>(File.ReadAllText(path), JsonOptions);
                     if (loaded is not null)
                     {
                         Normalize(loaded);
-                        _cached = loaded;
+                        _cache[roomId] = loaded;
                         return Clone(loaded);
                     }
                 }
@@ -63,27 +74,68 @@ public sealed class RoomAgentProfileStore
                 }
             }
 
-            var created = CreateDefault();
-            PersistUnlocked(created);
-            _cached = created;
+            var created = Clone(GetLegacyTemplateOrDefault());
+            PersistUnlocked(roomId, created);
+            _cache[roomId] = created;
             return Clone(created);
         }
     }
 
-    public void Save(AgentProfile profile)
+    public void Save(string roomId, AgentProfile profile)
     {
+        if (!RoomStore.IsSafeId(roomId))
+        {
+            throw new ArgumentException("Invalid room id.", nameof(roomId));
+        }
+
         ArgumentNullException.ThrowIfNull(profile);
         Normalize(profile);
         lock (_gate)
         {
-            PersistUnlocked(profile);
-            _cached = Clone(profile);
+            PersistUnlocked(roomId, profile);
+            _cache[roomId] = Clone(profile);
         }
     }
 
-    private void PersistUnlocked(AgentProfile profile)
+    private string GetProfilePath(string roomId) =>
+        Path.Combine(_roomsRoot, roomId, "agent-profile.json");
+
+    private void PersistUnlocked(string roomId, AgentProfile profile)
     {
-        File.WriteAllText(_path, JsonSerializer.Serialize(profile, JsonOptions));
+        var path = GetProfilePath(roomId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, JsonSerializer.Serialize(profile, JsonOptions));
+    }
+
+    private AgentProfile GetLegacyTemplateOrDefault()
+    {
+        if (_legacyTemplate is not null)
+        {
+            return _legacyTemplate;
+        }
+
+        if (File.Exists(_legacyGlobalPath))
+        {
+            try
+            {
+                var loaded = JsonSerializer.Deserialize<AgentProfile>(
+                    File.ReadAllText(_legacyGlobalPath),
+                    JsonOptions);
+                if (loaded is not null)
+                {
+                    Normalize(loaded);
+                    _legacyTemplate = loaded;
+                    return loaded;
+                }
+            }
+            catch
+            {
+                // fall through
+            }
+        }
+
+        _legacyTemplate = CreateDefault();
+        return _legacyTemplate;
     }
 
     private static AgentProfile CreateDefault()
@@ -116,7 +168,6 @@ public sealed class RoomAgentProfileStore
         profile.SkillNames ??= new List<string>();
         profile.McpServerNames ??= new List<string>();
 
-        // Always allow room_share_file when any file tools are enabled, else always include it.
         if (!profile.ToolAllowList.Any(t => string.Equals(t, "room_share_file", StringComparison.OrdinalIgnoreCase)))
         {
             profile.ToolAllowList.Add("room_share_file");

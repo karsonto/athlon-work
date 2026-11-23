@@ -14,6 +14,7 @@ interface RoomSettingsDialogProps {
     workspaceId: string | null;
     workspaceRoot: string | null;
   }) => void;
+  onOpenAgentCaps?: () => void;
 }
 
 export function RoomSettingsDialog({
@@ -24,21 +25,30 @@ export function RoomSettingsDialog({
   error,
   onClose,
   onSave,
+  onOpenAgentCaps,
 }: RoomSettingsDialogProps) {
   const [title, setTitle] = useState("");
-  const [workspaceKey, setWorkspaceKey] = useState("");
+  const [presetKey, setPresetKey] = useState("");
+  const [customPath, setCustomPath] = useState("");
 
   useEffect(() => {
     if (!open || !tab) return;
     setTitle(tab.title);
+    setCustomPath(tab.workspaceRoot?.trim() ?? "");
     if (tab.workspaceId) {
-      setWorkspaceKey(`id:${tab.workspaceId}`);
+      setPresetKey(`id:${tab.workspaceId}`);
     } else if (tab.workspaceRoot) {
-      setWorkspaceKey(`root:${tab.workspaceRoot}`);
+      const match = workspaces.find(
+        (w) =>
+          w.rootPath &&
+          w.rootPath.replace(/[/\\]+$/, "").toLowerCase() ===
+            tab.workspaceRoot!.replace(/[/\\]+$/, "").toLowerCase(),
+      );
+      setPresetKey(match?.id ? `id:${match.id}` : "custom");
     } else {
-      setWorkspaceKey("");
+      setPresetKey("");
     }
-  }, [open, tab]);
+  }, [open, tab, workspaces]);
 
   if (!tab) return null;
 
@@ -49,6 +59,16 @@ export function RoomSettingsDialog({
       onClose={onClose}
       footer={
         <>
+          {onOpenAgentCaps ? (
+            <button
+              type="button"
+              className="mr-auto rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-700 transition hover:bg-slate-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              onClick={onOpenAgentCaps}
+              disabled={saving}
+            >
+              Agent 能力
+            </button>
+          ) : null}
           <button
             type="button"
             className="rounded-xl px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -62,15 +82,32 @@ export function RoomSettingsDialog({
             className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:opacity-50"
             disabled={saving || !title.trim()}
             onClick={() => {
-              let workspaceId: string | null = null;
-              let workspaceRoot: string | null = null;
-              if (workspaceKey.startsWith("id:")) {
-                workspaceId = workspaceKey.slice(3);
-                workspaceRoot = workspaces.find((w) => w.id === workspaceId)?.rootPath ?? null;
-              } else if (workspaceKey.startsWith("root:")) {
-                workspaceRoot = workspaceKey.slice(5);
+              const trimmedPath = customPath.trim();
+              if (!trimmedPath) {
+                onSave({ title: title.trim(), workspaceId: null, workspaceRoot: null });
+                return;
               }
-              onSave({ title: title.trim(), workspaceId, workspaceRoot });
+
+              if (presetKey.startsWith("id:")) {
+                const workspaceId = presetKey.slice(3);
+                const match = workspaces.find((w) => w.id === workspaceId);
+                const root = match?.rootPath?.trim() ?? trimmedPath;
+                const sameRoot =
+                  root.replace(/[/\\]+$/, "").toLowerCase() ===
+                  trimmedPath.replace(/[/\\]+$/, "").toLowerCase();
+                onSave({
+                  title: title.trim(),
+                  workspaceId: sameRoot ? workspaceId : null,
+                  workspaceRoot: trimmedPath,
+                });
+                return;
+              }
+
+              onSave({
+                title: title.trim(),
+                workspaceId: null,
+                workspaceRoot: trimmedPath,
+              });
             }}
           >
             {saving ? "保存中…" : "保存"}
@@ -88,12 +125,27 @@ export function RoomSettingsDialog({
 
       <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-zinc-200">工作区</label>
       <p className="mb-2 text-xs text-slate-500 dark:text-zinc-400">
-        @agent 将在此工作区中读写文件。未选择时使用 Athlon 当前活动工作区。
+        @agent 将在此路径读写文件。可选手动输入本机目录，例如 C:\xxxx。留空则使用 Athlon 当前活动工作区。
       </p>
       <select
-        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-        value={workspaceKey}
-        onChange={(e) => setWorkspaceKey(e.target.value)}
+        className="mb-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+        value={presetKey === "custom" ? "custom" : presetKey}
+        onChange={(e) => {
+          const next = e.target.value;
+          setPresetKey(next);
+          if (!next) {
+            setCustomPath("");
+            return;
+          }
+          if (next === "custom") {
+            return;
+          }
+          if (next.startsWith("id:")) {
+            const id = next.slice(3);
+            const match = workspaces.find((w) => w.id === id);
+            if (match?.rootPath) setCustomPath(match.rootPath);
+          }
+        }}
       >
         <option value="">使用当前活动工作区</option>
         {workspaces.map((w) => (
@@ -102,7 +154,17 @@ export function RoomSettingsDialog({
             {w.rootPath ? ` — ${w.rootPath}` : ""}
           </option>
         ))}
+        <option value="custom">自定义路径…</option>
       </select>
+      <input
+        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-slate-900 outline-none placeholder:font-sans placeholder:text-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+        placeholder="C:\xxxx 或 D:\projects\foo"
+        value={customPath}
+        onChange={(e) => {
+          setCustomPath(e.target.value);
+          setPresetKey(e.target.value.trim() ? "custom" : "");
+        }}
+      />
       {error ? <p className="mt-3 text-sm text-red-500">{error}</p> : null}
     </Modal>
   );

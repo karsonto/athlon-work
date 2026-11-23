@@ -181,7 +181,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
 
     private async Task RunAgentTurnAsync(string roomId, RoomMessage trigger, string taskText)
     {
-        var profile = _profileStore.GetOrCreate();
+        var profile = _profileStore.GetOrCreate(roomId);
         var placeholder = _store.AppendMessage(roomId, new RoomMessage
         {
             SenderId = RoomAgentIds.SenderId,
