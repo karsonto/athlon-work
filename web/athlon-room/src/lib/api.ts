@@ -401,6 +401,7 @@ export function newId(): string {
   });
 }
 
+/** Local fallback only; prefer `resolveSenderId` (IP-bound via server). */
 export function createSenderId(): string {
   const key = "athlon-room-sender-id";
   const existing = localStorage.getItem(key);
@@ -408,4 +409,28 @@ export function createSenderId(): string {
   const id = newId().replace(/-/g, "").slice(0, 12);
   localStorage.setItem(key, id);
   return id;
+}
+
+/** Stable senderId from the room server (derived from client IP). */
+export async function resolveSenderId(baseUrl = ""): Promise<string> {
+  const origin = (baseUrl || window.location.origin).replace(/\/$/, "");
+  const cacheKey = `athlon-room-sender-id:${origin}`;
+  try {
+    const res = await fetch(apiUrl(baseUrl || origin, "/api/client-identity"));
+    if (res.ok) {
+      const data = (await res.json()) as { senderId?: string };
+      if (data.senderId && data.senderId.trim()) {
+        const id = data.senderId.trim();
+        localStorage.setItem(cacheKey, id);
+        localStorage.setItem("athlon-room-sender-id", id);
+        return id;
+      }
+    }
+  } catch {
+    // fall through
+  }
+
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) return cached;
+  return createSenderId();
 }

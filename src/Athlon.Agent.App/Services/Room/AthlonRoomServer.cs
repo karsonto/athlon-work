@@ -3,6 +3,7 @@ using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -278,11 +279,8 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 _logger.LogDebug(ex, "Room closed hook failed.");
             }
 
-            if (_activeRoomIds.IsEmpty)
-            {
-                await StopListenerCoreAsync().ConfigureAwait(false);
-            }
-
+            // Keep the TCP listener up after the last room closes so the host SPA can still
+            // call /api/rooms (create/list). Listener stops only on app shutdown via StopAsync.
             return true;
         }
         finally
@@ -576,6 +574,21 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         var method = context.Request.Method ?? "GET";
         var path = context.Request.Path ?? "";
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+        // GET /api/client-identity — stable senderId derived from client IP (all peers).
+        if (segments.Length == 2
+            && segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
+            && segments[1].Equals("client-identity", StringComparison.OrdinalIgnoreCase)
+            && method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+        {
+            var ip = NormalizeClientIp(context.Request.RemoteEndPoint?.Address);
+            await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
+            {
+                senderId = BuildClientSenderId(ip),
+                clientIp = ip
+            }).ConfigureAwait(false);
+            return;
+        }
 
         // GET /api/workspaces — localhost only
         if (segments.Length == 2
@@ -1012,10 +1025,11 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                     ? "file"
                     : "text";
 
+        var senderId = BuildClientSenderId(NormalizeClientIp(context.Request.RemoteEndPoint?.Address));
         var message = new RoomMessage
         {
             Id = Guid.NewGuid().ToString("N"),
-            SenderId = string.IsNullOrWhiteSpace(req.SenderId) ? Guid.NewGuid().ToString("N")[..8] : req.SenderId.Trim(),
+            SenderId = senderId,
             DisplayName = req.DisplayName.Trim(),
             Kind = kind,
             Text = hasText ? req.Text!.Trim() : null,
@@ -1131,11 +1145,8 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         var connectionId = Guid.NewGuid().ToString("N");
         _sseConnections[connectionId] = 0;
 
-        var senderId = (context.Request.QueryString["senderId"] ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(senderId) || senderId.Length > 64)
-        {
-            senderId = connectionId[..12];
-        }
+        // Bind presence identity to client IP so reopening the browser keeps the same user.
+        var senderId = BuildClientSenderId(NormalizeClientIp(context.Request.RemoteEndPoint?.Address));
 
         var displayName = (context.Request.QueryString["displayName"] ?? "").Trim();
         if (string.IsNullOrWhiteSpace(displayName))
@@ -1525,6 +1536,34 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
 
         return false;
+    }
+
+    private static string NormalizeClientIp(IPAddress? addr)
+    {
+        if (addr is null)
+        {
+            return "unknown";
+        }
+
+        if (addr.IsIPv4MappedToIPv6)
+        {
+            addr = addr.MapToIPv4();
+        }
+
+        if (IPAddress.IsLoopback(addr))
+        {
+            // Treat all loopback forms as one host identity.
+            return "127.0.0.1";
+        }
+
+        return addr.ToString();
+    }
+
+    /// <summary>Stable 12-hex sender id from client IP (same peer → same user across browser restarts).</summary>
+    private static string BuildClientSenderId(string normalizedIp)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes("athlon-room-client|" + normalizedIp));
+        return Convert.ToHexString(bytes).ToLowerInvariant()[..12];
     }
 
     private async Task WriteRoomAgentProfileAsync(RoomHttpResponse response, string roomId)

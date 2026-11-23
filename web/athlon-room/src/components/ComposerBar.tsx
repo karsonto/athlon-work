@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, Paperclip, Send, X } from "lucide-react";
+import { ImagePlus, Paperclip, Send, Smile, X } from "lucide-react";
 import type { PendingFile } from "../types";
 import { formatBytes } from "../lib/api";
 
@@ -12,6 +12,31 @@ interface ComposerBarProps {
   onPickFiles: (files: FileList | null) => void;
   onRemovePending: (id: string) => void;
 }
+
+const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
+  {
+    label: "常用",
+    emojis: [
+      "😀", "😁", "😂", "🤣", "😊", "😍", "🤩", "😘", "🙂", "😉",
+      "🤗", "🤔", "😏", "😌", "😴", "😷", "🤒", "🤯", "😎", "🥳",
+      "😢", "😭", "😤", "😡", "🥺", "😱", "🤭", "🙄", "😵", "💀",
+    ],
+  },
+  {
+    label: "手势",
+    emojis: [
+      "👍", "👎", "👏", "🙌", "👋", "🤝", "✌️", "🤞", "🤟", "👌",
+      "👊", "✊", "💪", "🙏", "🫶", "💯", "✅", "❌", "⭐", "🔥",
+    ],
+  },
+  {
+    label: "物品",
+    emojis: [
+      "🎉", "🎊", "🎈", "🎁", "💡", "📌", "📎", "📝", "📚", "💻",
+      "📱", "☕", "🍺", "🍕", "🍰", "🌈", "☀️", "🌙", "⚡", "❤️",
+    ],
+  },
+];
 
 /** Match incomplete @agent mention at caret (word-boundary @ + optional agent prefix). */
 function findAgentMention(
@@ -37,8 +62,10 @@ export function ComposerBar({
   onRemovePending,
 }: ComposerBarProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const emojiRef = useRef<HTMLDivElement>(null);
   const [caret, setCaret] = useState(0);
   const [mentionOpen, setMentionOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const pendingCaretRef = useRef<number | null>(null);
 
   const mention = findAgentMention(draft, caret);
@@ -57,9 +84,20 @@ export function ComposerBar({
     requestAnimationFrame(() => {
       el.focus();
       el.setSelectionRange(pos, pos);
-      setCaret(pos);
     });
+    setCaret(pos);
   }, [draft]);
+
+  useEffect(() => {
+    if (!emojiOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) {
+        setEmojiOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [emojiOpen]);
 
   const applyAgentMention = () => {
     if (!mention) return;
@@ -68,6 +106,17 @@ export function ComposerBar({
     pendingCaretRef.current = nextCaret;
     setMentionOpen(false);
     onDraftChange(next);
+  };
+
+  const insertEmoji = (emoji: string) => {
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? caret;
+    const end = el?.selectionEnd ?? caret;
+    const next = draft.slice(0, start) + emoji + draft.slice(end);
+    const nextCaret = start + emoji.length;
+    pendingCaretRef.current = nextCaret;
+    onDraftChange(next);
+    setCaret(nextCaret);
   };
 
   const syncCaret = () => {
@@ -137,6 +186,37 @@ export function ComposerBar({
           </div>
         ) : null}
 
+        {emojiOpen ? (
+          <div
+            ref={emojiRef}
+            className="absolute right-0 bottom-full left-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-lg dark:border-zinc-700 dark:bg-[#27272a]"
+          >
+            {EMOJI_GROUPS.map((group) => (
+              <div key={group.label} className="mb-2 last:mb-0">
+                <div className="mb-1.5 px-0.5 text-[11px] font-medium text-slate-400 dark:text-zinc-500">
+                  {group.label}
+                </div>
+                <div className="grid grid-cols-10 gap-0.5">
+                  {group.emojis.map((emoji) => (
+                    <button
+                      key={`${group.label}-${emoji}`}
+                      type="button"
+                      className="flex h-8 w-full items-center justify-center rounded-lg text-lg transition hover:bg-sky-50 dark:hover:bg-sky-500/15"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        insertEmoji(emoji);
+                      }}
+                      title={emoji}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
         <div className="flex items-end gap-2 rounded-[1.5rem] border border-slate-200 bg-slate-50/90 p-2 shadow-sm ring-1 ring-white dark:border-zinc-700 dark:bg-[#27272a] dark:ring-zinc-800">
           <label className="mb-0.5 cursor-pointer rounded-xl p-2 text-slate-500 transition hover:bg-white hover:text-sky-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-sky-300">
             <ImagePlus size={20} />
@@ -163,6 +243,23 @@ export function ComposerBar({
               }}
             />
           </label>
+          <button
+            type="button"
+            className={`mb-0.5 rounded-xl p-2 transition ${
+              emojiOpen
+                ? "bg-white text-sky-700 dark:bg-zinc-800 dark:text-sky-300"
+                : "text-slate-500 hover:bg-white hover:text-sky-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-sky-300"
+            }`}
+            onClick={() => {
+              setEmojiOpen((v) => !v);
+              setMentionOpen(false);
+            }}
+            title="表情"
+            aria-label="插入表情"
+            disabled={sending}
+          >
+            <Smile size={20} />
+          </button>
           <textarea
             ref={textareaRef}
             className="max-h-28 min-h-[42px] flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] text-slate-900 outline-none placeholder:text-slate-400 dark:text-zinc-100 dark:placeholder:text-zinc-500"
@@ -177,6 +274,7 @@ export function ComposerBar({
             onClick={syncCaret}
             onKeyUp={syncCaret}
             onSelect={syncCaret}
+            onFocus={() => setEmojiOpen(false)}
             onKeyDown={(e) => {
               if (showMention && (e.key === "Enter" || e.key === "Tab" || e.key === " ")) {
                 e.preventDefault();
@@ -188,8 +286,14 @@ export function ComposerBar({
                 setMentionOpen(false);
                 return;
               }
+              if (emojiOpen && e.key === "Escape") {
+                e.preventDefault();
+                setEmojiOpen(false);
+                return;
+              }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
+                setEmojiOpen(false);
                 onSend();
               }
             }}

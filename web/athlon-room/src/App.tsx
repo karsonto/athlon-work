@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   closeLocalRoom,
   connectEvents,
   createLocalRoom,
-  createSenderId,
   fetchLocalRooms,
   fetchMessages,
   fetchRoom,
@@ -14,6 +13,7 @@ import {
   parseRoomFromLocation,
   postMessage,
   renameLocalRoom,
+  resolveSenderId,
   saveRoomAgentProfile,
   setLocalRoomWorkspace,
   stopRoomAgent,
@@ -82,7 +82,7 @@ function sameOriginBase(baseUrl: string): boolean {
 }
 
 export default function App() {
-  const senderId = useMemo(() => createSenderId(), []);
+  const [senderId, setSenderId] = useState("");
   const [nickname, setNickname] = useState(() => localStorage.getItem(NICK_KEY) ?? "");
   const [joined, setJoined] = useState(false);
   const [rooms, setRooms] = useState<RoomTab[]>([]);
@@ -97,6 +97,8 @@ export default function App() {
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const [canCreateLocal, setCanCreateLocal] = useState(false);
   const [bootDone, setBootDone] = useState(false);
+  /** Room created via「新建」and not yet confirmed in settings — cancel discards it. */
+  const [draftRoomKey, setDraftRoomKey] = useState<string | null>(null);
 
   const [settingsTab, setSettingsTab] = useState<RoomTab | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -215,6 +217,7 @@ export default function App() {
     (tab: RoomTab) => {
       const key = roomKey(tab);
       if (esMap.current.has(key)) return;
+      if (!senderId) return;
 
       while (esMap.current.size >= MAX_SSE) {
         const victim = [...esMap.current.keys()].find((k) => k !== activeKeyRef.current);
@@ -291,6 +294,13 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      try {
+        const id = await resolveSenderId(window.location.origin);
+        if (!cancelled) setSenderId(id);
+      } catch {
+        // keep empty until retry on join/send
+      }
+
       const seeded: RoomTab[] = [];
       const fromUrl = parseRoomFromLocation();
       if (fromUrl) {
@@ -396,11 +406,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!joined || !activeKey) return;
+    if (!joined || !activeKey || !senderId) return;
     const tab = rooms.find((r) => roomKey(r) === activeKey);
     if (!tab) return;
     void loadSession(tab);
-  }, [joined, activeKey, rooms, loadSession]);
+  }, [joined, activeKey, rooms, loadSession, senderId]);
 
   const activeTab = rooms.find((r) => roomKey(r) === activeKey) ?? null;
   const activeSession = activeKey ? sessions[activeKey] ?? emptySession() : emptySession();
@@ -428,6 +438,7 @@ export default function App() {
   const onCreate = async () => {
     try {
       setShellError(null);
+      setCanCreateLocal(true);
       const created = await createLocalRoom();
       const baseUrl = window.location.origin;
       const tab: RoomTab = {
@@ -443,6 +454,7 @@ export default function App() {
         workspaceName: null,
       };
       upsertTab(tab, true);
+      setDraftRoomKey(roomKey(tab));
       // Require host to set workspace manually — no silent default.
       void openRoomSettings(tab);
     } catch (e) {
@@ -458,7 +470,11 @@ export default function App() {
     }
     try {
       setJoinError(null);
-      const meta = await fetchRoom(parsed.baseUrl, parsed.roomId, parsed.token);
+      const [meta, id] = await Promise.all([
+        fetchRoom(parsed.baseUrl, parsed.roomId, parsed.token),
+        resolveSenderId(parsed.baseUrl),
+      ]);
+      setSenderId(id);
       const role: RoomTab["role"] = sameOriginBase(parsed.baseUrl) ? "host" : "guest";
       upsertTab(
         {
@@ -484,6 +500,7 @@ export default function App() {
     esMap.current.get(key)?.close();
     esMap.current.delete(key);
     removeRecentRoom(tab.id, tab.baseUrl);
+    setDraftRoomKey((prev) => (prev === key ? null : prev));
     setSessions((prev) => {
       const next = { ...prev };
       delete next[key];
@@ -579,6 +596,7 @@ export default function App() {
           },
         };
       });
+      setDraftRoomKey((prev) => (prev === key ? null : prev));
       setSettingsOpen(false);
       setSettingsTab(null);
     } catch (e) {
@@ -586,6 +604,28 @@ export default function App() {
     } finally {
       setSettingsSaving(false);
     }
+  };
+
+  const discardDraftRoomIfNeeded = async () => {
+    const tab = settingsTab;
+    const key = tab ? roomKey(tab) : null;
+    setSettingsOpen(false);
+    setSettingsTab(null);
+    setSettingsError(null);
+    if (!tab || !key || draftRoomKey !== key) {
+      return;
+    }
+
+    // 「新建房间」后取消设置 → 丢弃尚未确认的房间，避免空房间继续生效。
+    setDraftRoomKey(null);
+    try {
+      if (tab.role === "host") {
+        await closeLocalRoom(tab.id);
+      }
+    } catch {
+      // still remove from UI
+    }
+    removeTab(tab);
   };
 
   const openAgentCaps = async (tab: RoomTab) => {
@@ -855,16 +895,16 @@ export default function App() {
         workspaces={workspaces}
         saving={settingsSaving}
         error={settingsError}
-        onClose={() => {
-          setSettingsOpen(false);
-          setSettingsTab(null);
-          setSettingsError(null);
-        }}
+        onClose={() => void discardDraftRoomIfNeeded()}
         onSave={(input) => void onSaveRoomSettings(input)}
         onOpenAgentCaps={
           settingsTab
             ? () => {
                 const tab = settingsTab;
+                // Opening agent caps confirms the draft room (do not discard).
+                setDraftRoomKey((prev) =>
+                  prev && tab && roomKey(tab) === prev ? null : prev,
+                );
                 setSettingsOpen(false);
                 void openAgentCaps(tab);
               }
