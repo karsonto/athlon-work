@@ -151,7 +151,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
 
         Exception? lastError = null;
-        foreach (var prefixes in BuildPrefixCandidates(_port, _lanIp))
+        foreach (var prefixes in BuildPrefixCandidates(_port))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var listener = new HttpListener();
@@ -167,12 +167,30 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 _cts = new CancellationTokenSource();
                 var token = _cts.Token;
                 _loop = Task.Run(() => AcceptLoopAsync(listener, contentRoot, token), token);
-                _logger.LogInformation("AthlonRoom listening on {Prefixes} (LAN {LanIp})", string.Join(", ", prefixes), _lanIp);
+                var anyNonLoopback = prefixes.Any(p =>
+                    !p.Contains("127.0.0.1", StringComparison.Ordinal)
+                    && !p.Contains("localhost", StringComparison.OrdinalIgnoreCase));
+                if (!anyNonLoopback)
+                {
+                    _logger.LogWarning(
+                        "AthlonRoom bound loopback-only on {Prefixes}; LAN clients cannot connect. Invite host={LanIp}",
+                        string.Join(", ", prefixes),
+                        _lanIp);
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "AthlonRoom listening on {Prefixes} (invite host {LanIp})",
+                        string.Join(", ", prefixes),
+                        _lanIp);
+                }
+
                 return;
             }
             catch (Exception ex)
             {
                 lastError = ex;
+                _logger.LogDebug(ex, "AthlonRoom bind failed for prefixes {Prefixes}", string.Join(", ", prefixes));
                 try
                 {
                     listener.Close();
@@ -185,7 +203,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
 
         throw new InvalidOperationException(
-            $"Unable to bind AthlonRoom on port {_port}. Try another port or run with elevated permissions.",
+            $"Unable to bind AthlonRoom on 0.0.0.0:{_port} (HttpListener +). Try another port or grant URL ACL / elevated permissions.",
             lastError);
     }
 
@@ -877,22 +895,37 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         return false;
     }
 
-    private static IEnumerable<string[]> BuildPrefixCandidates(int port, string lanIp)
+    /// <summary>
+    /// HttpListener equivalent of 0.0.0.0 is <c>http://+:{port}/</c>.
+    /// Prefer that; if URL ACL blocks it, bind every local IPv4 (+ loopback).
+    /// Loopback-only is last resort and must not win before LAN binds.
+    /// </summary>
+    private static IEnumerable<string[]> BuildPrefixCandidates(int port)
     {
-        // Prefer explicit LAN + loopback (no admin on Windows for +)
-        yield return new[]
-        {
-            $"http://{lanIp}:{port}/",
-            $"http://127.0.0.1:{port}/"
-        };
-
-        yield return new[] { $"http://127.0.0.1:{port}/" };
-
+        // 0.0.0.0 / all interfaces
         yield return new[] { $"http://+:{port}/" };
+
+        var ips = GetLocalIpv4Addresses().ToList();
+        if (ips.Count > 0)
+        {
+            var prefixes = ips
+                .Select(ip => $"http://{ip}:{port}/")
+                .Append($"http://127.0.0.1:{port}/")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            yield return prefixes;
+        }
+
+        // Last resort — LAN unreachable
+        yield return new[] { $"http://127.0.0.1:{port}/" };
     }
 
-    private static string? ResolveLanIpv4()
+    private static string? ResolveLanIpv4() =>
+        GetLocalIpv4Addresses().FirstOrDefault(ip => ip != "127.0.0.1");
+
+    private static IEnumerable<string> GetLocalIpv4Addresses()
     {
+        var results = new List<string>();
         try
         {
             foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
@@ -927,7 +960,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                         continue;
                     }
 
-                    return uni.Address.ToString();
+                    results.Add(uni.Address.ToString());
                 }
             }
         }
@@ -936,7 +969,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             // ignore
         }
 
-        return null;
+        return results.Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
     public static string BuildInviteUrl(string lanIp, int port, string roomId, string token) =>
