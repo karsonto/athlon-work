@@ -1,9 +1,20 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
+import { ChevronDown, ChevronRight, Square, Wrench } from "lucide-react";
 import type { AgentTraceStep } from "../types";
 
 interface AgentTracePanelProps {
   steps: AgentTraceStep[];
+  /** Host-only: stop the in-flight agent run. */
+  onStop?: () => void;
+  stopping?: boolean;
+}
+
+export function isAgentTraceRunning(steps: AgentTraceStep[] | undefined): boolean {
+  if (!steps || steps.length === 0) return false;
+  return (
+    steps.some((s) => s.type === "run_started") &&
+    !steps.some((s) => s.type === "run_finished" || s.type === "error" || s.type === "cancelled")
+  );
 }
 
 function stepLabel(step: AgentTraceStep): string {
@@ -20,6 +31,8 @@ function stepLabel(step: AgentTraceStep): string {
       return "推理";
     case "run_finished":
       return "完成";
+    case "cancelled":
+      return "已停止";
     case "error":
       return "错误";
     default:
@@ -31,6 +44,8 @@ function stepTone(type: string): string {
   switch (type) {
     case "error":
       return "border-rose-200 bg-rose-50/80 text-rose-800 dark:border-rose-500/30 dark:bg-rose-950/30 dark:text-rose-200";
+    case "cancelled":
+      return "border-amber-200 bg-amber-50/80 text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200";
     case "tool_result":
       return "border-emerald-200 bg-emerald-50/70 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-950/20 dark:text-emerald-200";
     case "tool_start":
@@ -43,10 +58,9 @@ function stepTone(type: string): string {
   }
 }
 
-export function AgentTracePanel({ steps }: AgentTracePanelProps) {
+export function AgentTracePanel({ steps, onStop, stopping }: AgentTracePanelProps) {
   const [open, setOpen] = useState(true);
-  const running = steps.some((s) => s.type === "run_started")
-    && !steps.some((s) => s.type === "run_finished" || s.type === "error");
+  const running = isAgentTraceRunning(steps);
 
   useEffect(() => {
     if (running) setOpen(true);
@@ -56,21 +70,35 @@ export function AgentTracePanel({ steps }: AgentTracePanelProps) {
 
   return (
     <div className="mt-3 overflow-hidden rounded-2xl border border-violet-200/80 bg-violet-50/40 dark:border-violet-500/25 dark:bg-violet-950/20">
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-violet-900 transition hover:bg-violet-100/50 dark:text-violet-100 dark:hover:bg-violet-900/25"
-        onClick={() => setOpen((v) => !v)}
-      >
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <Wrench size={14} className="shrink-0" />
-        <span className="min-w-0 flex-1 truncate">
-          运行轨迹
-          {running ? " · 进行中" : ""}
-          <span className="ml-1 font-normal text-violet-700/70 dark:text-violet-200/70">
-            ({steps.length})
+      <div className="flex items-stretch">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-violet-900 transition hover:bg-violet-100/50 dark:text-violet-100 dark:hover:bg-violet-900/25"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          <Wrench size={14} className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate">
+            运行轨迹
+            {running ? " · 进行中" : ""}
+            <span className="ml-1 font-normal text-violet-700/70 dark:text-violet-200/70">
+              ({steps.length})
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+        {running && onStop ? (
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center gap-1.5 border-l border-violet-200/80 px-3 text-xs font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-50 dark:border-violet-500/25 dark:text-rose-300 dark:hover:bg-rose-950/40"
+            onClick={onStop}
+            disabled={stopping}
+            title="停止 Agent"
+          >
+            <Square size={12} className="fill-current" />
+            {stopping ? "停止中" : "停止"}
+          </button>
+        ) : null}
+      </div>
 
       {open ? (
         <div className="max-h-64 space-y-1.5 overflow-y-auto border-t border-violet-200/70 px-3 py-2.5 dark:border-violet-500/20">

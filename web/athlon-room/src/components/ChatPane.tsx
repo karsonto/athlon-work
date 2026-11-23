@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Users } from "lucide-react";
+import { Pencil, Square, Users } from "lucide-react";
 import type {
   AgentTraceStep,
   PendingFile,
@@ -8,6 +8,7 @@ import type {
   RoomPresenceMember,
   RoomTab,
 } from "../types";
+import { isAgentTraceRunning } from "./AgentTracePanel";
 import { ComposerBar } from "./ComposerBar";
 import { MessageBubble } from "./MessageBubble";
 
@@ -23,12 +24,14 @@ interface ChatPaneProps {
   senderId: string;
   members?: RoomPresenceMember[];
   agentTraces?: Record<string, AgentTraceStep[]>;
+  stoppingAgent?: boolean;
   onDraftChange: (v: string) => void;
   onSend: () => void;
   onPickFiles: (files: FileList | null) => void;
   onRemovePending: (id: string) => void;
   onPreviewImage: (src: string, alt: string) => void;
   onOpenSettings?: () => void;
+  onStopAgent?: () => void;
 }
 
 /** Only the current browser's senderId is "me" (right). Agent + all peers stay left. */
@@ -52,12 +55,14 @@ export function ChatPane({
   senderId,
   members = [],
   agentTraces,
+  stoppingAgent,
   onDraftChange,
   onSend,
   onPickFiles,
   onRemovePending,
   onPreviewImage,
   onOpenSettings,
+  onStopAgent,
 }: ChatPaneProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const membersRef = useRef<HTMLDivElement>(null);
@@ -68,6 +73,10 @@ export function ChatPane({
     meta?.workspaceName ?? tab.workspaceName ?? meta?.workspaceRoot ?? tab.workspaceRoot;
   const traceCount = agentTraces ? Object.values(agentTraces).reduce((n, s) => n + s.length, 0) : 0;
   const memberCount = members.length;
+  const agentRunning =
+    tab.role === "host" &&
+    !!agentTraces &&
+    Object.values(agentTraces).some((steps) => isAgentTraceRunning(steps));
 
   useEffect(() => {
     const el = listRef.current;
@@ -154,6 +163,18 @@ export function ChatPane({
               </div>
             ) : null}
           </div>
+          {agentRunning && onStopAgent ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 transition hover:border-rose-300 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-950/70"
+              onClick={onStopAgent}
+              disabled={stoppingAgent}
+              title="停止 Agent"
+            >
+              <Square size={14} className="fill-current" />
+              {stoppingAgent ? "停止中" : "停止 Agent"}
+            </button>
+          ) : null}
           {tab.role === "host" && onOpenSettings ? (
             <button
               type="button"
@@ -183,6 +204,12 @@ export function ChatPane({
               token={tab.token}
               onPreviewImage={onPreviewImage}
               agentTrace={agentTraces?.[m.id]}
+              onStopAgent={
+                tab.role === "host" && onStopAgent && isAgentTraceRunning(agentTraces?.[m.id])
+                  ? onStopAgent
+                  : undefined
+              }
+              stoppingAgent={stoppingAgent}
             />
           ))
         )}

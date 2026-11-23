@@ -236,6 +236,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<AthlonRoomServer>();
 
         services.AddSingleton<RoomAgentProfileStore>();
+        services.AddSingleton<RoomAgentSessionStore>();
 
         services.AddSingleton<RoomAgentBridge>();
 

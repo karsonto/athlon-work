@@ -13,6 +13,8 @@ interface MessageBubbleProps {
   onPreviewImage: (url: string, alt: string) => void;
   /** Host-only live @agent tool/model trace for this bubble. */
   agentTrace?: AgentTraceStep[];
+  onStopAgent?: () => void;
+  stoppingAgent?: boolean;
 }
 
 export function MessageBubble({
@@ -23,6 +25,8 @@ export function MessageBubble({
   token,
   onPreviewImage,
   agentTrace,
+  onStopAgent,
+  stoppingAgent,
 }: MessageBubbleProps) {
   const isAgent = message.kind === "agent" || message.senderId === "athlon-agent";
   const name = message.displayName || (isAgent ? "Athlon" : "用户");
@@ -122,7 +126,11 @@ export function MessageBubble({
           );
         })}
         {isAgent && agentTrace && agentTrace.length > 0 ? (
-          <AgentTracePanel steps={agentTrace} />
+          <AgentTracePanel
+            steps={agentTrace}
+            onStop={onStopAgent}
+            stopping={stoppingAgent}
+          />
         ) : null}
       </div>
     </div>

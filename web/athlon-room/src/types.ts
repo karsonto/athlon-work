@@ -75,7 +75,16 @@ export interface RoomAgentProfileResponse {
 export interface AgentTraceStep {
   id: string;
   messageId: string;
-  type: "run_started" | "tool_start" | "tool_args" | "tool_result" | "reasoning" | "run_finished" | "error" | string;
+  type:
+    | "run_started"
+    | "tool_start"
+    | "tool_args"
+    | "tool_result"
+    | "reasoning"
+    | "run_finished"
+    | "cancelled"
+    | "error"
+    | string;
   toolCallId?: string | null;
   toolName?: string | null;
   summary?: string | null;

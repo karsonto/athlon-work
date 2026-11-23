@@ -75,6 +75,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     private string? _bindWarning;
     private Action<string>? _onRoomOpened;
     private Action<string>? _onRoomClosed;
+    private Func<string, bool>? _agentStopHandler;
 
     public AthlonRoomServer(
         RoomStore store,
@@ -139,6 +140,10 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         _onRoomOpened = onOpened;
         _onRoomClosed = onClosed;
     }
+
+    /// <summary>Host-only stop for in-flight @agent turns. Returns false when idle / unregistered.</summary>
+    public void SetAgentStopHandler(Func<string, bool>? handler) =>
+        _agentStopHandler = handler;
 
     /// <summary>
     /// Shareable invite for LAN/peers. Null when bound loopback-only (link would point at an unbound address).
@@ -799,6 +804,28 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 await HandleSaveRoomAgentProfileAsync(context, roomId).ConfigureAwait(false);
                 return;
             }
+        }
+
+        // POST /api/rooms/{id}/agent-stop — localhost only
+        if (segments.Length == 4
+            && segments[3].Equals("agent-stop", StringComparison.OrdinalIgnoreCase)
+            && method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsLocalRequest(context.Request))
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.Forbidden, new { error = "local_only" }).ConfigureAwait(false);
+                return;
+            }
+
+            if (_store.GetRoom(roomId) is null)
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.NotFound, new { error = "not_found" }).ConfigureAwait(false);
+                return;
+            }
+
+            var stopped = _agentStopHandler?.Invoke(roomId) == true;
+            await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { ok = true, stopped }).ConfigureAwait(false);
+            return;
         }
 
         // POST /api/rooms/{id}/title — localhost only

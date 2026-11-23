@@ -215,6 +215,18 @@ export async function saveRoomAgentProfile(
   return res.json();
 }
 
+/** Host-only: cancel the in-flight @agent turn for this room. */
+export async function stopRoomAgent(roomId: string, baseUrl = ""): Promise<{ ok: boolean; stopped: boolean }> {
+  const res = await fetch(
+    apiUrl(baseUrl || localManageBaseUrl(), `/api/rooms/${roomId}/agent-stop`),
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+  return res.json();
+}
+
 export async function fetchRoom(
   baseUrl: string,
   roomId: string,

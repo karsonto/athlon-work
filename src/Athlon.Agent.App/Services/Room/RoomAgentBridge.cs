@@ -29,6 +29,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
     private readonly RoomStore _store;
     private readonly AthlonRoomServer _server;
     private readonly RoomAgentProfileStore _profileStore;
+    private readonly RoomAgentSessionStore _sessionStore;
     private readonly IAgentRuntime _runtime;
     private readonly IServiceProvider _services;
     private readonly IActiveWorkspaceContext _workspaceContext;
@@ -36,12 +37,15 @@ public sealed class RoomAgentBridge : IAsyncDisposable
     private readonly ILogger<RoomAgentBridge> _logger;
     private readonly ConcurrentDictionary<string, byte> _attachedRooms = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _roomGates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _runCtsByRoom =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, IDisposable> _subscriptions = new(StringComparer.OrdinalIgnoreCase);
 
     public RoomAgentBridge(
         RoomStore store,
         AthlonRoomServer server,
         RoomAgentProfileStore profileStore,
+        RoomAgentSessionStore sessionStore,
         IAgentRuntime runtime,
         IServiceProvider services,
         IActiveWorkspaceContext workspaceContext,
@@ -51,12 +55,44 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         _store = store;
         _server = server;
         _profileStore = profileStore;
+        _sessionStore = sessionStore;
         _runtime = runtime;
         _services = services;
         _workspaceContext = workspaceContext;
         _settings = settings;
         _logger = logger;
         _server.SetRoomLifecycleHooks(AttachRoom, DetachRoom);
+        _server.SetAgentStopHandler(TryStop);
+    }
+
+    /// <summary>Cancel the in-flight @agent turn for a room (host-only API). Returns false if idle.</summary>
+    public bool TryStop(string roomId)
+    {
+        if (string.IsNullOrWhiteSpace(roomId))
+        {
+            return false;
+        }
+
+        if (!_runCtsByRoom.TryGetValue(roomId, out var cts))
+        {
+            return false;
+        }
+
+        try
+        {
+            if (cts.IsCancellationRequested)
+            {
+                return true;
+            }
+
+            cts.Cancel();
+            _logger.LogInformation("Room agent stop requested for {RoomId}", roomId);
+            return true;
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
     }
 
     public void AttachToActiveRoom()
@@ -151,9 +187,15 @@ public sealed class RoomAgentBridge : IAsyncDisposable
 
         var gate = _roomGates.GetOrAdd(roomId, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync().ConfigureAwait(false);
+        var cts = new CancellationTokenSource();
+        _runCtsByRoom[roomId] = cts;
         try
         {
-            await RunAgentTurnAsync(roomId, message, taskText).ConfigureAwait(false);
+            await RunAgentTurnAsync(roomId, message, taskText, cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Room agent turn cancelled for {RoomId}", roomId);
         }
         catch (Exception ex)
         {
@@ -176,11 +218,17 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         }
         finally
         {
+            _runCtsByRoom.TryRemove(roomId, out _);
+            cts.Dispose();
             gate.Release();
         }
     }
 
-    private async Task RunAgentTurnAsync(string roomId, RoomMessage trigger, string taskText)
+    private async Task RunAgentTurnAsync(
+        string roomId,
+        RoomMessage trigger,
+        string taskText,
+        CancellationToken cancellationToken)
     {
         var profile = _profileStore.GetOrCreate(roomId);
         var placeholder = _store.AppendMessage(roomId, new RoomMessage
@@ -192,13 +240,25 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             CreatedAt = DateTimeOffset.UtcNow
         });
 
-        var history = _store.GetMessages(roomId);
-        var prompt = BuildUserPrompt(trigger, taskText, history);
+        var prompt = BuildUserPrompt(trigger, taskText);
 
         var room = _store.GetRoom(roomId);
         var (workspaceRoot, workspaceId) = ResolveRoomWorkspace(room);
-        var session = AgentSession.Create($"Room {roomId}")
-            .WithWorkspace(workspaceRoot, workspaceId);
+        // Persist across @agent mentions so CompactionTurnMiddleware can compact like Chat.
+        var session = await _sessionStore
+            .LoadOrCreateAsync(roomId, $"Room {roomId}", cancellationToken)
+            .ConfigureAwait(false);
+        session = session.WithWorkspace(workspaceRoot, workspaceId);
+        if (!string.IsNullOrWhiteSpace(profile.ModelNameOverride))
+        {
+            session = session with { ModelName = profile.ModelNameOverride };
+        }
+
+        // Mirror all room chatter into the agent transcript (agent bubbles skipped — already from SendAsync).
+        var syncState = await _sessionStore.LoadSyncStateAsync(roomId, cancellationToken).ConfigureAwait(false);
+        session = SyncRoomChatIntoSession(session, syncState, roomId, excludeMessageId: trigger.Id);
+        await _sessionStore.SaveAsync(roomId, session, cancellationToken).ConfigureAwait(false);
+        await _sessionStore.SaveSyncStateAsync(roomId, syncState, cancellationToken).ConfigureAwait(false);
 
         var allowList = profile.ToolAllowList.Count > 0
             ? profile.ToolAllowList.ToArray()
@@ -322,6 +382,20 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         using var profileScope = AgentProfileTurnScope.Enter(profileOptions);
         using var runScope = runContextAccessor.Push(member);
 
+        var lastPersistMs = 0L;
+        async Task PersistSessionAsync(AgentSession updated, CancellationToken ct)
+        {
+            session = updated;
+            try
+            {
+                await _sessionStore.SaveAsync(roomId, session, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to persist room agent session for {RoomId}", roomId);
+            }
+        }
+
         try
         {
             var result = await _runtime.SendAsync(
@@ -329,7 +403,18 @@ public sealed class RoomAgentBridge : IAsyncDisposable
                 prompt,
                 callbacks: new AgentTurnCallbacks
                 {
-                    OnSessionUpdated = _ => Task.CompletedTask,
+                    OnSessionUpdated = async updated =>
+                    {
+                        var now = Environment.TickCount64;
+                        if (now - lastPersistMs < 400)
+                        {
+                            session = updated;
+                            return;
+                        }
+
+                        lastPersistMs = now;
+                        await PersistSessionAsync(updated, CancellationToken.None).ConfigureAwait(false);
+                    },
                     OnToolApprovalRequested = static (_, _) =>
                         Task.FromResult(ToolApprovalDecision.Approved),
                     OnStreamEvent = ev =>
@@ -401,7 +486,15 @@ public sealed class RoomAgentBridge : IAsyncDisposable
 
                         return Task.CompletedTask;
                     }
-                }).ConfigureAwait(false);
+                },
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            session = result;
+            MarkRoomMessagesSynced(syncState, trigger.Id, messageId);
+            // Pick up human chatter that arrived while this turn was running.
+            session = SyncRoomChatIntoSession(session, syncState, roomId, excludeMessageId: null);
+            await PersistSessionAsync(session, cancellationToken).ConfigureAwait(false);
+            await _sessionStore.SaveSyncStateAsync(roomId, syncState, CancellationToken.None).ConfigureAwait(false);
 
             var final = result.Messages.LastOrDefault(m => m.Role == MessageRole.Assistant)?.Content;
             if (!string.IsNullOrWhiteSpace(final))
@@ -417,14 +510,145 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             FlushText(force: true);
             PublishTrace("run_finished", summary: "完成");
         }
+        catch (OperationCanceledException)
+        {
+            MarkRoomMessagesSynced(syncState, trigger.Id, messageId);
+            session = SyncRoomChatIntoSession(session, syncState, roomId, excludeMessageId: null);
+            await PersistSessionAsync(session, CancellationToken.None).ConfigureAwait(false);
+            await _sessionStore.SaveSyncStateAsync(roomId, syncState, CancellationToken.None).ConfigureAwait(false);
+
+            if (streamed.Length == 0 || streamed.ToString().Trim() is "…" or "")
+            {
+                streamed.Clear();
+                streamed.Append("已停止。");
+            }
+            else
+            {
+                streamed.Append("\n\n（已停止）");
+            }
+
+            FlushText(force: true);
+            PublishTrace("cancelled", summary: "房主已停止");
+            throw;
+        }
         catch (Exception ex)
         {
+            MarkRoomMessagesSynced(syncState, trigger.Id, messageId);
+            session = SyncRoomChatIntoSession(session, syncState, roomId, excludeMessageId: null);
+            await PersistSessionAsync(session, CancellationToken.None).ConfigureAwait(false);
+            await _sessionStore.SaveSyncStateAsync(roomId, syncState, CancellationToken.None).ConfigureAwait(false);
             streamed.Clear();
             streamed.Append("处理失败：").Append(ex.Message);
             FlushText(force: true);
             PublishTrace("error", summary: ex.Message);
             throw;
         }
+    }
+
+    private AgentSession SyncRoomChatIntoSession(
+        AgentSession session,
+        RoomAgentSyncState syncState,
+        string roomId,
+        string? excludeMessageId)
+    {
+        var synced = new HashSet<string>(syncState.SyncedMessageIds, StringComparer.OrdinalIgnoreCase);
+        // Also treat messages already mirrored by id as synced (survives lost sync file).
+        foreach (var existing in session.Messages)
+        {
+            if (existing.Id.StartsWith("room:", StringComparison.Ordinal))
+            {
+                synced.Add(existing.Id["room:".Length..]);
+            }
+        }
+
+        var roomMessages = _store.GetMessages(roomId);
+        var changed = false;
+        foreach (var msg in roomMessages)
+        {
+            if (!string.IsNullOrWhiteSpace(excludeMessageId)
+                && string.Equals(msg.Id, excludeMessageId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (synced.Contains(msg.Id))
+            {
+                continue;
+            }
+
+            if (IsAgentRoomMessage(msg))
+            {
+                // Prior agent replies are already in the AgentSession from SendAsync.
+                synced.Add(msg.Id);
+                changed = true;
+                continue;
+            }
+
+            var content = FormatRoomMessageForSession(msg);
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                synced.Add(msg.Id);
+                changed = true;
+                continue;
+            }
+
+            session = session.WithMessage(
+                ChatMessage.CreateWithId(
+                    RoomAgentSessionStore.RoomChatMessageId(msg.Id),
+                    MessageRole.User,
+                    content));
+            synced.Add(msg.Id);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            syncState.SyncedMessageIds = synced.ToList();
+            // Drop ids no longer present in the room to keep the sync file bounded.
+            var live = new HashSet<string>(roomMessages.Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+            syncState.SyncedMessageIds = syncState.SyncedMessageIds
+                .Where(id => live.Contains(id))
+                .ToList();
+        }
+
+        return session;
+    }
+
+    private static void MarkRoomMessagesSynced(RoomAgentSyncState syncState, params string[] messageIds)
+    {
+        var synced = new HashSet<string>(syncState.SyncedMessageIds, StringComparer.OrdinalIgnoreCase);
+        foreach (var id in messageIds)
+        {
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                synced.Add(id);
+            }
+        }
+
+        syncState.SyncedMessageIds = synced.ToList();
+    }
+
+    private static bool IsAgentRoomMessage(RoomMessage message) =>
+        string.Equals(message.Kind, "agent", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(message.SenderId, RoomAgentIds.SenderId, StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatRoomMessageForSession(RoomMessage msg)
+    {
+        var preview = msg.Text?.Trim() ?? "";
+        if (msg.Attachments.Count > 0)
+        {
+            var attPreview = string.Join(", ", msg.Attachments.Select(FormatAttachmentForPrompt));
+            preview = string.IsNullOrWhiteSpace(preview)
+                ? "[attachments: " + attPreview + "]"
+                : preview + " [attachments: " + attPreview + "]";
+        }
+
+        if (string.IsNullOrWhiteSpace(preview))
+        {
+            return "";
+        }
+
+        return $"[room] {msg.DisplayName}: {preview}";
     }
 
     private static string? TruncateTrace(string? text, int maxChars = 800)
@@ -502,36 +726,12 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         return sb.ToString();
     }
 
-    private static string BuildUserPrompt(RoomMessage trigger, string taskText, IReadOnlyList<RoomMessage> history)
+    private static string BuildUserPrompt(RoomMessage trigger, string taskText)
     {
+        // Room chatter up to this point was mirrored into the session; this is only the current ask.
         var sb = new StringBuilder();
-        sb.AppendLine("Recent room messages:");
-        foreach (var msg in history.TakeLast(20))
-        {
-            if (string.Equals(msg.Id, trigger.Id, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var preview = msg.Text;
-            if (msg.Attachments.Count > 0)
-            {
-                var attPreview = string.Join(", ", msg.Attachments.Select(FormatAttachmentForPrompt));
-                preview = string.IsNullOrWhiteSpace(preview)
-                    ? "[attachments: " + attPreview + "]"
-                    : preview.Trim() + " [attachments: " + attPreview + "]";
-            }
-
-            if (string.IsNullOrWhiteSpace(preview))
-            {
-                continue;
-            }
-
-            sb.Append(msg.DisplayName).Append(": ").AppendLine(preview.Trim());
-        }
-
-        sb.AppendLine();
-        sb.Append(trigger.DisplayName).Append(" asked you: ").AppendLine(taskText);
+        sb.Append(trigger.DisplayName).Append(" asked you: ").AppendLine(
+            string.IsNullOrWhiteSpace(taskText) ? "(see attachments)" : taskText);
         if (trigger.Attachments.Count > 0)
         {
             sb.AppendLine("Attachments on this message (use these workspace paths with file tools):");

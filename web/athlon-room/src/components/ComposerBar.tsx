@@ -178,7 +178,7 @@ export function ComposerBar({
             onKeyUp={syncCaret}
             onSelect={syncCaret}
             onKeyDown={(e) => {
-              if (showMention && (e.key === "Enter" || e.key === "Tab")) {
+              if (showMention && (e.key === "Enter" || e.key === "Tab" || e.key === " ")) {
                 e.preventDefault();
                 applyAgentMention();
                 return;

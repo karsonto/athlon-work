@@ -16,6 +16,7 @@ import {
   renameLocalRoom,
   saveRoomAgentProfile,
   setLocalRoomWorkspace,
+  stopRoomAgent,
   uploadAttachment,
 } from "./lib/api";
 import {
@@ -88,6 +89,7 @@ export default function App() {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Record<string, SessionBundle>>({});
   const [sending, setSending] = useState(false);
+  const [stoppingAgent, setStoppingAgent] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinValue, setJoinValue] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -654,6 +656,18 @@ export default function App() {
     patchSession(activeKey, { draft: v });
   };
 
+  const onStopAgent = async () => {
+    if (!activeTab || activeTab.role !== "host" || stoppingAgent) return;
+    setStoppingAgent(true);
+    try {
+      await stopRoomAgent(activeTab.id);
+    } catch (e) {
+      setShellError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStoppingAgent(false);
+    }
+  };
+
   const onSend = async () => {
     if (!activeTab || !activeKey || sending) return;
     const session = sessionsRef.current[activeKey] ?? emptySession();
@@ -785,6 +799,7 @@ export default function App() {
           senderId={senderId}
           members={activeSession.members}
           agentTraces={activeSession.agentTraces}
+          stoppingAgent={stoppingAgent}
           onDraftChange={onDraftChange}
           onSend={() => void onSend()}
           onPickFiles={onPickFiles}
@@ -792,6 +807,9 @@ export default function App() {
           onPreviewImage={(src, alt) => setLightbox({ src, alt })}
           onOpenSettings={
             activeTab.role === "host" ? () => void openRoomSettings(activeTab) : undefined
+          }
+          onStopAgent={
+            activeTab.role === "host" ? () => void onStopAgent() : undefined
           }
         />
       ) : (
