@@ -697,14 +697,15 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             filePath = Path.Combine(filePath, AthlonRoomAssets.EntryFileName);
         }
 
-        // SPA fallback for /r/...
+        // SPA fallback for /r/{roomId} only — never for real static files (.js/.css/...).
         if (!File.Exists(filePath))
         {
             var abs = context.Request.Url?.AbsolutePath ?? "";
-            if (abs.StartsWith("/r/", StringComparison.OrdinalIgnoreCase)
-                || abs.Equals("/r", StringComparison.OrdinalIgnoreCase)
-                || abs == "/"
-                || string.IsNullOrEmpty(Path.GetExtension(abs)))
+            var ext = Path.GetExtension(abs);
+            if (string.IsNullOrEmpty(ext)
+                && (abs.StartsWith("/r/", StringComparison.OrdinalIgnoreCase)
+                    || abs.Equals("/r", StringComparison.OrdinalIgnoreCase)
+                    || abs == "/"))
             {
                 filePath = Path.Combine(contentRoot, AthlonRoomAssets.EntryFileName);
             }
@@ -960,16 +961,24 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             return null;
         }
 
-        // SPA client routes
-        if (trimmed.StartsWith("r/", StringComparison.OrdinalIgnoreCase) || trimmed.Equals("r", StringComparison.OrdinalIgnoreCase))
-        {
-            return AthlonRoomAssets.EntryFileName;
-        }
-
         var segments = trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Any(segment => segment is "." or ".."))
         {
             return null;
+        }
+
+        // SPA client routes: /r or /r/{roomId} only (not /r/assets/...).
+        if (segments.Length == 1
+            && segments[0].Equals("r", StringComparison.OrdinalIgnoreCase))
+        {
+            return AthlonRoomAssets.EntryFileName;
+        }
+
+        if (segments.Length == 2
+            && segments[0].Equals("r", StringComparison.OrdinalIgnoreCase)
+            && RoomStore.IsSafeId(segments[1]))
+        {
+            return AthlonRoomAssets.EntryFileName;
         }
 
         return Path.Combine(segments);

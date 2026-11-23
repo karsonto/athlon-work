@@ -8,7 +8,8 @@ const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(rootDir, "../../src/Athlon.Agent.App/Assets/AthlonRoom");
 
 export default defineConfig({
-  base: "./",
+  // Absolute asset URLs so /r/{roomId} does not resolve JS/CSS under /r/assets/.
+  base: "/",
   plugins: [react(), tailwindcss()],
   server: {
     host: true,
