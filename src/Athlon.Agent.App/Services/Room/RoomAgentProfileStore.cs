@@ -172,6 +172,25 @@ public sealed class RoomAgentProfileStore
         {
             profile.ToolAllowList.Add("room_share_file");
         }
+
+        // Same as Teams workers: selecting Skills auto-attaches load_skill_through_path
+        // (not shown as a catalog checkbox).
+        profile.ToolAllowList.RemoveAll(t =>
+            string.Equals(t, "load_skill_through_path", StringComparison.OrdinalIgnoreCase));
+        if (profile.SkillNames.Any(s => !string.IsNullOrWhiteSpace(s)))
+        {
+            profile.ToolAllowList.Add("load_skill_through_path");
+        }
+    }
+
+    /// <summary>Effective tool allow-list for a room @agent turn (includes implied skill loader).</summary>
+    public static string[] ResolveToolAllowList(AgentProfile profile)
+    {
+        var clone = Clone(profile);
+        Normalize(clone);
+        return clone.ToolAllowList.Count > 0
+            ? clone.ToolAllowList.ToArray()
+            : CatalogTools.ToArray();
     }
 
     private static AgentProfile Clone(AgentProfile source) => new()

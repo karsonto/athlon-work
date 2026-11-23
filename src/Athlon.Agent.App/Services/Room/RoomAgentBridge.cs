@@ -260,13 +260,8 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         await _sessionStore.SaveAsync(roomId, session, cancellationToken).ConfigureAwait(false);
         await _sessionStore.SaveSyncStateAsync(roomId, syncState, cancellationToken).ConfigureAwait(false);
 
-        var allowList = profile.ToolAllowList.Count > 0
-            ? profile.ToolAllowList.ToArray()
-            : RoomAgentProfileStore.CatalogTools;
-        if (!allowList.Contains("room_share_file", StringComparer.OrdinalIgnoreCase))
-        {
-            allowList = allowList.Append("room_share_file").ToArray();
-        }
+        // Selecting Skills in room settings auto-attaches load_skill_through_path.
+        var allowList = RoomAgentProfileStore.ResolveToolAllowList(profile);
 
         var localTools = _services.GetServices<IAgentTool>();
         var mcpRegistry = _services.GetRequiredService<IMcpRegistry>();
@@ -709,6 +704,21 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         {
             sb.AppendLine(
                 "This room has no workspace configured yet. Tell the host to set a workspace path in room settings before file tools can work.");
+        }
+
+        var selectedSkills = profile.SkillNames?
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? [];
+        if (selectedSkills.Length > 0)
+        {
+            sb.AppendLine();
+            sb.Append("This room has enabled Skills: ")
+                .Append(string.Join(", ", selectedSkills))
+                .AppendLine(".");
+            sb.AppendLine(
+                "When a task matches one of them, call load_skill_through_path(skillId=\"…\", path=\"SKILL.md\") before proceeding.");
         }
 
         if (!string.IsNullOrWhiteSpace(profile.SoulMd))

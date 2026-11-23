@@ -143,6 +143,9 @@ export function RoomAgentSettingsDialog({
           }))
         }
       />
+      <p className="-mt-2 mb-4 text-xs text-slate-400 dark:text-zinc-500">
+        勾选后将自动带上 load_skill_through_path，@agent 可直接加载这些 Skill。
+      </p>
 
       <CheckboxGroup
         title="MCP"
