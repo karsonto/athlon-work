@@ -1,26 +1,27 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: dark --default;
+  themes: light --default, dark --prefersdark;
 }
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family:
-    "PingFang SC",
-    "Hiragino Sans GB",
+    "Inter",
     "Segoe UI",
     system-ui,
     -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Hiragino Sans GB",
     sans-serif;
-  line-height: 1.45;
-  --room-bg: #121212;
-  --room-chrome: #1c1c1c;
-  --bubble-me: #12b7f5;
-  --bubble-other: #2c2c2c;
-  --bubble-agent: #243447;
-  --text-primary: #f2f2f2;
-  --text-muted: #8a8a8a;
-  --composer-bg: #1a1a1a;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 html,
@@ -32,44 +33,37 @@ body,
 body {
   margin: 0;
   min-width: 320px;
-  background: var(--room-bg);
-  color: var(--text-primary);
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
 }
 
 * {
   box-sizing: border-box;
 }
 
-/* QQ-style bubble tails */
-.bubble-tail-left,
-.bubble-tail-right {
-  position: relative;
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
 }
 
-.bubble-tail-left::before {
-  content: "";
-  position: absolute;
-  left: -6px;
-  top: 12px;
-  width: 0;
-  height: 0;
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
-  border-right: 6px solid var(--bubble-other);
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.bubble-tail-left.is-agent::before {
-  border-right-color: var(--bubble-agent);
-}
-
-.bubble-tail-right::before {
-  content: "";
-  position: absolute;
-  right: -6px;
-  top: 12px;
-  width: 0;
-  height: 0;
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
-  border-left: 6px solid var(--bubble-me);
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.55);
+  background-clip: padding-box;
 }

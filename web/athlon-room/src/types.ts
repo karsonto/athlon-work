@@ -22,6 +22,9 @@ export interface RoomMeta {
   id: string;
   title: string;
   createdAt: string;
+  workspaceRoot?: string | null;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
 }
 
 export interface PendingFile {
@@ -40,6 +43,33 @@ export interface RoomTab {
   role: RoomRole;
   unread: number;
   inviteUrl: string;
+  workspaceRoot?: string | null;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
+}
+
+export interface WorkspaceItem {
+  id: string;
+  name: string;
+  rootPath: string;
+  kind?: string;
+}
+
+export interface RoomAgentProfileData {
+  toolAllowList: string[];
+  skillNames: string[];
+  mcpServerNames: string[];
+}
+
+export interface RoomAgentCatalog {
+  tools: string[];
+  skills: Array<{ name: string }>;
+  mcpServers: Array<{ name: string }>;
+}
+
+export interface RoomAgentProfileResponse {
+  profile: RoomAgentProfileData;
+  catalog: RoomAgentCatalog;
 }
 
 export interface RoomSessionState {

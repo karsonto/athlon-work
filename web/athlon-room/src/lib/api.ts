@@ -1,4 +1,11 @@
-import type { RoomAttachment, RoomMessage, RoomMeta } from "../types";
+import type {
+  RoomAgentProfileData,
+  RoomAgentProfileResponse,
+  RoomAttachment,
+  RoomMessage,
+  RoomMeta,
+  WorkspaceItem,
+} from "../types";
 
 export function apiUrl(baseUrl: string, path: string): string {
   const base = baseUrl.replace(/\/$/, "");
@@ -120,6 +127,83 @@ export async function closeLocalRoom(roomId: string, baseUrl = ""): Promise<void
   if (!res.ok) {
     throw new Error(await readError(res));
   }
+}
+
+export async function renameLocalRoom(
+  roomId: string,
+  title: string,
+  baseUrl = "",
+): Promise<{ id: string; title: string }> {
+  const res = await fetch(
+    apiUrl(baseUrl || localManageBaseUrl(), `/api/rooms/${roomId}/title`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+  return res.json();
+}
+
+export async function setLocalRoomWorkspace(
+  roomId: string,
+  body: { workspaceId?: string | null; workspaceRoot?: string | null },
+  baseUrl = "",
+): Promise<{
+  id: string;
+  workspaceRoot?: string | null;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
+}> {
+  const res = await fetch(
+    apiUrl(baseUrl || localManageBaseUrl(), `/api/rooms/${roomId}/workspace`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+  return res.json();
+}
+
+export async function fetchWorkspaces(baseUrl = ""): Promise<WorkspaceItem[]> {
+  const res = await fetch(apiUrl(baseUrl || localManageBaseUrl(), "/api/workspaces"));
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+  const data = await res.json();
+  return data.workspaces ?? [];
+}
+
+export async function fetchRoomAgentProfile(
+  baseUrl = "",
+): Promise<RoomAgentProfileResponse> {
+  const res = await fetch(apiUrl(baseUrl || localManageBaseUrl(), "/api/room-agent/profile"));
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+  return res.json();
+}
+
+export async function saveRoomAgentProfile(
+  profile: RoomAgentProfileData,
+  baseUrl = "",
+): Promise<RoomAgentProfileResponse> {
+  const res = await fetch(apiUrl(baseUrl || localManageBaseUrl(), "/api/room-agent/profile"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ profile }),
+  });
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+  return res.json();
 }
 
 export async function fetchRoom(
@@ -248,11 +332,37 @@ export function formatBytes(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * UUID / id helper that works outside secure contexts.
+ * `crypto.randomUUID` is missing on http://{LAN-IP} (non-localhost HTTP).
+ */
+export function newId(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === "function") {
+    return c.randomUUID();
+  }
+
+  if (c && typeof c.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    c.getRandomValues(bytes);
+    bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+    bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+    const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    const v = ch === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export function createSenderId(): string {
   const key = "athlon-room-sender-id";
   const existing = localStorage.getItem(key);
   if (existing) return existing;
-  const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+  const id = newId().replace(/-/g, "").slice(0, 12);
   localStorage.setItem(key, id);
   return id;
 }

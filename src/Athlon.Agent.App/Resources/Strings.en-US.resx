@@ -2017,7 +2017,7 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
     <value>Chat Room</value>
   </data>
   <data name="Shell_ChatRoomTooltip" xml:space="preserve">
-    <value>Start a LAN chat room and share the invite link</value>
+    <value>Start the chat room server and open it in the browser</value>
   </data>
   <data name="Shell_ChatRoomTitle" xml:space="preserve">
     <value>Athlon Chat Room</value>

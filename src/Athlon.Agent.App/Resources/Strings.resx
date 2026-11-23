@@ -2026,7 +2026,7 @@
     <value>聊天房间</value>
   </data>
   <data name="Shell_ChatRoomTooltip" xml:space="preserve">
-    <value>开启局域网聊天房间并分享邀请链接</value>
+    <value>启动聊天房间服务并在浏览器中打开管理页</value>
   </data>
   <data name="Shell_ChatRoomTitle" xml:space="preserve">
     <value>Athlon 聊天房间</value>

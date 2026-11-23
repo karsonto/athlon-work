@@ -1,3 +1,5 @@
+import { Modal } from "./Modal";
+
 interface JoinRoomDialogProps {
   open: boolean;
   value: string;
@@ -15,45 +17,41 @@ export function JoinRoomDialog({
   onClose,
   onSubmit,
 }: JoinRoomDialogProps) {
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-      <form
-        className="w-full max-w-md rounded-2xl bg-[#1e1e1e] p-5 shadow-xl ring-1 ring-white/10"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSubmit();
-        }}
-      >
-        <h2 className="text-base font-semibold text-[var(--text-primary)]">加入房间</h2>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          粘贴完整邀请链接（含房间 ID 与 token）
-        </p>
-        <textarea
-          className="mt-4 min-h-[88px] w-full resize-y rounded-xl border border-white/10 bg-[#2c2c2c] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[#12b7f5]/60"
-          placeholder="http://192.168.x.x:6890/r/xxxx?t=..."
-          value={value}
-          autoFocus
-          onChange={(e) => onChange(e.target.value)}
-        />
-        {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
-        <div className="mt-4 flex justify-end gap-2">
+    <Modal
+      open={open}
+      title="加入房间"
+      onClose={onClose}
+      footer={
+        <>
           <button
             type="button"
-            className="rounded-xl px-4 py-2 text-sm text-[var(--text-muted)] hover:bg-white/5"
+            className="rounded-xl px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             onClick={onClose}
           >
             取消
           </button>
           <button
-            type="submit"
-            className="rounded-xl bg-[#12b7f5] px-4 py-2 text-sm font-medium text-white"
+            type="button"
+            className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700"
+            onClick={onSubmit}
           >
             加入
           </button>
-        </div>
-      </form>
-    </div>
+        </>
+      }
+    >
+      <p className="mb-3 text-slate-500 dark:text-zinc-400">
+        粘贴完整邀请链接（含房间 ID 与 token）
+      </p>
+      <textarea
+        className="min-h-[88px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:border-sky-500 dark:focus:ring-sky-500/20"
+        placeholder="http://192.168.x.x:6890/r/xxxx?t=..."
+        value={value}
+        autoFocus
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
+    </Modal>
   );
 }

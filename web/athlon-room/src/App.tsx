@@ -7,9 +7,15 @@ import {
   fetchLocalRooms,
   fetchMessages,
   fetchRoom,
+  fetchRoomAgentProfile,
+  fetchWorkspaces,
+  newId,
   parseInviteInput,
   parseRoomFromLocation,
   postMessage,
+  renameLocalRoom,
+  saveRoomAgentProfile,
+  setLocalRoomWorkspace,
   uploadAttachment,
 } from "./lib/api";
 import {
@@ -18,10 +24,20 @@ import {
   removeRecentRoom,
   saveRecentRoom,
 } from "./lib/recentRooms";
-import type { PendingFile, RoomMessage, RoomMeta, RoomTab } from "./types";
+import type {
+  PendingFile,
+  RoomAgentCatalog,
+  RoomAgentProfileData,
+  RoomMessage,
+  RoomMeta,
+  RoomTab,
+  WorkspaceItem,
+} from "./types";
 import { ChatPane } from "./components/ChatPane";
 import { JoinRoomDialog } from "./components/JoinRoomDialog";
 import { Lightbox } from "./components/Lightbox";
+import { RoomAgentSettingsDialog } from "./components/RoomAgentSettingsDialog";
+import { RoomSettingsDialog } from "./components/RoomSettingsDialog";
 import { RoomSidebar, roomKey } from "./components/RoomSidebar";
 
 const NICK_KEY = "athlon-room-nickname";
@@ -65,7 +81,6 @@ export default function App() {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Record<string, SessionBundle>>({});
   const [sending, setSending] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinValue, setJoinValue] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -73,6 +88,18 @@ export default function App() {
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const [canCreateLocal, setCanCreateLocal] = useState(false);
   const [bootDone, setBootDone] = useState(false);
+
+  const [settingsTab, setSettingsTab] = useState<RoomTab | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
+
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentSaving, setAgentSaving] = useState(false);
+  const [agentError, setAgentError] = useState<string | null>(null);
+  const [agentProfile, setAgentProfile] = useState<RoomAgentProfileData | null>(null);
+  const [agentCatalog, setAgentCatalog] = useState<RoomAgentCatalog | null>(null);
 
   const roomsRef = useRef(rooms);
   const activeKeyRef = useRef(activeKey);
@@ -157,7 +184,6 @@ export default function App() {
       if (esMap.current.has(key)) return;
 
       while (esMap.current.size >= MAX_SSE) {
-        // Evict least recently used among non-active
         const victim = [...esMap.current.keys()].find((k) => k !== activeKeyRef.current);
         if (!victim) break;
         esMap.current.get(victim)?.close();
@@ -197,7 +223,17 @@ export default function App() {
           error: null,
         });
         setRooms((prev) =>
-          prev.map((r) => (roomKey(r) === key ? { ...r, title: meta.title || r.title } : r)),
+          prev.map((r) =>
+            roomKey(r) === key
+              ? {
+                  ...r,
+                  title: meta.title || r.title,
+                  workspaceId: meta.workspaceId ?? r.workspaceId,
+                  workspaceRoot: meta.workspaceRoot ?? r.workspaceRoot,
+                  workspaceName: meta.workspaceName ?? r.workspaceName,
+                }
+              : r,
+          ),
         );
         ensureSse(tab);
       } catch (e) {
@@ -210,7 +246,6 @@ export default function App() {
     [ensureSse, patchSession],
   );
 
-  // Boot: nickname gate + seed rooms from URL / local API / recent
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -242,23 +277,19 @@ export default function App() {
         const local = await fetchLocalRooms();
         localOk = true;
         if (cancelled) return;
-        for (const r of local.rooms) {
+        for (const r of local.rooms as Array<{
+          id: string;
+          title: string;
+          inviteUrl: string;
+          workspaceRoot?: string;
+          workspaceId?: string;
+          workspaceName?: string;
+        }>) {
           localIds.add(r.id);
           const invite = parseInviteInput(r.inviteUrl);
           if (!invite) continue;
           const existingIdx = seeded.findIndex((s) => s.id === r.id);
-          if (existingIdx >= 0) {
-            seeded[existingIdx] = {
-              ...seeded[existingIdx],
-              title: r.title,
-              token: invite.token,
-              baseUrl: window.location.origin,
-              role: "host",
-              inviteUrl: r.inviteUrl,
-            };
-            continue;
-          }
-          seeded.push({
+          const patch: RoomTab = {
             id: r.id,
             title: r.title,
             baseUrl: window.location.origin,
@@ -266,7 +297,15 @@ export default function App() {
             role: "host",
             unread: 0,
             inviteUrl: r.inviteUrl,
-          });
+            workspaceRoot: r.workspaceRoot,
+            workspaceId: r.workspaceId,
+            workspaceName: r.workspaceName,
+          };
+          if (existingIdx >= 0) {
+            seeded[existingIdx] = { ...seeded[existingIdx], ...patch };
+            continue;
+          }
+          seeded.push(patch);
         }
       } catch {
         localOk = false;
@@ -274,7 +313,6 @@ export default function App() {
 
       if (!cancelled) setCanCreateLocal(localOk);
 
-      // URL-seeded rooms on this origin that aren't in local manage list are guests
       for (const tab of seeded) {
         if (sameOriginBase(tab.baseUrl) && localIds.has(tab.id)) {
           tab.role = "host";
@@ -349,7 +387,6 @@ export default function App() {
     try {
       setShellError(null);
       const created = await createLocalRoom();
-      // Chat traffic can stay on current origin; manage used loopback.
       const baseUrl = window.location.origin;
       upsertTab(
         {
@@ -392,9 +429,6 @@ export default function App() {
       );
       setJoinOpen(false);
       setJoinValue("");
-      if (!joined) {
-        // still need nickname
-      }
     } catch (e) {
       setJoinError(e instanceof Error ? e.message : "加入失败");
     }
@@ -443,6 +477,101 @@ export default function App() {
     }
   };
 
+  const openRoomSettings = async (tab: RoomTab) => {
+    setSettingsTab(tab);
+    setSettingsError(null);
+    setSettingsOpen(true);
+    try {
+      const list = await fetchWorkspaces();
+      setWorkspaces(list);
+    } catch {
+      setWorkspaces([]);
+    }
+  };
+
+  const onSaveRoomSettings = async (input: {
+    title: string;
+    workspaceId: string | null;
+    workspaceRoot: string | null;
+  }) => {
+    if (!settingsTab) return;
+    setSettingsSaving(true);
+    setSettingsError(null);
+    try {
+      const renamed = await renameLocalRoom(settingsTab.id, input.title);
+      const ws = await setLocalRoomWorkspace(settingsTab.id, {
+        workspaceId: input.workspaceId,
+        workspaceRoot: input.workspaceRoot,
+      });
+      const key = roomKey(settingsTab);
+      setRooms((prev) =>
+        prev.map((r) =>
+          roomKey(r) === key
+            ? {
+                ...r,
+                title: renamed.title,
+                workspaceId: ws.workspaceId,
+                workspaceRoot: ws.workspaceRoot,
+                workspaceName: ws.workspaceName,
+              }
+            : r,
+        ),
+      );
+      setSessions((prev) => {
+        const cur = prev[key];
+        if (!cur?.meta) return prev;
+        return {
+          ...prev,
+          [key]: {
+            ...cur,
+            meta: {
+              ...cur.meta,
+              title: renamed.title,
+              workspaceId: ws.workspaceId,
+              workspaceRoot: ws.workspaceRoot,
+              workspaceName: ws.workspaceName,
+            },
+          },
+        };
+      });
+      setSettingsOpen(false);
+      setSettingsTab(null);
+    } catch (e) {
+      setSettingsError(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const openAgentCaps = async () => {
+    setAgentError(null);
+    setAgentOpen(true);
+    try {
+      const data = await fetchRoomAgentProfile();
+      setAgentProfile(data.profile);
+      setAgentCatalog(data.catalog);
+    } catch (e) {
+      setAgentError(e instanceof Error ? e.message : "无法加载 Agent 能力");
+      setAgentProfile(null);
+      setAgentCatalog(null);
+    }
+  };
+
+  const onSaveAgentCaps = async (profile: RoomAgentProfileData) => {
+    setAgentSaving(true);
+    setAgentError(null);
+    try {
+      const data = await saveRoomAgentProfile(profile);
+      setAgentProfile(data.profile);
+      setAgentCatalog(data.catalog);
+      setAgentOpen(false);
+    } catch (e) {
+      setAgentError(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setAgentSaving(false);
+    }
+  };
+
   const onPickFiles = (files: FileList | null) => {
     if (!files?.length || !activeKey) return;
     const next: PendingFile[] = [];
@@ -451,7 +580,7 @@ export default function App() {
         patchSession(activeKey, { error: `文件过大（上限 25MB）：${file.name}` });
         continue;
       }
-      const id = crypto.randomUUID();
+      const id = newId();
       const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
       next.push({ id, file, previewUrl });
     }
@@ -516,7 +645,7 @@ export default function App() {
 
   if (!bootDone) {
     return (
-      <div className="flex h-full items-center justify-center bg-[var(--room-bg)] text-sm text-[var(--text-muted)]">
+      <div className="flex h-full items-center justify-center bg-[#f1f5f9] text-sm text-slate-500 dark:bg-[#0f0f10] dark:text-zinc-400">
         加载中…
       </div>
     );
@@ -524,31 +653,40 @@ export default function App() {
 
   if (!joined) {
     return (
-      <div className="flex h-full items-center justify-center bg-[var(--room-bg)] p-6">
+      <div className="flex h-full items-center justify-center bg-[#f1f5f9] p-6 dark:bg-[#0f0f10]">
         <form
           onSubmit={onJoinNick}
-          className="w-full max-w-sm rounded-2xl bg-[#1e1e1e] p-6 shadow-sm ring-1 ring-white/10"
+          className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-sky-100/70 dark:border-zinc-800 dark:bg-[#1f1f22] dark:shadow-none"
         >
-          <h1 className="text-center text-lg font-semibold text-[var(--text-primary)]">Athlon 聊天房间</h1>
-          <p className="mt-1 text-center text-sm text-[var(--text-muted)]">输入昵称后进入多房间会话</p>
+          <div className="mb-1 flex justify-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-600 text-lg font-bold text-white shadow-sm">
+              A
+            </div>
+          </div>
+          <h1 className="text-center text-lg font-semibold text-slate-900 dark:text-zinc-100">
+            Athlon 聊天房间
+          </h1>
+          <p className="mt-1 text-center text-sm text-slate-500 dark:text-zinc-400">
+            输入昵称后进入多房间会话
+          </p>
           <input
-            className="mt-5 w-full rounded-xl border border-white/10 bg-[#2c2c2c] px-3 py-2.5 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[#12b7f5]/60"
+            className="mt-5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none placeholder:text-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500"
             placeholder="你的昵称"
             value={nickname}
             maxLength={32}
             autoFocus
             onChange={(e) => setNickname(e.target.value)}
           />
-          {shellError ? <p className="mt-2 text-sm text-red-400">{shellError}</p> : null}
+          {shellError ? <p className="mt-2 text-sm text-red-500">{shellError}</p> : null}
           <button
             type="submit"
-            className="mt-4 w-full rounded-xl bg-[#12b7f5] py-2.5 font-medium text-white"
+            className="mt-4 w-full rounded-2xl bg-sky-600 py-2.5 font-medium text-white transition hover:bg-sky-700"
           >
             进入
           </button>
           <button
             type="button"
-            className="mt-2 w-full rounded-xl border border-white/15 py-2.5 text-sm text-[var(--text-primary)] hover:bg-white/5"
+            className="mt-2 w-full rounded-2xl border border-slate-200 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
             onClick={() => setJoinOpen(true)}
           >
             粘贴邀请链接加入
@@ -563,19 +701,17 @@ export default function App() {
             setJoinOpen(false);
             setJoinError(null);
           }}
-          onSubmit={onJoinRemote}
+          onSubmit={() => void onJoinRemote()}
         />
       </div>
     );
   }
 
   return (
-    <div className="flex h-full bg-[var(--room-bg)]">
+    <div className="flex h-full bg-[#f1f5f9] dark:bg-[#0f0f10]">
       <RoomSidebar
         rooms={rooms}
         activeKey={activeKey}
-        collapsed={collapsed}
-        onToggleCollapsed={() => setCollapsed((v) => !v)}
         onSelect={onSelect}
         onCreate={() => void onCreate()}
         onJoin={() => {
@@ -585,6 +721,8 @@ export default function App() {
         onCopyInvite={(t) => void onCopyInvite(t)}
         onLeave={onLeave}
         onCloseHost={(t) => void onCloseHost(t)}
+        onOpenSettings={(t) => void openRoomSettings(t)}
+        onOpenAgentCaps={() => void openAgentCaps()}
         canCreateLocal={canCreateLocal}
       />
 
@@ -604,16 +742,19 @@ export default function App() {
           onPickFiles={onPickFiles}
           onRemovePending={onRemovePending}
           onPreviewImage={(src, alt) => setLightbox({ src, alt })}
+          onOpenSettings={
+            activeTab.role === "host" ? () => void openRoomSettings(activeTab) : undefined
+          }
         />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-          <p className="text-sm text-[var(--text-muted)]">选择或创建一个房间开始聊天</p>
-          {shellError ? <p className="text-sm text-red-400">{shellError}</p> : null}
+          <p className="text-sm text-slate-500 dark:text-zinc-400">选择或创建一个房间开始聊天</p>
+          {shellError ? <p className="text-sm text-red-500">{shellError}</p> : null}
           <div className="flex gap-2">
             {canCreateLocal ? (
               <button
                 type="button"
-                className="rounded-xl bg-[#12b7f5] px-4 py-2 text-sm font-medium text-white"
+                className="rounded-2xl bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
                 onClick={() => void onCreate()}
               >
                 新建房间
@@ -621,7 +762,7 @@ export default function App() {
             ) : null}
             <button
               type="button"
-              className="rounded-xl border border-white/15 px-4 py-2 text-sm text-[var(--text-primary)]"
+              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-white dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
               onClick={() => setJoinOpen(true)}
             >
               加入房间
@@ -639,7 +780,34 @@ export default function App() {
           setJoinOpen(false);
           setJoinError(null);
         }}
-        onSubmit={onJoinRemote}
+        onSubmit={() => void onJoinRemote()}
+      />
+
+      <RoomSettingsDialog
+        open={settingsOpen}
+        tab={settingsTab}
+        workspaces={workspaces}
+        saving={settingsSaving}
+        error={settingsError}
+        onClose={() => {
+          setSettingsOpen(false);
+          setSettingsTab(null);
+          setSettingsError(null);
+        }}
+        onSave={(input) => void onSaveRoomSettings(input)}
+      />
+
+      <RoomAgentSettingsDialog
+        open={agentOpen}
+        profile={agentProfile}
+        catalog={agentCatalog}
+        saving={agentSaving}
+        error={agentError}
+        onClose={() => {
+          setAgentOpen(false);
+          setAgentError(null);
+        }}
+        onSave={(profile) => void onSaveAgentCaps(profile)}
       />
 
       {lightbox ? (

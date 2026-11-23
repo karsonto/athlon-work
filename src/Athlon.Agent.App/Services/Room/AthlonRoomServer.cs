@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Athlon.Agent.Core;
+using Athlon.Agent.Skills;
 using Microsoft.Extensions.Logging;
 
 namespace Athlon.Agent.App.Services.Room;
@@ -45,6 +46,8 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     private readonly RoomStore _store;
     private readonly AppSettings _settings;
     private readonly IActiveWorkspaceContext _workspaceContext;
+    private readonly RoomAgentProfileStore _profileStore;
+    private readonly IAgentSkillCatalog _skillCatalog;
     private readonly ILogger<AthlonRoomServer> _logger;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private readonly ConcurrentDictionary<string, byte> _sseConnections = new();
@@ -65,13 +68,20 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         RoomStore store,
         AppSettings settings,
         IActiveWorkspaceContext workspaceContext,
+        RoomAgentProfileStore profileStore,
+        IAgentSkillCatalog skillCatalog,
         ILogger<AthlonRoomServer> logger)
     {
         _store = store;
         _settings = settings;
         _workspaceContext = workspaceContext;
+        _profileStore = profileStore;
+        _skillCatalog = skillCatalog;
         _logger = logger;
     }
+
+    public RoomInfo? SetRoomTitle(string roomId, string title) =>
+        _store.UpdateTitle(roomId, title);
 
     public bool IsRunning => _listening && _listener is not null;
 
@@ -530,6 +540,58 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         var path = context.Request.Path ?? "";
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
+        // GET /api/workspaces — localhost only
+        if (segments.Length == 2
+            && segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
+            && segments[1].Equals("workspaces", StringComparison.OrdinalIgnoreCase)
+            && method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsLocalRequest(context.Request))
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.Forbidden, new { error = "local_only" }).ConfigureAwait(false);
+                return;
+            }
+
+            var workspaces = _settings.Workspaces
+                .Where(w => !string.IsNullOrWhiteSpace(w.RootPath))
+                .Select(w => new
+                {
+                    id = w.Id,
+                    name = string.IsNullOrWhiteSpace(w.Name) ? w.RootPath : w.Name,
+                    rootPath = w.RootPath,
+                    kind = w.Kind
+                })
+                .ToArray();
+            await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { workspaces }).ConfigureAwait(false);
+            return;
+        }
+
+        // GET/PUT /api/room-agent/profile — localhost only
+        if (segments.Length == 3
+            && segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
+            && segments[1].Equals("room-agent", StringComparison.OrdinalIgnoreCase)
+            && segments[2].Equals("profile", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsLocalRequest(context.Request))
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.Forbidden, new { error = "local_only" }).ConfigureAwait(false);
+                return;
+            }
+
+            if (method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteRoomAgentProfileAsync(context.Response).ConfigureAwait(false);
+                return;
+            }
+
+            if (method.Equals("PUT", StringComparison.OrdinalIgnoreCase)
+                || method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleSaveRoomAgentProfileAsync(context).ConfigureAwait(false);
+                return;
+            }
+        }
+
         // GET/POST /api/rooms — local manage (list / create)
         if (segments.Length == 2
             && segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
@@ -688,6 +750,57 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 workspaceRoot = updated.WorkspaceRoot,
                 workspaceId = updated.WorkspaceId,
                 workspaceName = ResolveWorkspaceName(updated.WorkspaceId, updated.WorkspaceRoot)
+            }).ConfigureAwait(false);
+            return;
+        }
+
+        // POST /api/rooms/{id}/title — localhost only
+        if (segments.Length == 4
+            && segments[3].Equals("title", StringComparison.OrdinalIgnoreCase)
+            && method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsLocalRequest(context.Request))
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.Forbidden, new { error = "local_only" }).ConfigureAwait(false);
+                return;
+            }
+
+            string? title = null;
+            try
+            {
+                using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
+                var body = await reader.ReadToEndAsync().ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(body))
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("title", out var t))
+                    {
+                        title = t.GetString();
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new { error = "title_required" }).ConfigureAwait(false);
+                return;
+            }
+
+            var renamed = SetRoomTitle(roomId, title);
+            if (renamed is null)
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.NotFound, new { error = "room_not_found" }).ConfigureAwait(false);
+                return;
+            }
+
+            await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
+            {
+                id = renamed.Id,
+                title = renamed.Title
             }).ConfigureAwait(false);
             return;
         }
@@ -1196,6 +1309,96 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
 
         return false;
+    }
+
+    private async Task WriteRoomAgentProfileAsync(RoomHttpResponse response)
+    {
+        var profile = _profileStore.GetOrCreate();
+        var skills = _skillCatalog.Skills
+            .Where(s => !string.IsNullOrWhiteSpace(s.Name))
+            .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(s => new { name = s.Name })
+            .ToArray();
+        var mcp = _settings.McpServers
+            .Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Name))
+            .Select(s => new { name = s.Name })
+            .ToArray();
+
+        await WriteJsonAsync(response, HttpStatusCode.OK, new
+        {
+            profile = new
+            {
+                toolAllowList = profile.ToolAllowList,
+                skillNames = profile.SkillNames,
+                mcpServerNames = profile.McpServerNames
+            },
+            catalog = new
+            {
+                tools = RoomAgentProfileStore.CatalogTools,
+                skills,
+                mcpServers = mcp
+            }
+        }).ConfigureAwait(false);
+    }
+
+    private async Task HandleSaveRoomAgentProfileAsync(RoomHttpContext context)
+    {
+        try
+        {
+            using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
+            var body = await reader.ReadToEndAsync().ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("profile", out var nested))
+            {
+                root = nested;
+            }
+
+            var profile = _profileStore.GetOrCreate();
+            if (root.TryGetProperty("toolAllowList", out var tools) && tools.ValueKind == JsonValueKind.Array)
+            {
+                profile.ToolAllowList = tools.EnumerateArray()
+                    .Select(e => e.GetString())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s!.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            if (root.TryGetProperty("skillNames", out var skills) && skills.ValueKind == JsonValueKind.Array)
+            {
+                profile.SkillNames = skills.EnumerateArray()
+                    .Select(e => e.GetString())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s!.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            if (root.TryGetProperty("mcpServerNames", out var mcp) && mcp.ValueKind == JsonValueKind.Array)
+            {
+                profile.McpServerNames = mcp.EnumerateArray()
+                    .Select(e => e.GetString())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s!.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            if (!profile.ToolAllowList.Any(t => string.Equals(t, "room_share_file", StringComparison.OrdinalIgnoreCase)))
+            {
+                profile.ToolAllowList.Add("room_share_file");
+            }
+
+            _profileStore.Save(profile);
+            await WriteRoomAgentProfileAsync(context.Response).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to save room agent profile.");
+            await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new { error = "invalid_profile" })
+                .ConfigureAwait(false);
+        }
     }
 
     private (string? Root, string? Id) ResolveWorkspaceInputs(

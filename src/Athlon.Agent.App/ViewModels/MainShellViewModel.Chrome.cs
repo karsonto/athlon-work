@@ -774,20 +774,12 @@ public partial class MainShellViewModel
                     _athlonRoomServer.BindHint);
             }
 
-            var owner = Application.Current?.MainWindow;
-            var window = new RoomInviteWindow(
-                _athlonRoomServer,
-                _roomAgentBridge,
-                _roomAgentProfileStore,
-                _roomStore,
-                _roomSkillCatalog,
-                _appSettings);
-            if (owner is not null)
+            var url = $"http://127.0.0.1:{_athlonRoomServer.Port}/";
+            Process.Start(new ProcessStartInfo
             {
-                window.Owner = owner;
-            }
-
-            window.ShowDialog();
+                FileName = url,
+                UseShellExecute = true
+            });
         }
         catch (Exception exception)
         {

@@ -21,9 +21,17 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const isAgent = message.kind === "agent" || message.senderId === "athlon-agent";
   const name = message.displayName || (isAgent ? "Athlon" : "用户");
-  const avatar = (
+
+  const avatar = isAgent ? (
     <div
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-sm font-semibold text-white"
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-600 text-sm font-semibold text-white shadow-sm"
+      title={name}
+    >
+      A
+    </div>
+  ) : (
+    <div
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold text-white shadow-sm"
       style={{ background: avatarColor(message.senderId || name) }}
       title={name}
     >
@@ -32,20 +40,20 @@ export function MessageBubble({
   );
 
   const bubbleClass = isMine
-    ? "bubble-tail-right bg-[var(--bubble-me)] text-white"
+    ? "rounded-3xl bg-sky-600 px-4 py-3 text-white shadow-sm"
     : isAgent
-      ? "bubble-tail-left is-agent bg-[var(--bubble-agent)] text-[var(--text-primary)]"
-      : "bubble-tail-left bg-[var(--bubble-other)] text-[var(--text-primary)]";
+      ? "rounded-3xl bg-white px-4 py-3 text-slate-800 ring-1 ring-slate-200 shadow-sm dark:bg-[#27272a] dark:text-zinc-100 dark:ring-zinc-700"
+      : "rounded-3xl bg-white px-4 py-3 text-slate-800 ring-1 ring-slate-200 shadow-sm dark:bg-[#27272a] dark:text-zinc-100 dark:ring-zinc-700";
 
   const body = (
-    <div className={`min-w-0 max-w-[min(78%,28rem)] ${isMine ? "items-end" : "items-start"} flex flex-col`}>
+    <div className={`flex min-w-0 max-w-[min(78%,28rem)] flex-col ${isMine ? "items-end" : "items-start"}`}>
       <div className={`mb-1 flex w-full items-baseline gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
-        <span className="truncate text-xs text-[var(--text-muted)]">{name}</span>
-        <time className="shrink-0 text-[10px] text-[var(--text-muted)]/80">
+        <span className="truncate text-xs text-slate-500 dark:text-zinc-400">{name}</span>
+        <time className="shrink-0 text-[10px] text-slate-400 dark:text-zinc-500">
           {formatTime(message.createdAt)}
         </time>
       </div>
-      <div className={`rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed ${bubbleClass}`}>
+      <div className={`text-[15px] leading-relaxed ${bubbleClass}`}>
         {message.text ? <p className="whitespace-pre-wrap break-words">{message.text}</p> : null}
         {message.attachments?.map((att) => {
           const url = attachmentUrl(baseUrl, roomId, token, att.id);
@@ -54,7 +62,7 @@ export function MessageBubble({
               <button
                 key={att.id}
                 type="button"
-                className={`block overflow-hidden rounded-lg ${message.text ? "mt-2" : ""}`}
+                className={`block overflow-hidden rounded-2xl ${message.text ? "mt-2" : ""}`}
                 onClick={() => onPreviewImage(url, att.fileName)}
               >
                 <img
@@ -74,16 +82,24 @@ export function MessageBubble({
               download={att.fileName}
               target="_blank"
               rel="noreferrer"
-              className={`flex min-w-[200px] items-center gap-3 rounded-lg bg-black/25 px-3 py-2.5 hover:bg-black/35 ${
-                message.text ? "mt-2" : ""
-              }`}
+              className={`flex min-w-[200px] items-center gap-3 rounded-2xl px-3 py-2.5 ${
+                isMine
+                  ? "bg-sky-700/40 hover:bg-sky-700/55"
+                  : "bg-slate-50 hover:bg-slate-100 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+              } ${message.text ? "mt-2" : ""}`}
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 text-white">
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                  isMine ? "bg-white/15 text-white" : "bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300"
+                }`}
+              >
                 <FileIcon size={18} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{att.fileName}</div>
-                <div className="text-xs opacity-70">{formatBytes(att.size)}</div>
+                <div className={`text-xs ${isMine ? "opacity-80" : "text-slate-500 dark:text-zinc-400"}`}>
+                  {formatBytes(att.size)}
+                </div>
               </div>
               <Download size={16} className="shrink-0 opacity-80" />
             </a>
@@ -93,16 +109,9 @@ export function MessageBubble({
     </div>
   );
 
-  // Own messages hug the right; everyone else (incl. agent) hugs the left.
   return (
-    <div
-      className={`flex w-full px-3 ${isMine ? "justify-end" : "justify-start"}`}
-    >
-      <div
-        className={`flex max-w-[min(85%,32rem)] gap-2.5 ${
-          isMine ? "flex-row-reverse" : "flex-row"
-        }`}
-      >
+    <div className={`flex w-full px-4 ${isMine ? "justify-end" : "justify-start"}`}>
+      <div className={`flex max-w-[min(85%,32rem)] gap-2.5 ${isMine ? "flex-row-reverse" : "flex-row"}`}>
         {avatar}
         {body}
       </div>
@@ -122,16 +131,14 @@ function avatarColor(seed: string): string {
     hash = seed.charCodeAt(i) + ((hash << 5) - hash);
   }
   const colors = [
-    "#5b8ff9",
-    "#61ddaa",
-    "#65789b",
-    "#f6bd16",
-    "#7262fd",
-    "#78d3f8",
-    "#9661bc",
-    "#f6903d",
-    "#008685",
-    "#f08bb4",
+    "#0ea5e9",
+    "#0284c7",
+    "#6366f1",
+    "#14b8a6",
+    "#f59e0b",
+    "#8b5cf6",
+    "#64748b",
+    "#f97316",
   ];
   return colors[Math.abs(hash) % colors.length];
 }

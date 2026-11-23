@@ -77,6 +77,30 @@ public sealed class RoomStore
         return room;
     }
 
+    public RoomInfo? UpdateTitle(string roomId, string title)
+    {
+        var room = GetRoom(roomId);
+        if (room is null)
+        {
+            return null;
+        }
+
+        var trimmed = string.IsNullOrWhiteSpace(title) ? "Athlon 聊天房间" : title.Trim();
+        if (trimmed.Length > 80)
+        {
+            trimmed = trimmed[..80];
+        }
+
+        room.Title = trimmed;
+        WriteRoomJson(room);
+        if (_rooms.TryGetValue(roomId, out var runtime))
+        {
+            runtime.UpdateInfo(room);
+        }
+
+        return room;
+    }
+
     private static string? NormalizeOptionalPath(string? path) =>
         string.IsNullOrWhiteSpace(path) ? null : path.Trim();
 
