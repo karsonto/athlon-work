@@ -25,11 +25,13 @@ import {
   saveRecentRoom,
 } from "./lib/recentRooms";
 import type {
+  AgentTraceStep,
   PendingFile,
   RoomAgentCatalog,
   RoomAgentProfileData,
   RoomMessage,
   RoomMeta,
+  RoomPresenceMember,
   RoomTab,
   WorkspaceItem,
 } from "./types";
@@ -51,6 +53,9 @@ interface SessionBundle {
   seenIds: Set<string>;
   error: string | null;
   loaded: boolean;
+  /** Host-only live traces keyed by agent message id. */
+  agentTraces: Record<string, AgentTraceStep[]>;
+  members: RoomPresenceMember[];
 }
 
 function emptySession(): SessionBundle {
@@ -62,6 +67,8 @@ function emptySession(): SessionBundle {
     seenIds: new Set(),
     error: null,
     loaded: false,
+    agentTraces: {},
+    members: [],
   };
 }
 
@@ -104,6 +111,7 @@ export default function App() {
 
   const roomsRef = useRef(rooms);
   const activeKeyRef = useRef(activeKey);
+  const nicknameRef = useRef(nickname);
   const esMap = useRef(new Map<string, EventSource>());
   const sessionsRef = useRef(sessions);
 
@@ -113,6 +121,9 @@ export default function App() {
   useEffect(() => {
     activeKeyRef.current = activeKey;
   }, [activeKey]);
+  useEffect(() => {
+    nicknameRef.current = nickname;
+  }, [nickname]);
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
@@ -179,6 +190,25 @@ export default function App() {
     [bumpUnread],
   );
 
+  const appendAgentTrace = useCallback((key: string, step: AgentTraceStep) => {
+    if (!step.messageId) return;
+    setSessions((prev) => {
+      const cur = prev[key] ?? emptySession();
+      const list = cur.agentTraces[step.messageId] ?? [];
+      if (list.some((s) => s.id === step.id)) return prev;
+      return {
+        ...prev,
+        [key]: {
+          ...cur,
+          agentTraces: {
+            ...cur.agentTraces,
+            [step.messageId]: [...list, step],
+          },
+        },
+      };
+    });
+  }, []);
+
   const ensureSse = useCallback(
     (tab: RoomTab) => {
       const key = roomKey(tab);
@@ -195,12 +225,21 @@ export default function App() {
         tab.baseUrl,
         tab.id,
         tab.token,
+        {
+          senderId,
+          displayName: nicknameRef.current.trim() || "访客",
+        },
         (msg) => upsertMessage(key, msg),
         (msg) => upsertMessage(key, msg),
+        // Server only emits agent_trace on loopback; guests simply never receive it.
+        (step) => appendAgentTrace(key, step),
+        (snapshot) => {
+          patchSession(key, { members: snapshot.members ?? [] });
+        },
       );
       esMap.current.set(key, es);
     },
-    [upsertMessage],
+    [appendAgentTrace, patchSession, senderId, upsertMessage],
   );
 
   const loadSession = useCallback(
@@ -389,18 +428,21 @@ export default function App() {
       setShellError(null);
       const created = await createLocalRoom();
       const baseUrl = window.location.origin;
-      upsertTab(
-        {
-          id: created.id,
-          title: created.title,
-          baseUrl,
-          token: created.token,
-          role: "host",
-          unread: 0,
-          inviteUrl: created.inviteUrl,
-        },
-        true,
-      );
+      const tab: RoomTab = {
+        id: created.id,
+        title: created.title,
+        baseUrl,
+        token: created.token,
+        role: "host",
+        unread: 0,
+        inviteUrl: created.inviteUrl,
+        workspaceRoot: null,
+        workspaceId: null,
+        workspaceName: null,
+      };
+      upsertTab(tab, true);
+      // Require host to set workspace manually — no silent default.
+      void openRoomSettings(tab);
     } catch (e) {
       setShellError(e instanceof Error ? e.message : "创建失败");
     }
@@ -741,6 +783,8 @@ export default function App() {
           sending={sending}
           error={activeSession.error ?? shellError}
           senderId={senderId}
+          members={activeSession.members}
+          agentTraces={activeSession.agentTraces}
           onDraftChange={onDraftChange}
           onSend={() => void onSend()}
           onPickFiles={onPickFiles}

@@ -757,9 +757,8 @@ public partial class MainShellViewModel
         {
             if (!_athlonRoomServer.IsRunning || _athlonRoomServer.ActiveRoomIds.Count == 0)
             {
-                await _athlonRoomServer.StartOrCreateRoomAsync(
-                    workspaceRoot: _workspaceContext.RootPath ?? _session.ActiveWorkspace,
-                    workspaceId: _workspaceContext.WorkspaceId ?? _session.ActiveWorkspaceId).ConfigureAwait(true);
+                // Workspace must be set manually in the Web room settings — do not inherit the shell workspace.
+                await _athlonRoomServer.StartOrCreateRoomAsync().ConfigureAwait(true);
             }
 
             _roomAgentBridge.AttachToActiveRoom();

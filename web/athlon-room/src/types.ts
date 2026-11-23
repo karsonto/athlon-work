@@ -72,6 +72,28 @@ export interface RoomAgentProfileResponse {
   catalog: RoomAgentCatalog;
 }
 
+export interface AgentTraceStep {
+  id: string;
+  messageId: string;
+  type: "run_started" | "tool_start" | "tool_args" | "tool_result" | "reasoning" | "run_finished" | "error" | string;
+  toolCallId?: string | null;
+  toolName?: string | null;
+  summary?: string | null;
+  at: string;
+}
+
+export interface RoomPresenceMember {
+  senderId: string;
+  displayName: string;
+  joinedAt: string;
+}
+
+export interface RoomPresenceSnapshot {
+  roomId: string;
+  members: RoomPresenceMember[];
+  count: number;
+}
+
 export interface RoomSessionState {
   messages: RoomMessage[];
   draft: string;

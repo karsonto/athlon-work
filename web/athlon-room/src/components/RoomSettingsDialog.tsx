@@ -80,11 +80,10 @@ export function RoomSettingsDialog({
           <button
             type="button"
             className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:opacity-50"
-            disabled={saving || !title.trim()}
+            disabled={saving || !title.trim() || !customPath.trim()}
             onClick={() => {
               const trimmedPath = customPath.trim();
               if (!trimmedPath) {
-                onSave({ title: title.trim(), workspaceId: null, workspaceRoot: null });
                 return;
               }
 
@@ -125,7 +124,8 @@ export function RoomSettingsDialog({
 
       <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-zinc-200">工作区</label>
       <p className="mb-2 text-xs text-slate-500 dark:text-zinc-400">
-        @agent 将在此路径读写文件。可选手动输入本机目录，例如 C:\xxxx。留空则使用 Athlon 当前活动工作区。
+        新建房间不会自动带入工作区，请在此选择或手输本机路径（例如 C:\xxxx）。@agent
+        与聊天上传都会使用该目录。
       </p>
       <select
         className="mb-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
@@ -147,7 +147,7 @@ export function RoomSettingsDialog({
           }
         }}
       >
-        <option value="">使用当前活动工作区</option>
+        <option value="">请选择或手输路径</option>
         {workspaces.map((w) => (
           <option key={w.id || w.rootPath} value={w.id ? `id:${w.id}` : `root:${w.rootPath}`}>
             {w.name}

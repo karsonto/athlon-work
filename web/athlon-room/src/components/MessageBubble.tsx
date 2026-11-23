@@ -1,6 +1,8 @@
 import { Download, FileIcon } from "lucide-react";
-import type { RoomMessage } from "../types";
+import type { AgentTraceStep, RoomMessage } from "../types";
 import { attachmentUrl, formatBytes } from "../lib/api";
+import { AgentTracePanel } from "./AgentTracePanel";
+import { MarkdownContent } from "./MarkdownContent";
 
 interface MessageBubbleProps {
   message: RoomMessage;
@@ -9,6 +11,8 @@ interface MessageBubbleProps {
   roomId: string;
   token: string;
   onPreviewImage: (url: string, alt: string) => void;
+  /** Host-only live @agent tool/model trace for this bubble. */
+  agentTrace?: AgentTraceStep[];
 }
 
 export function MessageBubble({
@@ -18,6 +22,7 @@ export function MessageBubble({
   roomId,
   token,
   onPreviewImage,
+  agentTrace,
 }: MessageBubbleProps) {
   const isAgent = message.kind === "agent" || message.senderId === "athlon-agent";
   const name = message.displayName || (isAgent ? "Athlon" : "用户");
@@ -39,14 +44,19 @@ export function MessageBubble({
     </div>
   );
 
+  // Agent bubbles match report/html: max-w-[85%] of the chat pane (no rem cap).
   const bubbleClass = isMine
     ? "rounded-3xl bg-sky-600 px-4 py-3 text-white shadow-sm"
     : isAgent
-      ? "rounded-3xl bg-white px-4 py-3 text-slate-800 ring-1 ring-slate-200 shadow-sm dark:bg-[#27272a] dark:text-zinc-100 dark:ring-zinc-700"
+      ? "w-full max-w-[85%] rounded-3xl bg-white px-5 py-4 text-slate-800 shadow-sm ring-1 ring-slate-200 dark:bg-[#262628] dark:text-zinc-100 dark:ring-zinc-700"
       : "rounded-3xl bg-white px-4 py-3 text-slate-800 ring-1 ring-slate-200 shadow-sm dark:bg-[#27272a] dark:text-zinc-100 dark:ring-zinc-700";
 
   const body = (
-    <div className={`flex min-w-0 max-w-[min(78%,28rem)] flex-col ${isMine ? "items-end" : "items-start"}`}>
+    <div
+      className={`flex min-w-0 flex-col ${isMine ? "items-end" : "items-start"} ${
+        isAgent ? "w-full" : "max-w-[min(78%,28rem)]"
+      }`}
+    >
       <div className={`mb-1 flex w-full items-baseline gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
         <span className="truncate text-xs text-slate-500 dark:text-zinc-400">{name}</span>
         <time className="shrink-0 text-[10px] text-slate-400 dark:text-zinc-500">
@@ -54,7 +64,13 @@ export function MessageBubble({
         </time>
       </div>
       <div className={`text-[15px] leading-relaxed ${bubbleClass}`}>
-        {message.text ? <p className="whitespace-pre-wrap break-words">{message.text}</p> : null}
+        {message.text ? (
+          isAgent ? (
+            <MarkdownContent content={message.text} />
+          ) : (
+            <p className="whitespace-pre-wrap break-words">{message.text}</p>
+          )
+        ) : null}
         {message.attachments?.map((att) => {
           const url = attachmentUrl(baseUrl, roomId, token, att.id);
           if (att.isImage || att.mimeType.startsWith("image/")) {
@@ -105,13 +121,18 @@ export function MessageBubble({
             </a>
           );
         })}
+        {isAgent && agentTrace && agentTrace.length > 0 ? (
+          <AgentTracePanel steps={agentTrace} />
+        ) : null}
       </div>
     </div>
   );
 
   return (
     <div className={`flex w-full px-4 ${isMine ? "justify-end" : "justify-start"}`}>
-      <div className={`flex max-w-[min(85%,32rem)] gap-2.5 ${isMine ? "flex-row-reverse" : "flex-row"}`}>
+      <div
+        className={`flex gap-2.5 ${isMine ? "max-w-[min(85%,32rem)] flex-row-reverse" : "w-full flex-row"}`}
+      >
         {avatar}
         {body}
       </div>

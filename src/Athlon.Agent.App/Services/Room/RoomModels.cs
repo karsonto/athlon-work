@@ -112,3 +112,43 @@ public enum RoomStoreEventKind
 }
 
 public readonly record struct RoomStoreEvent(RoomStoreEventKind Kind, RoomMessage Message);
+
+public sealed class RoomPresenceMember
+{
+    public string SenderId { get; set; } = "";
+
+    public string DisplayName { get; set; } = "";
+
+    public DateTimeOffset JoinedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class RoomPresenceSnapshot
+{
+    public string RoomId { get; set; } = "";
+
+    public List<RoomPresenceMember> Members { get; set; } = new();
+
+    public int Count => Members.Count;
+}
+
+/// <summary>Host-only live trace of @agent tool/model activity (not persisted to chat history).</summary>
+public sealed class RoomAgentTraceEvent
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
+    public string RoomId { get; set; } = "";
+
+    /// <summary>Agent chat bubble message id this run is attached to.</summary>
+    public string MessageId { get; set; } = "";
+
+    /// <summary>run_started | tool_start | tool_args | tool_result | reasoning | run_finished | error</summary>
+    public string Type { get; set; } = "";
+
+    public string? ToolCallId { get; set; }
+
+    public string? ToolName { get; set; }
+
+    public string? Summary { get; set; }
+
+    public DateTimeOffset At { get; set; } = DateTimeOffset.UtcNow;
+}

@@ -418,6 +418,44 @@ public sealed class RoomStore
         return runtime.Subscribe(handler);
     }
 
+    public IDisposable SubscribeTrace(string roomId, Action<RoomAgentTraceEvent> handler)
+    {
+        var runtime = EnsureRuntime(roomId);
+        return runtime.SubscribeTrace(handler);
+    }
+
+    public void PublishTrace(string roomId, RoomAgentTraceEvent evt)
+    {
+        ArgumentNullException.ThrowIfNull(evt);
+        evt.RoomId = roomId;
+        if (string.IsNullOrWhiteSpace(evt.Id))
+        {
+            evt.Id = Guid.NewGuid().ToString("N");
+        }
+
+        if (evt.At == default)
+        {
+            evt.At = DateTimeOffset.UtcNow;
+        }
+
+        var runtime = EnsureRuntime(roomId);
+        runtime.RaiseTrace(evt);
+    }
+
+    public IDisposable SubscribePresence(string roomId, Action<RoomPresenceSnapshot> handler)
+    {
+        var runtime = EnsureRuntime(roomId);
+        return runtime.SubscribePresence(handler);
+    }
+
+    public void PublishPresence(string roomId, RoomPresenceSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        snapshot.RoomId = roomId;
+        var runtime = EnsureRuntime(roomId);
+        runtime.RaisePresence(snapshot);
+    }
+
     public void InvalidateToken(string roomId)
     {
         var room = GetRoom(roomId);
@@ -592,6 +630,8 @@ public sealed class RoomStore
     {
         private readonly object _gate = new();
         private readonly List<Action<RoomStoreEvent>> _handlers = new();
+        private readonly List<Action<RoomAgentTraceEvent>> _traceHandlers = new();
+        private readonly List<Action<RoomPresenceSnapshot>> _presenceHandlers = new();
         private readonly List<RoomMessage> _messages;
 
         public RoomRuntime(RoomInfo info, List<RoomMessage> messages)
@@ -652,6 +692,22 @@ public sealed class RoomStore
             });
         }
 
+        public IDisposable SubscribeTrace(Action<RoomAgentTraceEvent> handler)
+        {
+            lock (_gate)
+            {
+                _traceHandlers.Add(handler);
+            }
+
+            return new Unsubscriber(() =>
+            {
+                lock (_gate)
+                {
+                    _traceHandlers.Remove(handler);
+                }
+            });
+        }
+
         public void Raise(RoomStoreEvent storeEvent)
         {
             Action<RoomStoreEvent>[] snapshot;
@@ -665,6 +721,64 @@ public sealed class RoomStore
                 try
                 {
                     handler(storeEvent);
+                }
+                catch
+                {
+                    // ignore subscriber errors
+                }
+            }
+        }
+
+        public void RaiseTrace(RoomAgentTraceEvent evt)
+        {
+            Action<RoomAgentTraceEvent>[] snapshot;
+            lock (_gate)
+            {
+                snapshot = _traceHandlers.ToArray();
+            }
+
+            foreach (var handler in snapshot)
+            {
+                try
+                {
+                    handler(evt);
+                }
+                catch
+                {
+                    // ignore subscriber errors
+                }
+            }
+        }
+
+        public IDisposable SubscribePresence(Action<RoomPresenceSnapshot> handler)
+        {
+            lock (_gate)
+            {
+                _presenceHandlers.Add(handler);
+            }
+
+            return new Unsubscriber(() =>
+            {
+                lock (_gate)
+                {
+                    _presenceHandlers.Remove(handler);
+                }
+            });
+        }
+
+        public void RaisePresence(RoomPresenceSnapshot snapshot)
+        {
+            Action<RoomPresenceSnapshot>[] handlers;
+            lock (_gate)
+            {
+                handlers = _presenceHandlers.ToArray();
+            }
+
+            foreach (var handler in handlers)
+            {
+                try
+                {
+                    handler(snapshot);
                 }
                 catch
                 {

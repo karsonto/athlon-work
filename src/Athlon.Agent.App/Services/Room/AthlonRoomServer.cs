@@ -52,6 +52,18 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private readonly ConcurrentDictionary<string, byte> _sseConnections = new();
     private readonly ConcurrentDictionary<string, byte> _activeRoomIds = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>roomId → connectionId → presence connection.</summary>
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, PresenceConnection>> _presenceByRoom =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private sealed class PresenceConnection
+    {
+        public required string SenderId { get; init; }
+
+        public required string DisplayName { get; set; }
+
+        public DateTimeOffset JoinedAt { get; init; } = DateTimeOffset.UtcNow;
+    }
 
     private TcpListener? _listener;
     private volatile bool _listening;
@@ -199,7 +211,8 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         try
         {
             _port = port is > 0 and < 65535 ? port.Value : DefaultPort;
-            var (root, id) = ResolveWorkspaceInputs(workspaceRoot, workspaceId);
+            // Do not auto-fill active/first workspace — host must set it in room settings.
+            var (root, id) = ResolveWorkspaceInputs(workspaceRoot, workspaceId, allowEmpty: false);
             var room = _store.CreateRoom(title, root, id);
             _activeRoomIds[room.Id] = 0;
 
@@ -1074,8 +1087,10 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         context.Response.StatusCode = (int)HttpStatusCode.OK;
         context.Response.ContentType = meta.MimeType;
         var disposition = meta.IsImage ? "inline" : "attachment";
+        // RFC 6266 / 5987: filename* is UTF-8 percent-encoded. Plain filename= is Latin-1
+        // fallback only — putting raw CJK there makes Chrome/Edge/Safari save garbled names.
         context.Response.Headers["Content-Disposition"] =
-            $"{disposition}; filename=\"{meta.FileName.Replace("\"", "", StringComparison.Ordinal)}\"";
+            BuildContentDisposition(disposition, meta.FileName);
 
         await using var stream = File.OpenRead(path);
         context.Response.ContentLength64 = stream.Length;
@@ -1088,6 +1103,22 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     {
         var connectionId = Guid.NewGuid().ToString("N");
         _sseConnections[connectionId] = 0;
+
+        var senderId = (context.Request.QueryString["senderId"] ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(senderId) || senderId.Length > 64)
+        {
+            senderId = connectionId[..12];
+        }
+
+        var displayName = (context.Request.QueryString["displayName"] ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            displayName = "访客";
+        }
+        else if (displayName.Length > 32)
+        {
+            displayName = displayName[..32];
+        }
 
         context.Response.StatusCode = (int)HttpStatusCode.OK;
         context.Response.ContentType = "text/event-stream; charset=utf-8";
@@ -1117,6 +1148,44 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             }
         });
 
+        using var presenceSubscription = _store.SubscribePresence(roomId, snapshot =>
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(snapshot, JsonOptions);
+                var payload = $"event: presence\ndata: {json}\n\n";
+                var bytes = Encoding.UTF8.GetBytes(payload);
+                context.Response.WriteBodySync(bytes);
+            }
+            catch
+            {
+                // connection likely closed
+            }
+        });
+
+        // Host-only: @agent tool/model trace (never sent to LAN guests).
+        IDisposable? traceSubscription = null;
+        if (IsLocalRequest(context.Request))
+        {
+            traceSubscription = _store.SubscribeTrace(roomId, traceEvent =>
+            {
+                try
+                {
+                    var json = JsonSerializer.Serialize(traceEvent, JsonOptions);
+                    var payload = $"event: agent_trace\ndata: {json}\n\n";
+                    var bytes = Encoding.UTF8.GetBytes(payload);
+                    context.Response.WriteBodySync(bytes);
+                }
+                catch
+                {
+                    // connection likely closed
+                }
+            });
+        }
+
+        RegisterPresence(roomId, connectionId, senderId, displayName);
+        BroadcastPresence(roomId);
+
         try
         {
             // Keep alive until client disconnects or server stops
@@ -1144,6 +1213,9 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
         finally
         {
+            traceSubscription?.Dispose();
+            UnregisterPresence(roomId, connectionId);
+            BroadcastPresence(roomId);
             _sseConnections.TryRemove(connectionId, out _);
             try
             {
@@ -1154,6 +1226,83 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 // ignore
             }
         }
+    }
+
+    private void RegisterPresence(string roomId, string connectionId, string senderId, string displayName)
+    {
+        var roomMap = _presenceByRoom.GetOrAdd(
+            roomId,
+            _ => new ConcurrentDictionary<string, PresenceConnection>(StringComparer.OrdinalIgnoreCase));
+
+        // Refresh display name if same sender reconnects from another tab.
+        foreach (var existing in roomMap.Values)
+        {
+            if (string.Equals(existing.SenderId, senderId, StringComparison.OrdinalIgnoreCase))
+            {
+                existing.DisplayName = displayName;
+            }
+        }
+
+        roomMap[connectionId] = new PresenceConnection
+        {
+            SenderId = senderId,
+            DisplayName = displayName,
+            JoinedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    private void UnregisterPresence(string roomId, string connectionId)
+    {
+        if (!_presenceByRoom.TryGetValue(roomId, out var roomMap))
+        {
+            return;
+        }
+
+        roomMap.TryRemove(connectionId, out _);
+        if (roomMap.IsEmpty)
+        {
+            _presenceByRoom.TryRemove(roomId, out _);
+        }
+    }
+
+    private void BroadcastPresence(string roomId)
+    {
+        var snapshot = BuildPresenceSnapshot(roomId);
+        _store.PublishPresence(roomId, snapshot);
+    }
+
+    private RoomPresenceSnapshot BuildPresenceSnapshot(string roomId)
+    {
+        var members = new Dictionary<string, RoomPresenceMember>(StringComparer.OrdinalIgnoreCase);
+        if (_presenceByRoom.TryGetValue(roomId, out var roomMap))
+        {
+            foreach (var conn in roomMap.Values)
+            {
+                if (members.TryGetValue(conn.SenderId, out var existing))
+                {
+                    existing.DisplayName = conn.DisplayName;
+                    if (conn.JoinedAt < existing.JoinedAt)
+                    {
+                        existing.JoinedAt = conn.JoinedAt;
+                    }
+                }
+                else
+                {
+                    members[conn.SenderId] = new RoomPresenceMember
+                    {
+                        SenderId = conn.SenderId,
+                        DisplayName = conn.DisplayName,
+                        JoinedAt = conn.JoinedAt
+                    };
+                }
+            }
+        }
+
+        return new RoomPresenceSnapshot
+        {
+            RoomId = roomId,
+            Members = members.Values.OrderBy(m => m.JoinedAt).ToList()
+        };
     }
 
     private async Task ServeStaticAsync(RoomHttpContext context, string contentRoot)
@@ -1242,8 +1391,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 continue;
             }
 
-            var nameMatch = Regex.Match(headers, @"filename=""([^""]*)""", RegexOptions.IgnoreCase);
-            var fileName = nameMatch.Success ? nameMatch.Groups[1].Value : "upload.bin";
+            var fileName = ExtractMultipartFileName(headers) ?? "upload.bin";
             var mimeMatch = Regex.Match(headers, @"Content-Type:\s*([^\r\n]+)", RegexOptions.IgnoreCase);
             var mime = mimeMatch.Success ? mimeMatch.Groups[1].Value.Trim() : "application/octet-stream";
 
@@ -1443,11 +1591,16 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
     }
 
-    /// <summary>Same resolution order as RoomAgentBridge: room workspace → active → first configured → null.</summary>
+    /// <summary>Only the room's explicitly configured workspace — no silent active/first fallback.</summary>
     private string? ResolveRoomWorkspaceRoot(string roomId)
     {
         var room = _store.GetRoom(roomId);
-        if (room is not null && !string.IsNullOrWhiteSpace(room.WorkspaceId))
+        if (room is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(room.WorkspaceId))
         {
             var match = _settings.Workspaces.FirstOrDefault(w =>
                 string.Equals(w.Id, room.WorkspaceId, StringComparison.OrdinalIgnoreCase));
@@ -1457,18 +1610,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             }
         }
 
-        if (room is not null && !string.IsNullOrWhiteSpace(room.WorkspaceRoot))
-        {
-            return room.WorkspaceRoot.Trim();
-        }
-
-        if (!string.IsNullOrWhiteSpace(_workspaceContext.RootPath))
-        {
-            return _workspaceContext.RootPath;
-        }
-
-        var first = _settings.Workspaces.FirstOrDefault(w => !string.IsNullOrWhiteSpace(w.RootPath));
-        return first?.RootPath?.Trim();
+        return string.IsNullOrWhiteSpace(room.WorkspaceRoot) ? null : room.WorkspaceRoot.Trim();
     }
 
     private (string? Root, string? Id) ResolveWorkspaceInputs(
@@ -1681,6 +1823,67 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         response.Headers["Access-Control-Allow-Origin"] = "*";
         response.Headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-File-Name";
         response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
+    }
+
+    /// <summary>
+    /// Build Content-Disposition with ASCII filename= fallback + UTF-8 filename* (RFC 5987).
+    /// </summary>
+    internal static string BuildContentDisposition(string disposition, string fileName)
+    {
+        var raw = (fileName ?? "download")
+            .Replace("\"", "", StringComparison.Ordinal)
+            .Replace("\r", "", StringComparison.Ordinal)
+            .Replace("\n", "", StringComparison.Ordinal)
+            .Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            raw = "download";
+        }
+
+        var ascii = new StringBuilder(raw.Length);
+        foreach (var ch in raw)
+        {
+            ascii.Append(ch is >= (char)0x20 and <= (char)0x7E and not '"' ? ch : '_');
+        }
+
+        var asciiName = ascii.ToString().Trim('_');
+        if (string.IsNullOrWhiteSpace(asciiName))
+        {
+            asciiName = "download";
+        }
+
+        // Uri.EscapeDataString percent-encodes as UTF-8; star-encoding forbids + for space.
+        var encoded = Uri.EscapeDataString(raw).Replace("+", "%20", StringComparison.Ordinal);
+        return $"{disposition}; filename=\"{asciiName}\"; filename*=UTF-8''{encoded}";
+    }
+
+    private static string? ExtractMultipartFileName(string headers)
+    {
+        // Prefer RFC 5987 filename*=UTF-8''...
+        var star = Regex.Match(
+            headers,
+            @"filename\*\s*=\s*(?:UTF-8|utf-8)''([^;\s]+)",
+            RegexOptions.IgnoreCase);
+        if (star.Success)
+        {
+            try
+            {
+                return Uri.UnescapeDataString(star.Groups[1].Value.Trim().Trim('"'));
+            }
+            catch
+            {
+                // fall through
+            }
+        }
+
+        var quoted = Regex.Match(headers, @"filename\s*=\s*""([^""]*)""", RegexOptions.IgnoreCase);
+        if (quoted.Success)
+        {
+            return quoted.Groups[1].Value;
+        }
+
+        var bare = Regex.Match(headers, @"filename\s*=\s*([^;\r\n]+)", RegexOptions.IgnoreCase);
+        return bare.Success ? bare.Groups[1].Value.Trim().Trim('"') : null;
     }
 
     private static async Task WriteJsonAsync(RoomHttpResponse response, HttpStatusCode status, object body)

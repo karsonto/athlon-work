@@ -1,9 +1,11 @@
 import type {
+  AgentTraceStep,
   RoomAgentProfileData,
   RoomAgentProfileResponse,
   RoomAttachment,
   RoomMessage,
   RoomMeta,
+  RoomPresenceSnapshot,
   WorkspaceItem,
 } from "../types";
 
@@ -309,11 +311,19 @@ export function connectEvents(
   baseUrl: string,
   roomId: string,
   token: string,
+  identity: { senderId: string; displayName: string },
   onMessage: (msg: RoomMessage) => void,
   onMessageUpdated?: (msg: RoomMessage) => void,
+  onAgentTrace?: (step: AgentTraceStep) => void,
+  onPresence?: (snapshot: RoomPresenceSnapshot) => void,
   onError?: (err: Event) => void,
 ): EventSource {
-  const url = apiUrl(baseUrl, `/api/rooms/${roomId}/events?t=${encodeURIComponent(token)}`);
+  const qs = new URLSearchParams({
+    t: token,
+    senderId: identity.senderId,
+    displayName: identity.displayName,
+  });
+  const url = apiUrl(baseUrl, `/api/rooms/${roomId}/events?${qs}`);
   const es = new EventSource(url);
   es.addEventListener("message", (ev) => {
     try {
@@ -325,6 +335,20 @@ export function connectEvents(
   es.addEventListener("message_updated", (ev) => {
     try {
       onMessageUpdated?.(JSON.parse((ev as MessageEvent).data) as RoomMessage);
+    } catch {
+      // ignore
+    }
+  });
+  es.addEventListener("agent_trace", (ev) => {
+    try {
+      onAgentTrace?.(JSON.parse((ev as MessageEvent).data) as AgentTraceStep);
+    } catch {
+      // ignore
+    }
+  });
+  es.addEventListener("presence", (ev) => {
+    try {
+      onPresence?.(JSON.parse((ev as MessageEvent).data) as RoomPresenceSnapshot);
     } catch {
       // ignore
     }

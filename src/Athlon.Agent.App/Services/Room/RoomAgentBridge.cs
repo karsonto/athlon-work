@@ -280,6 +280,29 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         var streamed = new StringBuilder();
         var lastFlush = 0L;
         var messageId = placeholder.Id;
+        var toolNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var toolArgs = new Dictionary<string, StringBuilder>(StringComparer.OrdinalIgnoreCase);
+        var lastArgsPublish = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        var reasoning = new StringBuilder();
+
+        void PublishTrace(string type, string? toolCallId = null, string? toolName = null, string? summary = null)
+        {
+            try
+            {
+                _store.PublishTrace(roomId, new RoomAgentTraceEvent
+                {
+                    MessageId = messageId,
+                    Type = type,
+                    ToolCallId = toolCallId,
+                    ToolName = toolName,
+                    Summary = TruncateTrace(summary)
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to publish room agent trace.");
+            }
+        }
 
         void FlushText(bool force)
         {
@@ -292,6 +315,8 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             lastFlush = now;
             _store.UpdateMessageText(roomId, messageId, streamed.ToString());
         }
+
+        PublishTrace("run_started", summary: "开始处理");
 
         using var roomScope = RoomAgentTurnScope.Enter(new RoomAgentTurnOptions(roomId));
         using var profileScope = AgentProfileTurnScope.Enter(profileOptions);
@@ -309,11 +334,69 @@ public sealed class RoomAgentBridge : IAsyncDisposable
                         Task.FromResult(ToolApprovalDecision.Approved),
                     OnStreamEvent = ev =>
                     {
-                        if (ev is AgentStreamEvent.TextMessageContent content
-                            && !string.IsNullOrEmpty(content.Delta))
+                        switch (ev)
                         {
-                            streamed.Append(content.Delta);
-                            FlushText(force: false);
+                            case AgentStreamEvent.TextMessageContent content
+                                when !string.IsNullOrEmpty(content.Delta):
+                                streamed.Append(content.Delta);
+                                FlushText(force: false);
+                                break;
+
+                            case AgentStreamEvent.ToolCallStart start:
+                                toolNames[start.ToolCallId] = start.ToolName;
+                                toolArgs[start.ToolCallId] = new StringBuilder();
+                                PublishTrace("tool_start", start.ToolCallId, start.ToolName, $"调用 {start.ToolName}");
+                                break;
+
+                            case AgentStreamEvent.ToolCallArgs args:
+                            {
+                                if (!toolArgs.TryGetValue(args.ToolCallId, out var buf))
+                                {
+                                    buf = new StringBuilder();
+                                    toolArgs[args.ToolCallId] = buf;
+                                }
+
+                                buf.Append(args.Delta);
+                                var now = Environment.TickCount64;
+                                if (!lastArgsPublish.TryGetValue(args.ToolCallId, out var last) || now - last >= 400)
+                                {
+                                    lastArgsPublish[args.ToolCallId] = now;
+                                    toolNames.TryGetValue(args.ToolCallId, out var name);
+                                    PublishTrace("tool_args", args.ToolCallId, name, buf.ToString());
+                                }
+
+                                break;
+                            }
+
+                            case AgentStreamEvent.ToolCallResult resultEv:
+                            {
+                                toolNames.TryGetValue(resultEv.ToolCallId, out var name);
+                                if (toolArgs.TryGetValue(resultEv.ToolCallId, out var argBuf) && argBuf.Length > 0)
+                                {
+                                    PublishTrace("tool_args", resultEv.ToolCallId, name, argBuf.ToString());
+                                }
+
+                                PublishTrace(
+                                    "tool_result",
+                                    resultEv.ToolCallId,
+                                    name,
+                                    string.IsNullOrWhiteSpace(resultEv.Content) ? "（空结果）" : resultEv.Content);
+                                break;
+                            }
+
+                            case AgentStreamEvent.ReasoningMessageContent reasoningDelta
+                                when !string.IsNullOrEmpty(reasoningDelta.Delta):
+                                reasoning.Append(reasoningDelta.Delta);
+                                break;
+
+                            case AgentStreamEvent.ReasoningMessageEnd:
+                                if (reasoning.Length > 0)
+                                {
+                                    PublishTrace("reasoning", summary: reasoning.ToString());
+                                    reasoning.Clear();
+                                }
+
+                                break;
                         }
 
                         return Task.CompletedTask;
@@ -332,14 +415,32 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             }
 
             FlushText(force: true);
+            PublishTrace("run_finished", summary: "完成");
         }
         catch (Exception ex)
         {
             streamed.Clear();
             streamed.Append("处理失败：").Append(ex.Message);
             FlushText(force: true);
+            PublishTrace("error", summary: ex.Message);
             throw;
         }
+    }
+
+    private static string? TruncateTrace(string? text, int maxChars = 800)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return text;
+        }
+
+        var trimmed = text.Trim();
+        if (trimmed.Length <= maxChars)
+        {
+            return trimmed;
+        }
+
+        return trimmed[..maxChars] + "…";
     }
 
     private (string Root, string? Id) ResolveRoomWorkspace(RoomInfo? room)
@@ -362,19 +463,8 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             return (room.WorkspaceRoot.Trim(), byRoot?.Id ?? room.WorkspaceId);
         }
 
-        if (!string.IsNullOrWhiteSpace(_workspaceContext.RootPath))
-        {
-            return (_workspaceContext.RootPath, _workspaceContext.WorkspaceId);
-        }
-
-        var first = _settings.Workspaces
-            .FirstOrDefault(w => !string.IsNullOrWhiteSpace(w.RootPath));
-        if (first is not null)
-        {
-            return (first.RootPath.Trim(), first.Id);
-        }
-
-        return (Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), null);
+        // No silent fallback — host must set workspace in room settings.
+        return (string.Empty, null);
     }
 
     private static string BuildSystemPrompt(AgentProfile profile, string workspaceRoot)
@@ -390,6 +480,11 @@ public sealed class RoomAgentBridge : IAsyncDisposable
                 .Append(Path.Combine(workspaceRoot, ".athlon-room"))
                 .AppendLine(" (per-room subfolders). Prefer those absolute paths when analyzing user files.");
             sb.AppendLine("Only read/write files inside this workspace unless the user explicitly asks otherwise.");
+        }
+        else
+        {
+            sb.AppendLine(
+                "This room has no workspace configured yet. Tell the host to set a workspace path in room settings before file tools can work.");
         }
 
         if (!string.IsNullOrWhiteSpace(profile.SoulMd))

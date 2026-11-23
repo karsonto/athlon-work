@@ -1,6 +1,13 @@
-import { useEffect, useRef } from "react";
-import { Pencil } from "lucide-react";
-import type { PendingFile, RoomMessage, RoomMeta, RoomTab } from "../types";
+import { useEffect, useRef, useState } from "react";
+import { Pencil, Users } from "lucide-react";
+import type {
+  AgentTraceStep,
+  PendingFile,
+  RoomMessage,
+  RoomMeta,
+  RoomPresenceMember,
+  RoomTab,
+} from "../types";
 import { ComposerBar } from "./ComposerBar";
 import { MessageBubble } from "./MessageBubble";
 
@@ -14,6 +21,8 @@ interface ChatPaneProps {
   sending: boolean;
   error: string | null;
   senderId: string;
+  members?: RoomPresenceMember[];
+  agentTraces?: Record<string, AgentTraceStep[]>;
   onDraftChange: (v: string) => void;
   onSend: () => void;
   onPickFiles: (files: FileList | null) => void;
@@ -41,6 +50,8 @@ export function ChatPane({
   sending,
   error,
   senderId,
+  members = [],
+  agentTraces,
   onDraftChange,
   onSend,
   onPickFiles,
@@ -49,16 +60,35 @@ export function ChatPane({
   onOpenSettings,
 }: ChatPaneProps) {
   const listRef = useRef<HTMLDivElement>(null);
+  const membersRef = useRef<HTMLDivElement>(null);
+  const [membersOpen, setMembersOpen] = useState(false);
   const lastText = messages[messages.length - 1]?.text ?? "";
   const title = meta?.title ?? tab.title;
   const workspaceLabel =
     meta?.workspaceName ?? tab.workspaceName ?? meta?.workspaceRoot ?? tab.workspaceRoot;
+  const traceCount = agentTraces ? Object.values(agentTraces).reduce((n, s) => n + s.length, 0) : 0;
+  const memberCount = members.length;
 
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages.length, lastText, tab.id]);
+  }, [messages.length, lastText, tab.id, traceCount]);
+
+  useEffect(() => {
+    if (!membersOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (membersRef.current && !membersRef.current.contains(e.target as Node)) {
+        setMembersOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [membersOpen]);
+
+  useEffect(() => {
+    setMembersOpen(false);
+  }, [tab.id]);
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-[#f1f5f9] dark:bg-[#0f0f10]">
@@ -72,19 +102,69 @@ export function ChatPane({
             <p className="truncate text-sm text-slate-500 dark:text-zinc-400">
               {nickname} · {tab.role === "host" ? "本机房间" : "已加入"}
               {workspaceLabel ? ` · ${workspaceLabel}` : ""}
+              {` · ${memberCount} 人在线`}
             </p>
           </div>
         </div>
-        {tab.role === "host" && onOpenSettings ? (
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-white"
-            onClick={onOpenSettings}
-          >
-            <Pencil size={16} />
-            设置
-          </button>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="relative" ref={membersRef}>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-white"
+              onClick={() => setMembersOpen((v) => !v)}
+              title="在线成员"
+            >
+              <Users size={16} />
+              {memberCount}
+            </button>
+            {membersOpen ? (
+              <div className="absolute top-full right-0 z-20 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-[#1f1f22]">
+                <div className="border-b border-slate-100 px-3 py-2 text-xs font-medium text-slate-500 dark:border-zinc-800 dark:text-zinc-400">
+                  已加入（{memberCount}）
+                </div>
+                <ul className="max-h-64 overflow-y-auto py-1">
+                  {members.length === 0 ? (
+                    <li className="px-3 py-3 text-sm text-slate-400">暂无在线用户</li>
+                  ) : (
+                    members.map((m) => {
+                      const isSelf = m.senderId === senderId;
+                      return (
+                        <li
+                          key={m.senderId}
+                          className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 dark:text-zinc-200"
+                        >
+                          <span
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-semibold text-white"
+                            style={{ background: avatarColor(m.senderId) }}
+                          >
+                            {(m.displayName || "?").trim().slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">
+                            {m.displayName || "用户"}
+                            {isSelf ? (
+                              <span className="ml-1 text-xs text-slate-400">（我）</span>
+                            ) : null}
+                          </span>
+                          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" title="在线" />
+                        </li>
+                      );
+                    })
+                  )}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+          {tab.role === "host" && onOpenSettings ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-white"
+              onClick={onOpenSettings}
+            >
+              <Pencil size={16} />
+              设置
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto py-4">
@@ -102,6 +182,7 @@ export function ChatPane({
               roomId={tab.id}
               token={tab.token}
               onPreviewImage={onPreviewImage}
+              agentTrace={agentTraces?.[m.id]}
             />
           ))
         )}
@@ -124,4 +205,13 @@ export function ChatPane({
       />
     </div>
   );
+}
+
+function avatarColor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const colors = ["#0ea5e9", "#0284c7", "#6366f1", "#14b8a6", "#f59e0b", "#8b5cf6", "#64748b", "#f97316"];
+  return colors[Math.abs(hash) % colors.length];
 }
