@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Threading;
 using Athlon.Agent.App.Resources;
+using Athlon.Agent.App.Services.Room;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Infrastructure;
@@ -14,6 +15,7 @@ public sealed class ApplicationShutdownService(
     SessionTurnHost turnHost,
     CliIpcServer cliIpcServer,
     AthlonWebStaticServer athlonWebServer,
+    AthlonRoomServer athlonRoomServer,
     SchedulerService scheduler,
     ExecuteCommandProcessRegistry processRegistry,
     IMcpRegistry mcpRegistry,
@@ -67,6 +69,14 @@ public sealed class ApplicationShutdownService(
         progress?.Report(Strings.Get("Shutdown_StoppingTurns"));
         await cliIpcServer.StopAsync().ConfigureAwait(false);
         await athlonWebServer.StopAsync().ConfigureAwait(false);
+        try
+        {
+            await athlonRoomServer.StopAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Best-effort stop on exit.
+        }
         await turnHost
             .ShutdownAsync(turnWaitTimeout ?? DefaultTurnWaitTimeout, cancellationToken)
             .ConfigureAwait(false);

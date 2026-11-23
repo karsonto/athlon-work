@@ -3,6 +3,7 @@ using Athlon.Agent.App.Navigation;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Services.Audio;
 using Athlon.Agent.App.Services.Chat;
+using Athlon.Agent.App.Services.Room;
 using Athlon.Agent.App.Services.Speech;
 
 using Athlon.Agent.App.ViewModels;
@@ -229,6 +230,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<PageViewFactory>();
 
         services.AddSingleton<AthlonWebStaticServer>();
+
+        services.AddSingleton<RoomStore>();
+
+        services.AddSingleton<AthlonRoomServer>();
 
         services.AddSingleton<MainShellViewModel>();
 

@@ -17,6 +17,7 @@ using Athlon.Agent.Core.Sso;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Services.ComputerUse;
 using Athlon.Agent.App.Services.Diagnostics;
+using Athlon.Agent.App.Services.Room;
 using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.Infrastructure;
@@ -746,6 +747,44 @@ public partial class MainShellViewModel
         catch (Exception exception)
         {
             _notifier.Warning("Shell_AthlonWeb", "Shell_AthlonWebStartFailed", exception.Message);
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenChatRoomAsync()
+    {
+        try
+        {
+            RoomCreateResult result;
+            if (_athlonRoomServer.IsRunning
+                && _athlonRoomServer.ActiveRoom is { } activeRoom
+                && !string.IsNullOrWhiteSpace(_athlonRoomServer.ActiveInviteUrl))
+            {
+                result = new RoomCreateResult
+                {
+                    Room = activeRoom,
+                    InviteUrl = _athlonRoomServer.ActiveInviteUrl!,
+                    LanIp = _athlonRoomServer.LanIp ?? "127.0.0.1",
+                    Port = _athlonRoomServer.Port
+                };
+            }
+            else
+            {
+                result = await _athlonRoomServer.StartOrCreateRoomAsync().ConfigureAwait(true);
+            }
+
+            var owner = Application.Current?.MainWindow;
+            var window = new RoomInviteWindow(_athlonRoomServer, result.InviteUrl);
+            if (owner is not null)
+            {
+                window.Owner = owner;
+            }
+
+            window.ShowDialog();
+        }
+        catch (Exception exception)
+        {
+            _notifier.Warning("Shell_ChatRoom", "Shell_ChatRoomStartFailed", exception.Message);
         }
     }
 

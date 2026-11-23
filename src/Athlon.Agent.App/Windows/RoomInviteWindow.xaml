@@ -1,0 +1,92 @@
+<Window x:Class="Athlon.Agent.App.Windows.RoomInviteWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+        Title="{loc:Localize Key=Shell_ChatRoomTitle}"
+        Icon="/Assets/app-icon.ico"
+        Height="320"
+        Width="520"
+        MinHeight="280"
+        MinWidth="440"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource Brush.AppBackground}"
+        WindowStyle="None">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            CornerRadius="0"
+                            GlassFrameThickness="0"
+                            ResizeBorderThickness="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+    <Border BorderBrush="{DynamicResource Brush.Border}"
+            BorderThickness="1"
+            Background="{DynamicResource Brush.AppBackground}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="32" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Background="{DynamicResource Brush.Chrome}"
+                    BorderBrush="{DynamicResource Brush.Border}"
+                    BorderThickness="0,0,0,1"
+                    MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
+                <Grid Margin="12,0">
+                    <TextBlock Text="{loc:Localize Key=Shell_ChatRoomTitle}"
+                               FontSize="12"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               VerticalAlignment="Center" />
+                    <Button HorizontalAlignment="Right"
+                            ToolTip="{loc:Localize Key=Common_Close}"
+                            Click="CloseButton_OnClick"
+                            ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                            Style="{StaticResource WindowCloseCaptionButtonStyle}" />
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="1" Margin="24,20">
+                <TextBlock Text="{loc:Localize Key=Shell_ChatRoomInviteHint}"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource Brush.SubtleText}"
+                           Margin="0,0,0,12" />
+                <TextBox x:Name="InviteUrlBox"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         MinHeight="64"
+                         Padding="10,8"
+                         VerticalScrollBarVisibility="Auto" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="2"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Margin="24,0,24,20">
+                <Button Content="{loc:Localize Key=Shell_ChatRoomCopyLink}"
+                        MinWidth="100"
+                        Margin="0,0,8,0"
+                        Padding="12,6"
+                        Click="CopyButton_OnClick" />
+                <Button Content="{loc:Localize Key=Shell_ChatRoomOpenBrowser}"
+                        MinWidth="100"
+                        Margin="0,0,8,0"
+                        Padding="12,6"
+                        Click="OpenBrowserButton_OnClick" />
+                <Button Content="{loc:Localize Key=Shell_ChatRoomStop}"
+                        MinWidth="100"
+                        Margin="0,0,8,0"
+                        Padding="12,6"
+                        Click="StopButton_OnClick" />
+                <Button Content="{loc:Localize Key=Common_Close}"
+                        MinWidth="88"
+                        Padding="12,6"
+                        IsDefault="True"
+                        Click="CloseButton_OnClick" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

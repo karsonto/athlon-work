@@ -2022,6 +2022,33 @@
   <data name="Shell_AthlonWebStartFailed" xml:space="preserve">
     <value>无法启动 Athlon Web 本地服务：{0}</value>
   </data>
+  <data name="Shell_ChatRoom" xml:space="preserve">
+    <value>聊天房间</value>
+  </data>
+  <data name="Shell_ChatRoomTooltip" xml:space="preserve">
+    <value>开启局域网聊天房间并分享邀请链接</value>
+  </data>
+  <data name="Shell_ChatRoomTitle" xml:space="preserve">
+    <value>Athlon 聊天房间</value>
+  </data>
+  <data name="Shell_ChatRoomInviteHint" xml:space="preserve">
+    <value>同一局域网内的设备可用下方链接进入房间（含邀请令牌）。关闭房间后链接将失效。</value>
+  </data>
+  <data name="Shell_ChatRoomCopyLink" xml:space="preserve">
+    <value>复制链接</value>
+  </data>
+  <data name="Shell_ChatRoomOpenBrowser" xml:space="preserve">
+    <value>本机打开</value>
+  </data>
+  <data name="Shell_ChatRoomStop" xml:space="preserve">
+    <value>停止房间</value>
+  </data>
+  <data name="Shell_ChatRoomStopped" xml:space="preserve">
+    <value>聊天房间已停止。</value>
+  </data>
+  <data name="Shell_ChatRoomStartFailed" xml:space="preserve">
+    <value>无法启动聊天房间：{0}</value>
+  </data>
   <data name="Shell_ContextSidebarClose" xml:space="preserve">
     <value>关闭右侧栏 (Ctrl+Alt+B)</value>
   </data>

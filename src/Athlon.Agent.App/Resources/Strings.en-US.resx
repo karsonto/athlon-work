@@ -2013,6 +2013,33 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   <data name="Shell_AthlonWebStartFailed" xml:space="preserve">
     <value>Unable to start the Athlon Web local service: {0}</value>
   </data>
+  <data name="Shell_ChatRoom" xml:space="preserve">
+    <value>Chat Room</value>
+  </data>
+  <data name="Shell_ChatRoomTooltip" xml:space="preserve">
+    <value>Start a LAN chat room and share the invite link</value>
+  </data>
+  <data name="Shell_ChatRoomTitle" xml:space="preserve">
+    <value>Athlon Chat Room</value>
+  </data>
+  <data name="Shell_ChatRoomInviteHint" xml:space="preserve">
+    <value>Devices on the same LAN can join with the link below (includes invite token). Stopping the room invalidates the link.</value>
+  </data>
+  <data name="Shell_ChatRoomCopyLink" xml:space="preserve">
+    <value>Copy link</value>
+  </data>
+  <data name="Shell_ChatRoomOpenBrowser" xml:space="preserve">
+    <value>Open locally</value>
+  </data>
+  <data name="Shell_ChatRoomStop" xml:space="preserve">
+    <value>Stop room</value>
+  </data>
+  <data name="Shell_ChatRoomStopped" xml:space="preserve">
+    <value>Chat room stopped.</value>
+  </data>
+  <data name="Shell_ChatRoomStartFailed" xml:space="preserve">
+    <value>Unable to start the chat room: {0}</value>
+  </data>
   <data name="Shell_ContextSidebarClose" xml:space="preserve">
     <value>Close right sidebar (Ctrl+Alt+B)</value>
   </data>

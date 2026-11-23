@@ -17,6 +17,7 @@ using Athlon.Agent.Core.Sso;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Services.ComputerUse;
 using Athlon.Agent.App.Services.Diagnostics;
+using Athlon.Agent.App.Services.Room;
 using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.Infrastructure;
@@ -75,6 +76,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private bool _suppressTaskListRefresh;
     private readonly ILongTermMemory _longTermMemory;
     private readonly AthlonWebStaticServer _athlonWebServer;
+    private readonly AthlonRoomServer _athlonRoomServer;
 
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -141,6 +143,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ILongTermMemory longTermMemory,
         AppUpdateService updateService,
         AthlonWebStaticServer athlonWebServer,
+        AthlonRoomServer athlonRoomServer,
         IAppLogger logger)
     {
         _storage = storage;
@@ -169,6 +172,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _userQuestions = userQuestions;
         _longTermMemory = longTermMemory;
         _athlonWebServer = athlonWebServer;
+        _athlonRoomServer = athlonRoomServer;
         _skillCatalog = skillCatalog;
         _logger = logger;
         _appSettings = settings;
