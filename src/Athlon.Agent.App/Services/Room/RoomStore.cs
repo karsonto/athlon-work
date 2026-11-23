@@ -52,7 +52,7 @@ public sealed class RoomStore
         WriteRoomJson(info);
         File.WriteAllText(GetMessagesPath(id), string.Empty, Encoding.UTF8);
 
-        _rooms[id] = new RoomRuntime(info);
+        _rooms[id] = new RoomRuntime(info, new List<RoomMessage>());
         return info;
     }
 
@@ -78,7 +78,8 @@ public sealed class RoomStore
                 return null;
             }
 
-            _rooms[info.Id] = new RoomRuntime(info);
+            var messages = ReadAllMessagesFromDisk(info.Id);
+            _rooms[info.Id] = new RoomRuntime(info, messages);
             return info;
         }
         catch
@@ -107,10 +108,10 @@ public sealed class RoomStore
 
     public IReadOnlyList<RoomMessage> GetMessages(string roomId, string? afterId = null)
     {
-        EnsureRuntime(roomId);
+        var runtime = EnsureRuntime(roomId);
         lock (_ioLock)
         {
-            var all = ReadAllMessages(roomId);
+            var all = runtime.SnapshotMessages();
             if (string.IsNullOrWhiteSpace(afterId))
             {
                 return all;
@@ -141,10 +142,28 @@ public sealed class RoomStore
                 message.CreatedAt = DateTimeOffset.UtcNow;
             }
 
+            runtime.AddMessage(CloneMessage(message));
             var line = JsonSerializer.Serialize(message, JsonlOptions);
             File.AppendAllText(GetMessagesPath(roomId), line + Environment.NewLine, Encoding.UTF8);
-            runtime.RaiseMessage(message);
+            runtime.Raise(new RoomStoreEvent(RoomStoreEventKind.Message, CloneMessage(message)));
             return message;
+        }
+    }
+
+    public RoomMessage? UpdateMessageText(string roomId, string messageId, string? text)
+    {
+        var runtime = EnsureRuntime(roomId);
+        lock (_ioLock)
+        {
+            var updated = runtime.UpdateText(messageId, text);
+            if (updated is null)
+            {
+                return null;
+            }
+
+            RewriteMessagesFile(roomId, runtime.SnapshotMessages());
+            runtime.Raise(new RoomStoreEvent(RoomStoreEventKind.MessageUpdated, CloneMessage(updated)));
+            return updated;
         }
     }
 
@@ -190,10 +209,7 @@ public sealed class RoomStore
             }
         }
 
-        if (declaredLength is > 0 && declaredLength != size)
-        {
-            // tolerate mismatch; trust written size
-        }
+        _ = declaredLength;
 
         var isImage = mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
             || IsImageExtension(Path.GetExtension(safeName));
@@ -211,6 +227,25 @@ public sealed class RoomStore
         var metaPath = Path.Combine(dir, "meta.json");
         File.WriteAllText(metaPath, JsonSerializer.Serialize(info, JsonOptions), Encoding.UTF8);
         return info;
+    }
+
+    public RoomAttachmentInfo SaveAttachmentFromPath(string roomId, string absolutePath)
+    {
+        if (!File.Exists(absolutePath))
+        {
+            throw new FileNotFoundException("File not found.", absolutePath);
+        }
+
+        var info = new FileInfo(absolutePath);
+        if (info.Length > MaxAttachmentBytes)
+        {
+            throw new InvalidOperationException($"Attachment exceeds {MaxAttachmentBytes} bytes.");
+        }
+
+        var fileName = info.Name;
+        var mime = GuessMime(fileName);
+        using var stream = File.OpenRead(absolutePath);
+        return SaveAttachment(roomId, fileName, mime, stream, info.Length);
     }
 
     public RoomAttachmentInfo? GetAttachmentMeta(string roomId, string attachmentId)
@@ -256,7 +291,16 @@ public sealed class RoomStore
         return File.Exists(full) ? full : null;
     }
 
-    public IDisposable Subscribe(string roomId, Action<RoomMessage> handler)
+    public IDisposable Subscribe(string roomId, Action<RoomMessage> handler) =>
+        SubscribeEvents(roomId, ev =>
+        {
+            if (ev.Kind == RoomStoreEventKind.Message)
+            {
+                handler(ev.Message);
+            }
+        });
+
+    public IDisposable SubscribeEvents(string roomId, Action<RoomStoreEvent> handler)
     {
         var runtime = EnsureRuntime(roomId);
         return runtime.Subscribe(handler);
@@ -281,10 +325,10 @@ public sealed class RoomStore
     private RoomRuntime EnsureRuntime(string roomId)
     {
         var info = GetRoom(roomId) ?? throw new InvalidOperationException("Room not found.");
-        return _rooms.GetOrAdd(info.Id, _ => new RoomRuntime(info));
+        return _rooms.GetOrAdd(info.Id, id => new RoomRuntime(info, ReadAllMessagesFromDisk(id)));
     }
 
-    private List<RoomMessage> ReadAllMessages(string roomId)
+    private List<RoomMessage> ReadAllMessagesFromDisk(string roomId)
     {
         var path = GetMessagesPath(roomId);
         if (!File.Exists(path))
@@ -317,6 +361,18 @@ public sealed class RoomStore
         return list;
     }
 
+    private void RewriteMessagesFile(string roomId, IReadOnlyList<RoomMessage> messages)
+    {
+        var path = GetMessagesPath(roomId);
+        var sb = new StringBuilder();
+        foreach (var message in messages)
+        {
+            sb.AppendLine(JsonSerializer.Serialize(message, JsonlOptions));
+        }
+
+        File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
+    }
+
     private void WriteRoomJson(RoomInfo info)
     {
         var path = GetRoomJsonPath(info.Id);
@@ -337,6 +393,25 @@ public sealed class RoomStore
     private string GetRoomJsonPath(string roomId) => Path.Combine(GetRoomDirectory(roomId), "room.json");
 
     private string GetMessagesPath(string roomId) => Path.Combine(GetRoomDirectory(roomId), "messages.jsonl");
+
+    private static RoomMessage CloneMessage(RoomMessage message) => new()
+    {
+        Id = message.Id,
+        SenderId = message.SenderId,
+        DisplayName = message.DisplayName,
+        Kind = message.Kind,
+        Text = message.Text,
+        Attachments = message.Attachments.Select(a => new RoomAttachmentInfo
+        {
+            Id = a.Id,
+            FileName = a.FileName,
+            MimeType = a.MimeType,
+            Size = a.Size,
+            IsImage = a.IsImage,
+            StoredName = a.StoredName
+        }).ToList(),
+        CreatedAt = message.CreatedAt
+    };
 
     internal static bool IsSafeId(string? id)
     {
@@ -395,6 +470,8 @@ public sealed class RoomStore
             ".txt" => "text/plain",
             ".json" => "application/json",
             ".zip" => "application/zip",
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".doc" => "application/msword",
             _ => "application/octet-stream"
         };
     }
@@ -402,18 +479,52 @@ public sealed class RoomStore
     private sealed class RoomRuntime
     {
         private readonly object _gate = new();
-        private readonly List<Action<RoomMessage>> _handlers = new();
+        private readonly List<Action<RoomStoreEvent>> _handlers = new();
+        private readonly List<RoomMessage> _messages;
 
-        public RoomRuntime(RoomInfo info)
+        public RoomRuntime(RoomInfo info, List<RoomMessage> messages)
         {
             Info = info;
+            _messages = messages;
         }
 
         public RoomInfo Info { get; private set; }
 
         public void UpdateInfo(RoomInfo info) => Info = info;
 
-        public IDisposable Subscribe(Action<RoomMessage> handler)
+        public List<RoomMessage> SnapshotMessages()
+        {
+            lock (_gate)
+            {
+                return _messages.Select(CloneMessage).ToList();
+            }
+        }
+
+        public void AddMessage(RoomMessage message)
+        {
+            lock (_gate)
+            {
+                _messages.Add(message);
+            }
+        }
+
+        public RoomMessage? UpdateText(string messageId, string? text)
+        {
+            lock (_gate)
+            {
+                var index = _messages.FindIndex(m =>
+                    string.Equals(m.Id, messageId, StringComparison.OrdinalIgnoreCase));
+                if (index < 0)
+                {
+                    return null;
+                }
+
+                _messages[index].Text = text;
+                return CloneMessage(_messages[index]);
+            }
+        }
+
+        public IDisposable Subscribe(Action<RoomStoreEvent> handler)
         {
             lock (_gate)
             {
@@ -429,9 +540,9 @@ public sealed class RoomStore
             });
         }
 
-        public void RaiseMessage(RoomMessage message)
+        public void Raise(RoomStoreEvent storeEvent)
         {
-            Action<RoomMessage>[] snapshot;
+            Action<RoomStoreEvent>[] snapshot;
             lock (_gate)
             {
                 snapshot = _handlers.ToArray();
@@ -441,7 +552,7 @@ public sealed class RoomStore
             {
                 try
                 {
-                    handler(message);
+                    handler(storeEvent);
                 }
                 catch
                 {

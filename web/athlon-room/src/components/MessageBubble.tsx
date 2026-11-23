@@ -17,17 +17,33 @@ export function MessageBubble({
   token,
   onPreviewImage,
 }: MessageBubbleProps) {
-  const align = isMine ? "items-end" : "items-start";
-  const bubble = isMine
-    ? "bg-[var(--bubble-me)] rounded-2xl rounded-br-md"
-    : "bg-[var(--bubble-other)] rounded-2xl rounded-bl-md shadow-sm";
+  const isAgent = message.kind === "agent" || message.senderId === "athlon-agent";
+  const name = message.displayName || (isAgent ? "Athlon" : "用户");
+  const avatar = (
+    <div
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-sm font-semibold text-white"
+      style={{ background: avatarColor(message.senderId || name) }}
+      title={name}
+    >
+      {avatarInitial(name)}
+    </div>
+  );
 
-  return (
-    <div className={`flex w-full flex-col ${align} gap-1 px-3`}>
-      {!isMine ? (
-        <span className="px-1 text-xs text-slate-500">{message.displayName}</span>
-      ) : null}
-      <div className={`max-w-[78%] px-3 py-2 text-[15px] leading-snug text-slate-900 ${bubble}`}>
+  const bubbleClass = isMine
+    ? "bubble-tail-right bg-[var(--bubble-me)] text-white"
+    : isAgent
+      ? "bubble-tail-left is-agent bg-[var(--bubble-agent)] text-[var(--text-primary)]"
+      : "bubble-tail-left bg-[var(--bubble-other)] text-[var(--text-primary)]";
+
+  const body = (
+    <div className={`min-w-0 max-w-[min(78%,28rem)] ${isMine ? "items-end" : "items-start"} flex flex-col`}>
+      <div className={`mb-1 flex w-full items-baseline gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
+        <span className="truncate text-xs text-[var(--text-muted)]">{name}</span>
+        <time className="shrink-0 text-[10px] text-[var(--text-muted)]/80">
+          {formatTime(message.createdAt)}
+        </time>
+      </div>
+      <div className={`rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed ${bubbleClass}`}>
         {message.text ? <p className="whitespace-pre-wrap break-words">{message.text}</p> : null}
         {message.attachments?.map((att) => {
           const url = attachmentUrl(roomId, token, att.id);
@@ -56,27 +72,59 @@ export function MessageBubble({
               download={att.fileName}
               target="_blank"
               rel="noreferrer"
-              className={`mt-1 flex min-w-[200px] items-center gap-3 rounded-xl bg-black/5 px-3 py-2.5 hover:bg-black/10 ${
+              className={`flex min-w-[200px] items-center gap-3 rounded-lg bg-black/25 px-3 py-2.5 hover:bg-black/35 ${
                 message.text ? "mt-2" : ""
               }`}
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-700 text-white">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 text-white">
                 <FileIcon size={18} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{att.fileName}</div>
-                <div className="text-xs text-slate-500">{formatBytes(att.size)}</div>
+                <div className="text-xs opacity-70">{formatBytes(att.size)}</div>
               </div>
-              <Download size={16} className="shrink-0 text-slate-600" />
+              <Download size={16} className="shrink-0 opacity-80" />
             </a>
           );
         })}
       </div>
-      <time className="px-1 text-[10px] text-slate-400">
-        {formatTime(message.createdAt)}
-      </time>
     </div>
   );
+
+  return (
+    <div
+      className={`flex w-full gap-2.5 px-3 ${isMine ? "flex-row-reverse" : "flex-row"}`}
+    >
+      {avatar}
+      {body}
+    </div>
+  );
+}
+
+function avatarInitial(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+  return trimmed.slice(0, 1).toUpperCase();
+}
+
+function avatarColor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const colors = [
+    "#5b8ff9",
+    "#61ddaa",
+    "#65789b",
+    "#f6bd16",
+    "#7262fd",
+    "#78d3f8",
+    "#9661bc",
+    "#f6903d",
+    "#008685",
+    "#f08bb4",
+  ];
+  return colors[Math.abs(hash) % colors.length];
 }
 
 function formatTime(iso: string): string {

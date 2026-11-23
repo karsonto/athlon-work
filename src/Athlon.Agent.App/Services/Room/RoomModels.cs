@@ -2,6 +2,13 @@ using System.Text.Json.Serialization;
 
 namespace Athlon.Agent.App.Services.Room;
 
+public static class RoomAgentIds
+{
+    public const string SenderId = "athlon-agent";
+    public const string DisplayName = "Athlon";
+    public const string ProfileId = "room-agent";
+}
+
 public sealed class RoomInfo
 {
     public string Id { get; set; } = "";
@@ -36,7 +43,7 @@ public sealed class RoomMessage
 
     public string DisplayName { get; set; } = "";
 
-    /// <summary>text | image | file</summary>
+    /// <summary>text | image | file | agent</summary>
     public string Kind { get; set; } = "text";
 
     public string? Text { get; set; }
@@ -71,3 +78,11 @@ public sealed class PostMessageRequest
     [JsonPropertyName("attachmentIds")]
     public List<string>? AttachmentIds { get; set; }
 }
+
+public enum RoomStoreEventKind
+{
+    Message,
+    MessageUpdated
+}
+
+public readonly record struct RoomStoreEvent(RoomStoreEventKind Kind, RoomMessage Message);

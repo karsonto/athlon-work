@@ -1,10 +1,10 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: light --default;
+  themes: dark --default;
 }
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-family:
     "PingFang SC",
     "Hiragino Sans GB",
@@ -13,10 +13,14 @@
     -apple-system,
     sans-serif;
   line-height: 1.45;
-  --room-bg: #ededed;
-  --bubble-me: #95ec69;
-  --bubble-other: #ffffff;
-  --chrome: #2e2e2e;
+  --room-bg: #121212;
+  --room-chrome: #1c1c1c;
+  --bubble-me: #12b7f5;
+  --bubble-other: #2c2c2c;
+  --bubble-agent: #243447;
+  --text-primary: #f2f2f2;
+  --text-muted: #8a8a8a;
+  --composer-bg: #1a1a1a;
 }
 
 html,
@@ -29,9 +33,43 @@ body {
   margin: 0;
   min-width: 320px;
   background: var(--room-bg);
-  color: #111;
+  color: var(--text-primary);
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* QQ-style bubble tails */
+.bubble-tail-left,
+.bubble-tail-right {
+  position: relative;
+}
+
+.bubble-tail-left::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 12px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 6px solid var(--bubble-other);
+}
+
+.bubble-tail-left.is-agent::before {
+  border-right-color: var(--bubble-agent);
+}
+
+.bubble-tail-right::before {
+  content: "";
+  position: absolute;
+  right: -6px;
+  top: 12px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 6px solid var(--bubble-me);
 }

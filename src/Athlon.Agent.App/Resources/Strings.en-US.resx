@@ -2040,6 +2040,27 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   <data name="Shell_ChatRoomStartFailed" xml:space="preserve">
     <value>Unable to start the chat room: {0}</value>
   </data>
+  <data name="Shell_ChatRoomAgentCaps" xml:space="preserve">
+    <value>Room Agent capabilities</value>
+  </data>
+  <data name="Shell_ChatRoomAgentCapsHint" xml:space="preserve">
+    <value>Anyone can @agent; tools run on the host. Save after changing selections.</value>
+  </data>
+  <data name="Shell_ChatRoomTools" xml:space="preserve">
+    <value>Tools</value>
+  </data>
+  <data name="Shell_ChatRoomSkills" xml:space="preserve">
+    <value>Skills</value>
+  </data>
+  <data name="Shell_ChatRoomMcp" xml:space="preserve">
+    <value>MCP</value>
+  </data>
+  <data name="Shell_ChatRoomSaveCaps" xml:space="preserve">
+    <value>Save capabilities</value>
+  </data>
+  <data name="Shell_ChatRoomCapsSaved" xml:space="preserve">
+    <value>Room Agent capabilities saved.</value>
+  </data>
   <data name="Shell_ContextSidebarClose" xml:space="preserve">
     <value>Close right sidebar (Ctrl+Alt+B)</value>
   </data>

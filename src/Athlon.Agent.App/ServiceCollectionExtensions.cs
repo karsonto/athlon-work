@@ -235,6 +235,12 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<AthlonRoomServer>();
 
+        services.AddSingleton<RoomAgentProfileStore>();
+
+        services.AddSingleton<RoomAgentBridge>();
+
+        services.AddSingleton<IAgentTool, RoomShareFileTool>();
+
         services.AddSingleton<MainShellViewModel>();
 
         services.AddSingleton<ISessionHost>(sp => sp.GetRequiredService<MainShellViewModel>());

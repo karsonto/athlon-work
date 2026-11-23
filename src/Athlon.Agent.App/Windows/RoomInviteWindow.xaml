@@ -5,19 +5,19 @@
         xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
         Title="{loc:Localize Key=Shell_ChatRoomTitle}"
         Icon="/Assets/app-icon.ico"
-        Height="320"
-        Width="520"
-        MinHeight="280"
-        MinWidth="440"
+        Height="560"
+        Width="560"
+        MinHeight="480"
+        MinWidth="480"
         WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize"
+        ResizeMode="CanResizeWithGrip"
         Background="{DynamicResource Brush.AppBackground}"
         WindowStyle="None">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0"
                             CornerRadius="0"
                             GlassFrameThickness="0"
-                            ResizeBorderThickness="0"
+                            ResizeBorderThickness="4"
                             UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
     <Border BorderBrush="{DynamicResource Brush.Border}"
@@ -49,23 +49,71 @@
                 </Grid>
             </Border>
 
-            <StackPanel Grid.Row="1" Margin="24,20">
-                <TextBlock Text="{loc:Localize Key=Shell_ChatRoomInviteHint}"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource Brush.SubtleText}"
-                           Margin="0,0,0,12" />
-                <TextBox x:Name="InviteUrlBox"
-                         IsReadOnly="True"
-                         TextWrapping="Wrap"
-                         MinHeight="64"
-                         Padding="10,8"
-                         VerticalScrollBarVisibility="Auto" />
-            </StackPanel>
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="24,16">
+                <StackPanel>
+                    <TextBlock Text="{loc:Localize Key=Shell_ChatRoomInviteHint}"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               Margin="0,0,0,12" />
+                    <TextBox x:Name="InviteUrlBox"
+                             IsReadOnly="True"
+                             TextWrapping="Wrap"
+                             MinHeight="56"
+                             Padding="10,8"
+                             VerticalScrollBarVisibility="Auto" />
+
+                    <TextBlock Text="{loc:Localize Key=Shell_ChatRoomAgentCaps}"
+                               FontWeight="SemiBold"
+                               Margin="0,20,0,6" />
+                    <TextBlock Text="{loc:Localize Key=Shell_ChatRoomAgentCapsHint}"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               Margin="0,0,0,10" />
+
+                    <TextBlock Text="{loc:Localize Key=Shell_ChatRoomTools}" Margin="0,0,0,4" />
+                    <ItemsControl x:Name="ToolList" Margin="0,0,0,12">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Label}"
+                                          IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                          Margin="0,2" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="{loc:Localize Key=Shell_ChatRoomSkills}" Margin="0,0,0,4" />
+                    <ItemsControl x:Name="SkillList" Margin="0,0,0,12">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Label}"
+                                          IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                          Margin="0,2" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="{loc:Localize Key=Shell_ChatRoomMcp}" Margin="0,0,0,4" />
+                    <ItemsControl x:Name="McpList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Label}"
+                                          IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                          Margin="0,2" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
 
             <StackPanel Grid.Row="2"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
-                        Margin="24,0,24,20">
+                        Margin="24,12,24,20">
+                <Button Content="{loc:Localize Key=Shell_ChatRoomSaveCaps}"
+                        MinWidth="100"
+                        Margin="0,0,8,0"
+                        Padding="12,6"
+                        Click="SaveCapsButton_OnClick" />
                 <Button Content="{loc:Localize Key=Shell_ChatRoomCopyLink}"
                         MinWidth="100"
                         Margin="0,0,8,0"

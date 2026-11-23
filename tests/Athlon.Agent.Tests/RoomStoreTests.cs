@@ -69,6 +69,31 @@ public sealed class RoomStoreTests
     }
 
     [Fact]
+    public void UpdateMessageText_RaisesMessageUpdated()
+    {
+        using var temp = new TempDirectoryScope("athlon-room-upd");
+        var store = new RoomStore(new TempPathProvider(temp.Root));
+        var room = store.CreateRoom();
+        RoomStoreEvent? seen = null;
+        using var _ = store.SubscribeEvents(room.Id, ev => seen = ev);
+
+        var msg = store.AppendMessage(room.Id, new RoomMessage
+        {
+            SenderId = RoomAgentIds.SenderId,
+            DisplayName = RoomAgentIds.DisplayName,
+            Kind = "agent",
+            Text = "…"
+        });
+        Assert.Equal(RoomStoreEventKind.Message, seen!.Value.Kind);
+
+        var updated = store.UpdateMessageText(room.Id, msg.Id, "hello agent");
+        Assert.NotNull(updated);
+        Assert.Equal("hello agent", updated!.Text);
+        Assert.Equal(RoomStoreEventKind.MessageUpdated, seen.Value.Kind);
+        Assert.Equal("hello agent", store.GetMessages(room.Id).Single().Text);
+    }
+
+    [Fact]
     public void SaveAttachment_RejectsOversizeAndPathEscape()
     {
         using var temp = new TempDirectoryScope("athlon-room-att");
@@ -82,10 +107,38 @@ public sealed class RoomStoreTests
 
         var path = store.GetAttachmentFilePath(room.Id, meta.Id);
         Assert.NotNull(path);
-        Assert.True(path!.StartsWith(Path.Combine(temp.Root, "rooms", room.Id), StringComparison.OrdinalIgnoreCase));
+        Assert.StartsWith(Path.Combine(temp.Root, "rooms", room.Id), path!);
 
         Assert.Null(store.GetAttachmentFilePath(room.Id, "../" + meta.Id));
         Assert.Null(store.GetAttachmentMeta(room.Id, "not-a-valid!"));
+    }
+
+    [Fact]
+    public void SaveAttachmentFromPath_PostsFileMessageLikeShareTool()
+    {
+        using var temp = new TempDirectoryScope("athlon-room-share");
+        var store = new RoomStore(new TempPathProvider(temp.Root));
+        var room = store.CreateRoom();
+        var docx = Path.Combine(temp.Root, "notes.docx");
+        File.WriteAllBytes(docx, Encoding.UTF8.GetBytes("PK fake-docx"));
+
+        var attachment = store.SaveAttachmentFromPath(room.Id, docx);
+        Assert.Equal("notes.docx", attachment.FileName);
+        Assert.False(attachment.IsImage);
+
+        store.AppendMessage(room.Id, new RoomMessage
+        {
+            SenderId = RoomAgentIds.SenderId,
+            DisplayName = RoomAgentIds.DisplayName,
+            Kind = "file",
+            Text = "已分享文档",
+            Attachments = [attachment]
+        });
+
+        var last = store.GetMessages(room.Id).Last();
+        Assert.Equal("file", last.Kind);
+        Assert.Single(last.Attachments);
+        Assert.NotNull(store.GetAttachmentFilePath(room.Id, last.Attachments[0].Id));
     }
 
     private sealed class TempPathProvider(string root) : IAppPathProvider

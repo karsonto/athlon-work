@@ -773,8 +773,16 @@ public partial class MainShellViewModel
                 result = await _athlonRoomServer.StartOrCreateRoomAsync().ConfigureAwait(true);
             }
 
+            _roomAgentBridge.AttachToActiveRoom();
+
             var owner = Application.Current?.MainWindow;
-            var window = new RoomInviteWindow(_athlonRoomServer, result.InviteUrl);
+            var window = new RoomInviteWindow(
+                _athlonRoomServer,
+                _roomAgentBridge,
+                _roomAgentProfileStore,
+                _roomSkillCatalog,
+                _appSettings,
+                result.InviteUrl);
             if (owner is not null)
             {
                 window.Owner = owner;

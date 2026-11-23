@@ -103,6 +103,7 @@ export function connectEvents(
   roomId: string,
   token: string,
   onMessage: (msg: RoomMessage) => void,
+  onMessageUpdated?: (msg: RoomMessage) => void,
   onError?: (err: Event) => void,
 ): EventSource {
   const url = `/api/rooms/${roomId}/events?t=${encodeURIComponent(token)}`;
@@ -111,6 +112,14 @@ export function connectEvents(
     try {
       const data = JSON.parse((ev as MessageEvent).data) as RoomMessage;
       onMessage(data);
+    } catch {
+      // ignore
+    }
+  });
+  es.addEventListener("message_updated", (ev) => {
+    try {
+      const data = JSON.parse((ev as MessageEvent).data) as RoomMessage;
+      onMessageUpdated?.(data);
     } catch {
       // ignore
     }

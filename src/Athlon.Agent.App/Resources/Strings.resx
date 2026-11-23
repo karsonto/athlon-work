@@ -2049,6 +2049,27 @@
   <data name="Shell_ChatRoomStartFailed" xml:space="preserve">
     <value>无法启动聊天房间：{0}</value>
   </data>
+  <data name="Shell_ChatRoomAgentCaps" xml:space="preserve">
+    <value>房间 Agent 能力</value>
+  </data>
+  <data name="Shell_ChatRoomAgentCapsHint" xml:space="preserve">
+    <value>成员可通过 @agent 触发；工具在房主本机执行。勾选后点「保存能力」生效。</value>
+  </data>
+  <data name="Shell_ChatRoomTools" xml:space="preserve">
+    <value>工具</value>
+  </data>
+  <data name="Shell_ChatRoomSkills" xml:space="preserve">
+    <value>Skills</value>
+  </data>
+  <data name="Shell_ChatRoomMcp" xml:space="preserve">
+    <value>MCP</value>
+  </data>
+  <data name="Shell_ChatRoomSaveCaps" xml:space="preserve">
+    <value>保存能力</value>
+  </data>
+  <data name="Shell_ChatRoomCapsSaved" xml:space="preserve">
+    <value>房间 Agent 能力已保存。</value>
+  </data>
   <data name="Shell_ContextSidebarClose" xml:space="preserve">
     <value>关闭右侧栏 (Ctrl+Alt+B)</value>
   </data>

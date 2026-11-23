@@ -16,6 +16,7 @@ public sealed class ApplicationShutdownService(
     CliIpcServer cliIpcServer,
     AthlonWebStaticServer athlonWebServer,
     AthlonRoomServer athlonRoomServer,
+    RoomAgentBridge roomAgentBridge,
     SchedulerService scheduler,
     ExecuteCommandProcessRegistry processRegistry,
     IMcpRegistry mcpRegistry,
@@ -71,6 +72,7 @@ public sealed class ApplicationShutdownService(
         await athlonWebServer.StopAsync().ConfigureAwait(false);
         try
         {
+            roomAgentBridge.DetachAll();
             await athlonRoomServer.StopAsync().ConfigureAwait(false);
         }
         catch

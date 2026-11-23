@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -143,12 +144,14 @@ public sealed class AthlonRoomServer : IAsyncDisposable
 
     private async Task StartListenerAsync(CancellationToken cancellationToken)
     {
-        _lanIp = ResolveLanIpv4() ?? "127.0.0.1";
         var contentRoot = AthlonRoomAssets.AssetsDirectory;
         if (!Directory.Exists(contentRoot))
         {
             Directory.CreateDirectory(contentRoot);
         }
+
+        // Windows HttpListener "+" needs a URL ACL; best-effort so LAN bind works without elevation when possible.
+        TryEnsureUrlAcl(_port);
 
         Exception? lastError = null;
         foreach (var prefixes in BuildPrefixCandidates(_port))
@@ -164,12 +167,11 @@ public sealed class AthlonRoomServer : IAsyncDisposable
 
                 listener.Start();
                 _listener = listener;
+                _lanIp = ResolveInviteHost(prefixes) ?? ResolveLanIpv4() ?? "127.0.0.1";
                 _cts = new CancellationTokenSource();
                 var token = _cts.Token;
                 _loop = Task.Run(() => AcceptLoopAsync(listener, contentRoot, token), token);
-                var anyNonLoopback = prefixes.Any(p =>
-                    !p.Contains("127.0.0.1", StringComparison.Ordinal)
-                    && !p.Contains("localhost", StringComparison.OrdinalIgnoreCase));
+                var anyNonLoopback = prefixes.Any(IsNonLoopbackPrefix);
                 if (!anyNonLoopback)
                 {
                     _logger.LogWarning(
@@ -190,7 +192,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             catch (Exception ex)
             {
                 lastError = ex;
-                _logger.LogDebug(ex, "AthlonRoom bind failed for prefixes {Prefixes}", string.Join(", ", prefixes));
+                _logger.LogWarning(ex, "AthlonRoom bind failed for prefixes {Prefixes}", string.Join(", ", prefixes));
                 try
                 {
                     listener.Close();
@@ -203,7 +205,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
 
         throw new InvalidOperationException(
-            $"Unable to bind AthlonRoom on 0.0.0.0:{_port} (HttpListener +). Try another port or grant URL ACL / elevated permissions.",
+            $"Unable to bind AthlonRoom on 0.0.0.0:{_port}. On Windows run once as admin: netsh http add urlacl url=http://+:{_port}/ user=Everyone",
             lastError);
     }
 
@@ -638,12 +640,15 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         var output = context.Response.OutputStream;
         await WriteSseAsync(output, "ready", new { ok = true }).ConfigureAwait(false);
 
-        using var subscription = _store.Subscribe(roomId, message =>
+        using var subscription = _store.SubscribeEvents(roomId, storeEvent =>
         {
             try
             {
-                var json = JsonSerializer.Serialize(message, JsonOptions);
-                var payload = $"event: message\ndata: {json}\n\n";
+                var eventName = storeEvent.Kind == RoomStoreEventKind.MessageUpdated
+                    ? "message_updated"
+                    : "message";
+                var json = JsonSerializer.Serialize(storeEvent.Message, JsonOptions);
+                var payload = $"event: {eventName}\ndata: {json}\n\n";
                 var bytes = Encoding.UTF8.GetBytes(payload);
                 lock (output)
                 {
@@ -897,31 +902,120 @@ public sealed class AthlonRoomServer : IAsyncDisposable
 
     /// <summary>
     /// HttpListener equivalent of 0.0.0.0 is <c>http://+:{port}/</c>.
-    /// Prefer that; if URL ACL blocks it, bind every local IPv4 (+ loopback).
+    /// Prefer that; if URL ACL blocks it, bind each local IPv4 with loopback (one candidate at a time).
     /// Loopback-only is last resort and must not win before LAN binds.
     /// </summary>
     private static IEnumerable<string[]> BuildPrefixCandidates(int port)
     {
-        // 0.0.0.0 / all interfaces
+        // 0.0.0.0 / all interfaces (needs URL ACL on Windows)
         yield return new[] { $"http://+:{port}/" };
+        yield return new[] { $"http://*:{port}/" };
 
-        var ips = GetLocalIpv4Addresses().ToList();
-        if (ips.Count > 0)
+        var ips = GetLocalIpv4Addresses()
+            .OrderByDescending(IsPrivateIpv4)
+            .ThenBy(ip => ip, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // Prefer private LAN first: bind one NIC + loopback so a bad public IP doesn't fail the whole set.
+        foreach (var ip in ips)
         {
-            var prefixes = ips
+            yield return new[]
+            {
+                $"http://{ip}:{port}/",
+                $"http://127.0.0.1:{port}/"
+            };
+        }
+
+        if (ips.Count > 1)
+        {
+            yield return ips
                 .Select(ip => $"http://{ip}:{port}/")
                 .Append($"http://127.0.0.1:{port}/")
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            yield return prefixes;
         }
 
         // Last resort — LAN unreachable
         yield return new[] { $"http://127.0.0.1:{port}/" };
     }
 
-    private static string? ResolveLanIpv4() =>
-        GetLocalIpv4Addresses().FirstOrDefault(ip => ip != "127.0.0.1");
+    private static string? ResolveInviteHost(IReadOnlyList<string> prefixes)
+    {
+        var hosts = new List<string>();
+        foreach (var prefix in prefixes)
+        {
+            if (!Uri.TryCreate(prefix, UriKind.Absolute, out var uri))
+            {
+                continue;
+            }
+
+            var host = uri.Host;
+            if (string.IsNullOrWhiteSpace(host)
+                || host is "+" or "*"
+                || host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+                || host is "127.0.0.1")
+            {
+                continue;
+            }
+
+            hosts.Add(host);
+        }
+
+        if (hosts.Count == 0)
+        {
+            // Bound to +/* — pick best local address for the invite link.
+            return ResolveLanIpv4();
+        }
+
+        return hosts.OrderByDescending(IsPrivateIpv4).FirstOrDefault();
+    }
+
+    private static bool IsNonLoopbackPrefix(string prefix) =>
+        !prefix.Contains("127.0.0.1", StringComparison.Ordinal)
+        && !prefix.Contains("localhost", StringComparison.OrdinalIgnoreCase);
+
+    private static void TryEnsureUrlAcl(int port)
+    {
+        try
+        {
+            var url = $"http://+:{port}/";
+            var psi = new ProcessStartInfo
+            {
+                FileName = "netsh",
+                Arguments = $"http add urlacl url={url} user=Everyone",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using var process = Process.Start(psi);
+            process?.WaitForExit(3000);
+        }
+        catch
+        {
+            // Best effort — may already exist or require elevation.
+        }
+    }
+
+    private static string? ResolveLanIpv4()
+    {
+        var ips = GetLocalIpv4Addresses().ToList();
+        return ips.OrderByDescending(IsPrivateIpv4).FirstOrDefault();
+    }
+
+    private static bool IsPrivateIpv4(string ip)
+    {
+        if (!IPAddress.TryParse(ip, out var address)
+            || address.AddressFamily != AddressFamily.InterNetwork)
+        {
+            return false;
+        }
+
+        var bytes = address.GetAddressBytes();
+        return bytes[0] == 10
+            || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+            || (bytes[0] == 192 && bytes[1] == 168);
+    }
 
     private static IEnumerable<string> GetLocalIpv4Addresses()
     {

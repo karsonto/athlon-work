@@ -77,6 +77,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly ILongTermMemory _longTermMemory;
     private readonly AthlonWebStaticServer _athlonWebServer;
     private readonly AthlonRoomServer _athlonRoomServer;
+    private readonly RoomAgentBridge _roomAgentBridge;
+    private readonly RoomAgentProfileStore _roomAgentProfileStore;
+    private readonly IAgentSkillCatalog _roomSkillCatalog;
 
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -144,6 +147,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         AppUpdateService updateService,
         AthlonWebStaticServer athlonWebServer,
         AthlonRoomServer athlonRoomServer,
+        RoomAgentBridge roomAgentBridge,
+        RoomAgentProfileStore roomAgentProfileStore,
         IAppLogger logger)
     {
         _storage = storage;
@@ -173,6 +178,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _longTermMemory = longTermMemory;
         _athlonWebServer = athlonWebServer;
         _athlonRoomServer = athlonRoomServer;
+        _roomAgentBridge = roomAgentBridge;
+        _roomAgentProfileStore = roomAgentProfileStore;
+        _roomSkillCatalog = skillCatalog;
         _skillCatalog = skillCatalog;
         _logger = logger;
         _appSettings = settings;

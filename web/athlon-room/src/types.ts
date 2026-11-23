@@ -12,7 +12,7 @@ export interface RoomMessage {
   id: string;
   senderId: string;
   displayName: string;
-  kind: "text" | "image" | "file" | string;
+  kind: "text" | "image" | "file" | "agent" | string;
   text?: string | null;
   attachments: RoomAttachment[];
   createdAt: string;
