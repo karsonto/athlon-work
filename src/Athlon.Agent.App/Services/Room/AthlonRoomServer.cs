@@ -1030,6 +1030,12 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 }
 
                 var info = _store.SaveAttachment(roomId, fileName, mime, contentStream, context.Request.ContentLength64);
+                var workspaceRoot = ResolveRoomWorkspaceRoot(roomId);
+                if (!string.IsNullOrWhiteSpace(workspaceRoot))
+                {
+                    info = _store.MirrorAttachmentToWorkspace(roomId, info.Id, workspaceRoot) ?? info;
+                }
+
                 var previewUrl = $"/api/rooms/{roomId}/attachments/{info.Id}?t={Uri.EscapeDataString(ExtractToken(context.Request) ?? "")}";
                 await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
                 {
@@ -1038,6 +1044,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                     mimeType = info.MimeType,
                     size = info.Size,
                     isImage = info.IsImage,
+                    workspacePath = info.WorkspacePath,
                     previewUrl
                 }).ConfigureAwait(false);
             }
@@ -1434,6 +1441,34 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new { error = "invalid_profile" })
                 .ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Same resolution order as RoomAgentBridge: room workspace → active → first configured → null.</summary>
+    private string? ResolveRoomWorkspaceRoot(string roomId)
+    {
+        var room = _store.GetRoom(roomId);
+        if (room is not null && !string.IsNullOrWhiteSpace(room.WorkspaceId))
+        {
+            var match = _settings.Workspaces.FirstOrDefault(w =>
+                string.Equals(w.Id, room.WorkspaceId, StringComparison.OrdinalIgnoreCase));
+            if (match is not null && !string.IsNullOrWhiteSpace(match.RootPath))
+            {
+                return match.RootPath.Trim();
+            }
+        }
+
+        if (room is not null && !string.IsNullOrWhiteSpace(room.WorkspaceRoot))
+        {
+            return room.WorkspaceRoot.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(_workspaceContext.RootPath))
+        {
+            return _workspaceContext.RootPath;
+        }
+
+        var first = _settings.Workspaces.FirstOrDefault(w => !string.IsNullOrWhiteSpace(w.RootPath));
+        return first?.RootPath?.Trim();
     }
 
     private (string? Root, string? Id) ResolveWorkspaceInputs(

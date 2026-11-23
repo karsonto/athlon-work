@@ -272,9 +272,73 @@ public sealed class RoomStore
             StoredName = safeName
         };
 
-        var metaPath = Path.Combine(dir, "meta.json");
-        File.WriteAllText(metaPath, JsonSerializer.Serialize(info, JsonOptions), Encoding.UTF8);
+        WriteAttachmentMeta(roomId, info);
         return info;
+    }
+
+    /// <summary>
+    /// Copy a room attachment into the host workspace so @agent can read/analyze it.
+    /// Layout: {workspaceRoot}/.athlon-room/{roomId}/{fileName}
+    /// </summary>
+    public RoomAttachmentInfo? MirrorAttachmentToWorkspace(string roomId, string attachmentId, string workspaceRoot)
+    {
+        if (string.IsNullOrWhiteSpace(workspaceRoot))
+        {
+            return null;
+        }
+
+        var info = GetAttachmentMeta(roomId, attachmentId);
+        var sourcePath = GetAttachmentFilePath(roomId, attachmentId);
+        if (info is null || sourcePath is null)
+        {
+            return null;
+        }
+
+        string targetDir;
+        string targetPath;
+        try
+        {
+            var rootFull = Path.GetFullPath(workspaceRoot.Trim());
+            targetDir = Path.Combine(rootFull, ".athlon-room", roomId);
+            Directory.CreateDirectory(targetDir);
+
+            var safeName = SanitizeFileName(info.FileName);
+            targetPath = Path.Combine(targetDir, safeName);
+            if (File.Exists(targetPath))
+            {
+                var stem = Path.GetFileNameWithoutExtension(safeName);
+                var ext = Path.GetExtension(safeName);
+                targetPath = Path.Combine(targetDir, $"{stem}_{attachmentId[..Math.Min(8, attachmentId.Length)]}{ext}");
+            }
+
+            var targetFull = Path.GetFullPath(targetPath);
+            if (!targetFull.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(targetFull, rootFull, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            File.Copy(sourcePath, targetFull, overwrite: true);
+            info.WorkspacePath = targetFull;
+            WriteAttachmentMeta(roomId, info);
+            return info;
+        }
+        catch
+        {
+            return info;
+        }
+    }
+
+    public void WriteAttachmentMeta(string roomId, RoomAttachmentInfo info)
+    {
+        if (!IsSafeId(roomId) || !IsSafeId(info.Id))
+        {
+            return;
+        }
+
+        var metaPath = Path.Combine(GetRoomDirectory(roomId), "files", info.Id, "meta.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(metaPath)!);
+        File.WriteAllText(metaPath, JsonSerializer.Serialize(info, JsonOptions), Encoding.UTF8);
     }
 
     public RoomAttachmentInfo SaveAttachmentFromPath(string roomId, string absolutePath)

@@ -39,6 +39,9 @@ public sealed class RoomAttachmentInfo
     public bool IsImage { get; set; }
 
     public string StoredName { get; set; } = "";
+
+    /// <summary>Absolute path under the room workspace when the upload was mirrored for @agent.</summary>
+    public string? WorkspacePath { get; set; }
 }
 
 public sealed class RoomMessage

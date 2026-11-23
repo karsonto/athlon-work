@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using Athlon.Agent.Core;
@@ -385,6 +386,9 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         if (!string.IsNullOrWhiteSpace(workspaceRoot))
         {
             sb.Append("Your assigned workspace root for this room is: ").Append(workspaceRoot).AppendLine();
+            sb.Append("Chat uploads from members are mirrored under: ")
+                .Append(Path.Combine(workspaceRoot, ".athlon-room"))
+                .AppendLine(" (per-room subfolders). Prefer those absolute paths when analyzing user files.");
             sb.AppendLine("Only read/write files inside this workspace unless the user explicitly asks otherwise.");
         }
 
@@ -415,9 +419,12 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             }
 
             var preview = msg.Text;
-            if (string.IsNullOrWhiteSpace(preview) && msg.Attachments.Count > 0)
+            if (msg.Attachments.Count > 0)
             {
-                preview = "[attachments: " + string.Join(", ", msg.Attachments.Select(a => a.FileName)) + "]";
+                var attPreview = string.Join(", ", msg.Attachments.Select(FormatAttachmentForPrompt));
+                preview = string.IsNullOrWhiteSpace(preview)
+                    ? "[attachments: " + attPreview + "]"
+                    : preview.Trim() + " [attachments: " + attPreview + "]";
             }
 
             if (string.IsNullOrWhiteSpace(preview))
@@ -432,13 +439,23 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         sb.Append(trigger.DisplayName).Append(" asked you: ").AppendLine(taskText);
         if (trigger.Attachments.Count > 0)
         {
-            sb.AppendLine("Attachments on this message:");
+            sb.AppendLine("Attachments on this message (use these workspace paths with file tools):");
             foreach (var att in trigger.Attachments)
             {
-                sb.Append("- ").Append(att.FileName).Append(" (").Append(att.MimeType).AppendLine(")");
+                sb.Append("- ").AppendLine(FormatAttachmentForPrompt(att));
             }
         }
 
         return sb.ToString();
+    }
+
+    private static string FormatAttachmentForPrompt(RoomAttachmentInfo att)
+    {
+        if (!string.IsNullOrWhiteSpace(att.WorkspacePath))
+        {
+            return $"{att.FileName} ({att.MimeType}) @ {att.WorkspacePath}";
+        }
+
+        return $"{att.FileName} ({att.MimeType})";
     }
 }
