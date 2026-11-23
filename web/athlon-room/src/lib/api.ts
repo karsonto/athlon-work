@@ -1,14 +1,51 @@
 import type { RoomAttachment, RoomMessage, RoomMeta } from "../types";
 
-export function parseRoomFromLocation(): { roomId: string; token: string } | null {
-  const path = window.location.pathname;
-  const match = path.match(/\/r\/([A-Za-z0-9_-]+)/);
+export function apiUrl(baseUrl: string, path: string): string {
+  const base = baseUrl.replace(/\/$/, "");
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${p}`;
+}
+
+export function parseInviteInput(raw: string): {
+  baseUrl: string;
+  roomId: string;
+  token: string;
+} | null {
+  const text = raw.trim();
+  if (!text) return null;
+
+  try {
+    const url = new URL(text);
+    const match = url.pathname.match(/\/r\/([A-Za-z0-9_-]+)/);
+    const token = url.searchParams.get("t") ?? "";
+    if (!match || !token) return null;
+    return {
+      baseUrl: `${url.protocol}//${url.host}`,
+      roomId: match[1],
+      token,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function parseRoomFromLocation(): {
+  baseUrl: string;
+  roomId: string;
+  token: string;
+} | null {
   const params = new URLSearchParams(window.location.search);
   const token = params.get("t") ?? "";
+  const hostOverride = params.get("host");
+  const match = window.location.pathname.match(/\/r\/([A-Za-z0-9_-]+)/);
   if (!match || !token) {
     return null;
   }
-  return { roomId: match[1], token };
+
+  const baseUrl = hostOverride
+    ? hostOverride.replace(/\/$/, "")
+    : `${window.location.protocol}//${window.location.host}`;
+  return { baseUrl, roomId: match[1], token };
 }
 
 function authHeaders(token: string, extra?: HeadersInit): HeadersInit {
@@ -27,9 +64,47 @@ async function readError(res: Response): Promise<string> {
   }
 }
 
-export async function fetchRoom(roomId: string, token: string): Promise<RoomMeta> {
-  const res = await fetch(`/api/rooms/${roomId}?t=${encodeURIComponent(token)}`, {
-    headers: authHeaders(token),
+/** Prefer loopback for host-only manage APIs (list/create/close). */
+export function localManageBaseUrl(): string {
+  try {
+    const u = new URL(window.location.href);
+    if (u.hostname === "127.0.0.1" || u.hostname === "localhost") {
+      return u.origin;
+    }
+    return `${u.protocol}//127.0.0.1:${u.port || "6890"}`;
+  } catch {
+    return "http://127.0.0.1:6890";
+  }
+}
+
+export async function fetchLocalRooms(baseUrl = ""): Promise<{
+  lanIp?: string;
+  port?: number;
+  rooms: Array<{ id: string; title: string; inviteUrl: string; createdAt: string }>;
+}> {
+  const res = await fetch(apiUrl(baseUrl || localManageBaseUrl(), "/api/rooms"));
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+  return res.json();
+}
+
+export async function createLocalRoom(
+  title?: string,
+  baseUrl = "",
+): Promise<{
+  id: string;
+  title: string;
+  inviteUrl: string;
+  lanIp: string;
+  port: number;
+  token: string;
+  createdAt: string;
+}> {
+  const res = await fetch(apiUrl(baseUrl || localManageBaseUrl(), "/api/rooms"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: title ?? "Athlon 聊天房间" }),
   });
   if (!res.ok) {
     throw new Error(await readError(res));
@@ -37,16 +112,40 @@ export async function fetchRoom(roomId: string, token: string): Promise<RoomMeta
   return res.json();
 }
 
+export async function closeLocalRoom(roomId: string, baseUrl = ""): Promise<void> {
+  const res = await fetch(
+    apiUrl(baseUrl || localManageBaseUrl(), `/api/rooms/${roomId}/close`),
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+}
+
+export async function fetchRoom(
+  baseUrl: string,
+  roomId: string,
+  token: string,
+): Promise<RoomMeta> {
+  const res = await fetch(
+    apiUrl(baseUrl, `/api/rooms/${roomId}?t=${encodeURIComponent(token)}`),
+    { headers: authHeaders(token) },
+  );
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+  return res.json();
+}
+
 export async function fetchMessages(
+  baseUrl: string,
   roomId: string,
   token: string,
   after?: string,
 ): Promise<RoomMessage[]> {
   const qs = new URLSearchParams({ t: token });
-  if (after) {
-    qs.set("after", after);
-  }
-  const res = await fetch(`/api/rooms/${roomId}/messages?${qs}`, {
+  if (after) qs.set("after", after);
+  const res = await fetch(apiUrl(baseUrl, `/api/rooms/${roomId}/messages?${qs}`), {
     headers: authHeaders(token),
   });
   if (!res.ok) {
@@ -57,17 +156,21 @@ export async function fetchMessages(
 }
 
 export async function uploadAttachment(
+  baseUrl: string,
   roomId: string,
   token: string,
   file: File,
 ): Promise<RoomAttachment> {
   const form = new FormData();
   form.append("file", file, file.name);
-  const res = await fetch(`/api/rooms/${roomId}/attachments?t=${encodeURIComponent(token)}`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: form,
-  });
+  const res = await fetch(
+    apiUrl(baseUrl, `/api/rooms/${roomId}/attachments?t=${encodeURIComponent(token)}`),
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: form,
+    },
+  );
   if (!res.ok) {
     throw new Error(await readError(res));
   }
@@ -75,6 +178,7 @@ export async function uploadAttachment(
 }
 
 export async function postMessage(
+  baseUrl: string,
   roomId: string,
   token: string,
   body: {
@@ -84,49 +188,57 @@ export async function postMessage(
     attachmentIds?: string[];
   },
 ): Promise<RoomMessage> {
-  const res = await fetch(`/api/rooms/${roomId}/messages?t=${encodeURIComponent(token)}`, {
-    method: "POST",
-    headers: authHeaders(token, { "Content-Type": "application/json" }),
-    body: JSON.stringify(body),
-  });
+  const res = await fetch(
+    apiUrl(baseUrl, `/api/rooms/${roomId}/messages?t=${encodeURIComponent(token)}`),
+    {
+      method: "POST",
+      headers: authHeaders(token, { "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    },
+  );
   if (!res.ok) {
     throw new Error(await readError(res));
   }
   return res.json();
 }
 
-export function attachmentUrl(roomId: string, token: string, attachmentId: string): string {
-  return `/api/rooms/${roomId}/attachments/${attachmentId}?t=${encodeURIComponent(token)}`;
+export function attachmentUrl(
+  baseUrl: string,
+  roomId: string,
+  token: string,
+  attachmentId: string,
+): string {
+  return apiUrl(
+    baseUrl,
+    `/api/rooms/${roomId}/attachments/${attachmentId}?t=${encodeURIComponent(token)}`,
+  );
 }
 
 export function connectEvents(
+  baseUrl: string,
   roomId: string,
   token: string,
   onMessage: (msg: RoomMessage) => void,
   onMessageUpdated?: (msg: RoomMessage) => void,
   onError?: (err: Event) => void,
 ): EventSource {
-  const url = `/api/rooms/${roomId}/events?t=${encodeURIComponent(token)}`;
+  const url = apiUrl(baseUrl, `/api/rooms/${roomId}/events?t=${encodeURIComponent(token)}`);
   const es = new EventSource(url);
   es.addEventListener("message", (ev) => {
     try {
-      const data = JSON.parse((ev as MessageEvent).data) as RoomMessage;
-      onMessage(data);
+      onMessage(JSON.parse((ev as MessageEvent).data) as RoomMessage);
     } catch {
       // ignore
     }
   });
   es.addEventListener("message_updated", (ev) => {
     try {
-      const data = JSON.parse((ev as MessageEvent).data) as RoomMessage;
-      onMessageUpdated?.(data);
+      onMessageUpdated?.(JSON.parse((ev as MessageEvent).data) as RoomMessage);
     } catch {
       // ignore
     }
   });
-  es.onerror = (ev) => {
-    onError?.(ev);
-  };
+  es.onerror = (ev) => onError?.(ev);
   return es;
 }
 

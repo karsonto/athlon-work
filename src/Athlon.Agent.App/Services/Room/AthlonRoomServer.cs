@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -7,6 +6,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Athlon.Agent.Core;
 using Microsoft.Extensions.Logging;
 
 namespace Athlon.Agent.App.Services.Room;
@@ -43,68 +43,176 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     };
 
     private readonly RoomStore _store;
+    private readonly AppSettings _settings;
+    private readonly IActiveWorkspaceContext _workspaceContext;
     private readonly ILogger<AthlonRoomServer> _logger;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private readonly ConcurrentDictionary<string, byte> _sseConnections = new();
+    private readonly ConcurrentDictionary<string, byte> _activeRoomIds = new(StringComparer.OrdinalIgnoreCase);
 
-    private HttpListener? _listener;
+    private TcpListener? _listener;
+    private volatile bool _listening;
     private CancellationTokenSource? _cts;
     private Task? _loop;
     private int _port = DefaultPort;
     private string? _lanIp;
-    private string? _activeRoomId;
+    private bool _lanReachable;
+    private string? _bindWarning;
+    private Action<string>? _onRoomOpened;
+    private Action<string>? _onRoomClosed;
 
-    public AthlonRoomServer(RoomStore store, ILogger<AthlonRoomServer> logger)
+    public AthlonRoomServer(
+        RoomStore store,
+        AppSettings settings,
+        IActiveWorkspaceContext workspaceContext,
+        ILogger<AthlonRoomServer> logger)
     {
         _store = store;
+        _settings = settings;
+        _workspaceContext = workspaceContext;
         _logger = logger;
     }
 
-    public bool IsRunning => _listener?.IsListening == true;
+    public bool IsRunning => _listening && _listener is not null;
 
     public int Port => _port;
 
     public string? LanIp => _lanIp;
 
-    public string? ActiveRoomId => _activeRoomId;
+    /// <summary>
+    /// True when bound to all interfaces (0.0.0.0) so LAN/peers can reach the invite host.
+    /// False after fallback to 127.0.0.1 only.
+    /// </summary>
+    public bool IsLanReachable => _lanReachable;
+
+    /// <summary>Human-readable bind warning for UI when <see cref="IsLanReachable"/> is false.</summary>
+    public string? BindWarning => _bindWarning;
+
+    /// <summary>Most recently created/focused room (compat).</summary>
+    public string? ActiveRoomId =>
+        _activeRoomIds.Keys.LastOrDefault();
+
+    public IReadOnlyList<string> ActiveRoomIds => _activeRoomIds.Keys.ToArray();
 
     public string? ActiveInviteUrl
     {
         get
         {
-            if (_activeRoomId is null || _lanIp is null)
-            {
-                return null;
-            }
-
-            var room = _store.GetRoom(_activeRoomId);
-            return room is null ? null : BuildInviteUrl(_lanIp, _port, room.Id, room.Token);
+            var id = ActiveRoomId;
+            return id is null ? null : GetInviteUrl(id);
         }
     }
 
-    public RoomInfo? ActiveRoom =>
-        _activeRoomId is null ? null : _store.GetRoom(_activeRoomId);
+    public RoomInfo? ActiveRoom
+    {
+        get
+        {
+            var id = ActiveRoomId;
+            return id is null ? null : _store.GetRoom(id);
+        }
+    }
 
-    public async Task<RoomCreateResult> StartOrCreateRoomAsync(string? title = null, int? port = null, CancellationToken cancellationToken = default)
+    public void SetRoomLifecycleHooks(Action<string>? onOpened, Action<string>? onClosed)
+    {
+        _onRoomOpened = onOpened;
+        _onRoomClosed = onClosed;
+    }
+
+    /// <summary>
+    /// Shareable invite for LAN/peers. Null when bound loopback-only (link would point at an unbound address).
+    /// </summary>
+    public string? GetInviteUrl(string roomId)
+    {
+        if (!_lanReachable || _lanIp is null || !_activeRoomIds.ContainsKey(roomId))
+        {
+            return null;
+        }
+
+        var room = _store.GetRoom(roomId);
+        return room is null ? null : BuildInviteUrl(_lanIp, _port, room.Id, room.Token);
+    }
+
+    /// <summary>Always uses 127.0.0.1 — for host "open locally" even when LAN bind failed.</summary>
+    public string? GetLocalInviteUrl(string roomId)
+    {
+        if (!IsRunning || !_activeRoomIds.ContainsKey(roomId))
+        {
+            return null;
+        }
+
+        var room = _store.GetRoom(roomId);
+        return room is null ? null : BuildInviteUrl("127.0.0.1", _port, room.Id, room.Token);
+    }
+
+    public string BindHint =>
+        $"Ensure nothing else is using TCP port {_port}, then reopen the chat room.";
+
+    public IReadOnlyList<RoomSummary> ListActiveRooms()
+    {
+        if (!IsRunning)
+        {
+            return [];
+        }
+
+        var list = new List<RoomSummary>();
+        foreach (var id in _activeRoomIds.Keys)
+        {
+            var room = _store.GetRoom(id);
+            if (room is null)
+            {
+                continue;
+            }
+
+            list.Add(new RoomSummary
+            {
+                Id = room.Id,
+                Title = room.Title,
+                InviteUrl = GetInviteUrl(room.Id) ?? string.Empty,
+                CreatedAt = room.CreatedAt,
+                WorkspaceRoot = room.WorkspaceRoot,
+                WorkspaceId = room.WorkspaceId,
+                WorkspaceName = ResolveWorkspaceName(room.WorkspaceId, room.WorkspaceRoot)
+            });
+        }
+
+        return list.OrderByDescending(r => r.CreatedAt).ToArray();
+    }
+
+    public async Task<RoomCreateResult> StartOrCreateRoomAsync(
+        string? title = null,
+        string? workspaceRoot = null,
+        string? workspaceId = null,
+        int? port = null,
+        CancellationToken cancellationToken = default)
     {
         await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             _port = port is > 0 and < 65535 ? port.Value : DefaultPort;
-            var room = _store.CreateRoom(title);
-            _activeRoomId = room.Id;
+            var (root, id) = ResolveWorkspaceInputs(workspaceRoot, workspaceId);
+            var room = _store.CreateRoom(title, root, id);
+            _activeRoomIds[room.Id] = 0;
 
             if (!IsRunning)
             {
                 await StartListenerAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            var invite = BuildInviteUrl(_lanIp!, _port, room.Id, room.Token);
+            var invite = GetInviteUrl(room.Id) ?? GetLocalInviteUrl(room.Id) ?? string.Empty;
+            try
+            {
+                _onRoomOpened?.Invoke(room.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Room opened hook failed.");
+            }
+
             return new RoomCreateResult
             {
                 Room = room,
                 InviteUrl = invite,
-                LanIp = _lanIp!,
+                LanIp = _lanIp ?? "127.0.0.1",
                 Port = _port
             };
         }
@@ -114,24 +222,80 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
     }
 
+    public async Task<bool> CloseRoomAsync(string roomId, CancellationToken cancellationToken = default)
+    {
+        await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_activeRoomIds.TryRemove(roomId, out _))
+            {
+                return false;
+            }
+
+            try
+            {
+                _store.InvalidateToken(roomId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to invalidate room token.");
+            }
+
+            try
+            {
+                _onRoomClosed?.Invoke(roomId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Room closed hook failed.");
+            }
+
+            if (_activeRoomIds.IsEmpty)
+            {
+                await StopListenerCoreAsync().ConfigureAwait(false);
+            }
+
+            return true;
+        }
+        finally
+        {
+            _lifecycle.Release();
+        }
+    }
+
+    public RoomInfo? SetRoomWorkspace(string roomId, string? workspaceRoot, string? workspaceId = null)
+    {
+        var (root, id) = ResolveWorkspaceInputs(workspaceRoot, workspaceId, allowEmpty: false);
+        return _store.UpdateWorkspace(roomId, root, id);
+    }
+
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_activeRoomId is not null)
+            foreach (var id in _activeRoomIds.Keys.ToArray())
             {
+                _activeRoomIds.TryRemove(id, out _);
                 try
                 {
-                    _store.InvalidateToken(_activeRoomId);
+                    _store.InvalidateToken(id);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogDebug(ex, "Failed to invalidate room token.");
                 }
+
+                try
+                {
+                    _onRoomClosed?.Invoke(id);
+                }
+                catch
+                {
+                    // ignore
+                }
             }
 
-            _activeRoomId = null;
             await StopListenerCoreAsync().ConfigureAwait(false);
         }
         finally
@@ -150,40 +314,41 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             Directory.CreateDirectory(contentRoot);
         }
 
-        // Windows HttpListener "+" needs a URL ACL; best-effort so LAN bind works without elevation when possible.
-        TryEnsureUrlAcl(_port);
-
+        // TcpListener on 0.0.0.0 — no Windows Http.sys URL ACL required.
         Exception? lastError = null;
-        foreach (var prefixes in BuildPrefixCandidates(_port))
+        foreach (var (address, lanReachable) in BuildBindCandidates())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var listener = new HttpListener();
+            TcpListener? listener = null;
             try
             {
-                foreach (var prefix in prefixes)
-                {
-                    listener.Prefixes.Add(prefix);
-                }
-
+                listener = new TcpListener(address, _port);
+                listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                 listener.Start();
                 _listener = listener;
-                _lanIp = ResolveInviteHost(prefixes) ?? ResolveLanIpv4() ?? "127.0.0.1";
+                _listening = true;
+                _lanReachable = lanReachable;
+                _lanIp = lanReachable
+                    ? (ResolveLanIpv4() ?? "127.0.0.1")
+                    : "127.0.0.1";
+                _bindWarning = lanReachable ? null : BuildLoopbackOnlyWarning();
+
                 _cts = new CancellationTokenSource();
                 var token = _cts.Token;
                 _loop = Task.Run(() => AcceptLoopAsync(listener, contentRoot, token), token);
-                var anyNonLoopback = prefixes.Any(IsNonLoopbackPrefix);
-                if (!anyNonLoopback)
+
+                if (!_lanReachable)
                 {
                     _logger.LogWarning(
-                        "AthlonRoom bound loopback-only on {Prefixes}; LAN clients cannot connect. Invite host={LanIp}",
-                        string.Join(", ", prefixes),
-                        _lanIp);
+                        "AthlonRoom TcpListener bound loopback-only on 127.0.0.1:{Port}. {Warning}",
+                        _port,
+                        _bindWarning);
                 }
                 else
                 {
                     _logger.LogInformation(
-                        "AthlonRoom listening on {Prefixes} (invite host {LanIp})",
-                        string.Join(", ", prefixes),
+                        "AthlonRoom TcpListener on 0.0.0.0:{Port} (invite host {LanIp})",
+                        _port,
                         _lanIp);
                 }
 
@@ -192,10 +357,11 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             catch (Exception ex)
             {
                 lastError = ex;
-                _logger.LogWarning(ex, "AthlonRoom bind failed for prefixes {Prefixes}", string.Join(", ", prefixes));
+                _listening = false;
+                _logger.LogWarning(ex, "AthlonRoom TcpListener bind failed on {Address}:{Port}", address, _port);
                 try
                 {
-                    listener.Close();
+                    listener?.Stop();
                 }
                 catch
                 {
@@ -205,12 +371,25 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
 
         throw new InvalidOperationException(
-            $"Unable to bind AthlonRoom on 0.0.0.0:{_port}. On Windows run once as admin: netsh http add urlacl url=http://+:{_port}/ user=Everyone",
+            $"Unable to bind AthlonRoom TcpListener on port {_port}. {BindHint}",
             lastError);
     }
 
+    private static IEnumerable<(IPAddress Address, bool LanReachable)> BuildBindCandidates()
+    {
+        yield return (IPAddress.Any, true);
+        yield return (IPAddress.Loopback, false);
+    }
+
+    private string BuildLoopbackOnlyWarning() =>
+        $"Room server is listening on 127.0.0.1:{_port} only — LAN/peer invites will not work. {BindHint}";
+
     private async Task StopListenerCoreAsync()
     {
+        _lanReachable = false;
+        _bindWarning = null;
+        _lanIp = null;
+        _listening = false;
         var cts = _cts;
         _cts = null;
         if (cts is not null)
@@ -239,15 +418,6 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             {
                 // ignore
             }
-
-            try
-            {
-                listener.Close();
-            }
-            catch
-            {
-                // ignore
-            }
         }
 
         var loop = _loop;
@@ -265,20 +435,16 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
     }
 
-    private async Task AcceptLoopAsync(HttpListener listener, string contentRoot, CancellationToken cancellationToken)
+    private async Task AcceptLoopAsync(TcpListener listener, string contentRoot, CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested && listener.IsListening)
+        while (!cancellationToken.IsCancellationRequested && _listening)
         {
-            HttpListenerContext context;
+            TcpClient client;
             try
             {
-                context = await listener.GetContextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+                client = await listener.AcceptTcpClientAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (HttpListenerException)
             {
                 break;
             }
@@ -286,24 +452,54 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             {
                 break;
             }
+            catch (SocketException)
+            {
+                if (cancellationToken.IsCancellationRequested || !_listening)
+                {
+                    break;
+                }
 
-            _ = Task.Run(() => HandleRequestAsync(context, contentRoot), cancellationToken);
+                continue;
+            }
+
+            _ = Task.Run(() => HandleClientAsync(client, contentRoot, cancellationToken), cancellationToken);
         }
     }
 
-    private async Task HandleRequestAsync(HttpListenerContext context, string contentRoot)
+    private async Task HandleClientAsync(TcpClient client, string contentRoot, CancellationToken cancellationToken)
+    {
+        using (client)
+        {
+            try
+            {
+                var context = await RoomTcpHttp.AcceptRequestAsync(client, cancellationToken).ConfigureAwait(false);
+                if (context is null)
+                {
+                    return;
+                }
+
+                await HandleRequestAsync(context, contentRoot).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "AthlonRoom client handler failed.");
+            }
+        }
+    }
+
+    private async Task HandleRequestAsync(RoomHttpContext context, string contentRoot)
     {
         try
         {
             AddCors(context.Response);
-            if (string.Equals(context.Request.HttpMethod, "OPTIONS", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(context.Request.Method, "OPTIONS", StringComparison.OrdinalIgnoreCase))
             {
                 context.Response.StatusCode = (int)HttpStatusCode.NoContent;
                 context.Response.Close();
                 return;
             }
 
-            var path = context.Request.Url?.AbsolutePath ?? "/";
+            var path = context.Request.Path ?? "/";
             if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
             {
                 await HandleApiAsync(context).ConfigureAwait(false);
@@ -328,17 +524,16 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
     }
 
-    private async Task HandleApiAsync(HttpListenerContext context)
+    private async Task HandleApiAsync(RoomHttpContext context)
     {
-        var method = context.Request.HttpMethod ?? "GET";
-        var path = context.Request.Url?.AbsolutePath ?? "";
+        var method = context.Request.Method ?? "GET";
+        var path = context.Request.Path ?? "";
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
-        // POST /api/rooms — local create (also used by desktop; no token required, localhost preferred)
+        // GET/POST /api/rooms — local manage (list / create)
         if (segments.Length == 2
             && segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
-            && segments[1].Equals("rooms", StringComparison.OrdinalIgnoreCase)
-            && method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+            && segments[1].Equals("rooms", StringComparison.OrdinalIgnoreCase))
         {
             if (!IsLocalRequest(context.Request))
             {
@@ -346,36 +541,70 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 return;
             }
 
-            string? title = null;
-            try
+            if (method.Equals("GET", StringComparison.OrdinalIgnoreCase))
             {
-                using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
-                var body = await reader.ReadToEndAsync().ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(body))
+                var rooms = ListActiveRooms();
+                await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
                 {
-                    using var doc = JsonDocument.Parse(body);
-                    if (doc.RootElement.TryGetProperty("title", out var t))
-                    {
-                        title = t.GetString();
-                    }
-                }
-            }
-            catch
-            {
-                // ignore body parse
+                    lanIp = _lanIp,
+                    port = _port,
+                    lanReachable = _lanReachable,
+                    bindWarning = _bindWarning,
+                    bindHint = BindHint,
+                    rooms
+                }).ConfigureAwait(false);
+                return;
             }
 
-            var result = await StartOrCreateRoomAsync(title).ConfigureAwait(false);
-            await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
+            if (method.Equals("POST", StringComparison.OrdinalIgnoreCase))
             {
-                id = result.Room.Id,
-                title = result.Room.Title,
-                inviteUrl = result.InviteUrl,
-                lanIp = result.LanIp,
-                port = result.Port,
-                createdAt = result.Room.CreatedAt
-            }).ConfigureAwait(false);
-            return;
+                string? title = null;
+                string? workspaceRoot = null;
+                string? workspaceId = null;
+                try
+                {
+                    using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
+                    var body = await reader.ReadToEndAsync().ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(body))
+                    {
+                        using var doc = JsonDocument.Parse(body);
+                        if (doc.RootElement.TryGetProperty("title", out var t))
+                        {
+                            title = t.GetString();
+                        }
+
+                        if (doc.RootElement.TryGetProperty("workspaceRoot", out var wr))
+                        {
+                            workspaceRoot = wr.GetString();
+                        }
+
+                        if (doc.RootElement.TryGetProperty("workspaceId", out var wid))
+                        {
+                            workspaceId = wid.GetString();
+                        }
+                    }
+                }
+                catch
+                {
+                    // ignore body parse
+                }
+
+                var result = await StartOrCreateRoomAsync(title, workspaceRoot, workspaceId).ConfigureAwait(false);
+                await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
+                {
+                    id = result.Room.Id,
+                    title = result.Room.Title,
+                    inviteUrl = result.InviteUrl,
+                    lanIp = result.LanIp,
+                    port = result.Port,
+                    createdAt = result.Room.CreatedAt,
+                    token = result.Room.Token,
+                    workspaceRoot = result.Room.WorkspaceRoot,
+                    workspaceId = result.Room.WorkspaceId,
+                    workspaceName = ResolveWorkspaceName(result.Room.WorkspaceId, result.Room.WorkspaceRoot)
+                }).ConfigureAwait(false);
+                return;
+            }
         }
 
         // /api/rooms/{id}/...
@@ -394,6 +623,75 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             return;
         }
 
+        // POST /api/rooms/{id}/close — localhost only
+        if (segments.Length == 4
+            && segments[3].Equals("close", StringComparison.OrdinalIgnoreCase)
+            && method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsLocalRequest(context.Request))
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.Forbidden, new { error = "local_only" }).ConfigureAwait(false);
+                return;
+            }
+
+            var closed = await CloseRoomAsync(roomId).ConfigureAwait(false);
+            await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { closed }).ConfigureAwait(false);
+            return;
+        }
+
+        // POST /api/rooms/{id}/workspace — localhost only
+        if (segments.Length == 4
+            && segments[3].Equals("workspace", StringComparison.OrdinalIgnoreCase)
+            && method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsLocalRequest(context.Request))
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.Forbidden, new { error = "local_only" }).ConfigureAwait(false);
+                return;
+            }
+
+            string? workspaceRoot = null;
+            string? workspaceId = null;
+            try
+            {
+                using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
+                var body = await reader.ReadToEndAsync().ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(body))
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("workspaceRoot", out var wr))
+                    {
+                        workspaceRoot = wr.GetString();
+                    }
+
+                    if (doc.RootElement.TryGetProperty("workspaceId", out var wid))
+                    {
+                        workspaceId = wid.GetString();
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            var updated = SetRoomWorkspace(roomId, workspaceRoot, workspaceId);
+            if (updated is null)
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.NotFound, new { error = "room_not_found" }).ConfigureAwait(false);
+                return;
+            }
+
+            await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
+            {
+                id = updated.Id,
+                workspaceRoot = updated.WorkspaceRoot,
+                workspaceId = updated.WorkspaceId,
+                workspaceName = ResolveWorkspaceName(updated.WorkspaceId, updated.WorkspaceRoot)
+            }).ConfigureAwait(false);
+            return;
+        }
+
         var token = ExtractToken(context.Request);
         if (!_store.ValidateToken(roomId, token))
         {
@@ -409,6 +707,11 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             {
                 id = room.Id,
                 title = room.Title,
+                workspaceRoot = IsLocalRequest(context.Request) ? room.WorkspaceRoot : null,
+                workspaceId = IsLocalRequest(context.Request) ? room.WorkspaceId : null,
+                workspaceName = IsLocalRequest(context.Request)
+                    ? ResolveWorkspaceName(room.WorkspaceId, room.WorkspaceRoot)
+                    : null,
                 createdAt = room.CreatedAt
             }).ConfigureAwait(false);
             return;
@@ -469,7 +772,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         await WriteJsonAsync(context.Response, HttpStatusCode.NotFound, new { error = "not_found" }).ConfigureAwait(false);
     }
 
-    private async Task HandlePostMessageAsync(HttpListenerContext context, string roomId)
+    private async Task HandlePostMessageAsync(RoomHttpContext context, string roomId)
     {
         PostMessageRequest? req;
         try
@@ -537,7 +840,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         await WriteJsonAsync(context.Response, HttpStatusCode.OK, message).ConfigureAwait(false);
     }
 
-    private async Task HandleUploadAsync(HttpListenerContext context, string roomId)
+    private async Task HandleUploadAsync(RoomHttpContext context, string roomId)
     {
         try
         {
@@ -598,7 +901,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
     }
 
-    private async Task HandleDownloadAsync(HttpListenerContext context, string roomId, string attachmentId)
+    private async Task HandleDownloadAsync(RoomHttpContext context, string roomId, string attachmentId)
     {
         if (!RoomStore.IsSafeId(attachmentId))
         {
@@ -622,11 +925,12 @@ public sealed class AthlonRoomServer : IAsyncDisposable
 
         await using var stream = File.OpenRead(path);
         context.Response.ContentLength64 = stream.Length;
+        context.Response.EnsureHeaders();
         await stream.CopyToAsync(context.Response.OutputStream).ConfigureAwait(false);
         context.Response.Close();
     }
 
-    private async Task HandleSseAsync(HttpListenerContext context, string roomId)
+    private async Task HandleSseAsync(RoomHttpContext context, string roomId)
     {
         var connectionId = Guid.NewGuid().ToString("N");
         _sseConnections[connectionId] = 0;
@@ -635,10 +939,11 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         context.Response.ContentType = "text/event-stream; charset=utf-8";
         context.Response.Headers["Cache-Control"] = "no-cache";
         context.Response.Headers["Connection"] = "keep-alive";
-        context.Response.SendChunked = true;
+        context.Response.Streaming = true;
+        context.Response.KeepAlive = true;
 
-        var output = context.Response.OutputStream;
-        await WriteSseAsync(output, "ready", new { ok = true }).ConfigureAwait(false);
+        context.Response.EnsureHeaders();
+        await WriteSseAsync(context.Response, "ready", new { ok = true }).ConfigureAwait(false);
 
         using var subscription = _store.SubscribeEvents(roomId, storeEvent =>
         {
@@ -650,11 +955,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 var json = JsonSerializer.Serialize(storeEvent.Message, JsonOptions);
                 var payload = $"event: {eventName}\ndata: {json}\n\n";
                 var bytes = Encoding.UTF8.GetBytes(payload);
-                lock (output)
-                {
-                    output.Write(bytes, 0, bytes.Length);
-                    output.Flush();
-                }
+                context.Response.WriteBodySync(bytes);
             }
             catch
             {
@@ -666,17 +967,13 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         {
             // Keep alive until client disconnects or server stops
             var buffer = new byte[1];
-            while (_listener?.IsListening == true)
+            while (_listening)
             {
                 await Task.Delay(15000).ConfigureAwait(false);
                 try
                 {
                     var ping = Encoding.UTF8.GetBytes(": ping\n\n");
-                    lock (output)
-                    {
-                        output.Write(ping, 0, ping.Length);
-                        output.Flush();
-                    }
+                    context.Response.WriteBodySync(ping);
                 }
                 catch
                 {
@@ -705,9 +1002,9 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
     }
 
-    private async Task ServeStaticAsync(HttpListenerContext context, string contentRoot)
+    private async Task ServeStaticAsync(RoomHttpContext context, string contentRoot)
     {
-        var relative = ResolveStaticRelativePath(context.Request.Url);
+        var relative = ResolveStaticRelativePath(context.Request.Url, context.Request.Path);
         if (relative is null)
         {
             await WriteTextAsync(context.Response, HttpStatusCode.Forbidden, "Forbidden").ConfigureAwait(false);
@@ -723,7 +1020,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         // SPA fallback for /r/{roomId} only — never for real static files (.js/.css/...).
         if (!File.Exists(filePath))
         {
-            var abs = context.Request.Url?.AbsolutePath ?? "";
+            var abs = context.Request.Path ?? "";
             var ext = Path.GetExtension(abs);
             if (string.IsNullOrEmpty(ext)
                 && (abs.StartsWith("/r/", StringComparison.OrdinalIgnoreCase)
@@ -745,11 +1042,12 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         context.Response.ContentType = mime;
         await using var stream = File.OpenRead(filePath);
         context.Response.ContentLength64 = stream.Length;
+        context.Response.EnsureHeaders();
         await stream.CopyToAsync(context.Response.OutputStream).ConfigureAwait(false);
         context.Response.Close();
     }
 
-    private static async Task<(string FileName, string MimeType, Stream Content)?> ParseMultipartAsync(HttpListenerRequest request)
+    private static async Task<(string FileName, string MimeType, Stream Content)?> ParseMultipartAsync(RoomHttpRequest request)
     {
         var contentType = request.ContentType ?? "";
         var match = Regex.Match(contentType, @"boundary=(?:"")?([^"";]+)(?:"")?", RegexOptions.IgnoreCase);
@@ -867,7 +1165,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         return -1;
     }
 
-    private static string? ExtractToken(HttpListenerRequest request)
+    private static string? ExtractToken(RoomHttpRequest request)
     {
         var auth = request.Headers["Authorization"];
         if (!string.IsNullOrWhiteSpace(auth) && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
@@ -878,7 +1176,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         return request.QueryString["t"];
     }
 
-    private static bool IsLocalRequest(HttpListenerRequest request)
+    private static bool IsLocalRequest(RoomHttpRequest request)
     {
         var addr = request.RemoteEndPoint?.Address;
         if (addr is null)
@@ -900,101 +1198,84 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         return false;
     }
 
-    /// <summary>
-    /// HttpListener equivalent of 0.0.0.0 is <c>http://+:{port}/</c>.
-    /// Prefer that; if URL ACL blocks it, bind each local IPv4 with loopback (one candidate at a time).
-    /// Loopback-only is last resort and must not win before LAN binds.
-    /// </summary>
-    private static IEnumerable<string[]> BuildPrefixCandidates(int port)
+    private (string? Root, string? Id) ResolveWorkspaceInputs(
+        string? workspaceRoot,
+        string? workspaceId,
+        bool allowEmpty = true)
     {
-        // 0.0.0.0 / all interfaces (needs URL ACL on Windows)
-        yield return new[] { $"http://+:{port}/" };
-        yield return new[] { $"http://*:{port}/" };
-
-        var ips = GetLocalIpv4Addresses()
-            .OrderByDescending(IsPrivateIpv4)
-            .ThenBy(ip => ip, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        // Prefer private LAN first: bind one NIC + loopback so a bad public IP doesn't fail the whole set.
-        foreach (var ip in ips)
+        if (!string.IsNullOrWhiteSpace(workspaceId))
         {
-            yield return new[]
+            var match = _settings.Workspaces.FirstOrDefault(w =>
+                string.Equals(w.Id, workspaceId.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (match is not null && !string.IsNullOrWhiteSpace(match.RootPath))
             {
-                $"http://{ip}:{port}/",
-                $"http://127.0.0.1:{port}/"
-            };
+                return (match.RootPath.Trim(), match.Id);
+            }
         }
 
-        if (ips.Count > 1)
+        if (!string.IsNullOrWhiteSpace(workspaceRoot))
         {
-            yield return ips
-                .Select(ip => $"http://{ip}:{port}/")
-                .Append($"http://127.0.0.1:{port}/")
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+            var byRoot = _settings.Workspaces.FirstOrDefault(w =>
+                !string.IsNullOrWhiteSpace(w.RootPath)
+                && string.Equals(w.RootPath.Trim(), workspaceRoot.Trim(), StringComparison.OrdinalIgnoreCase));
+            return (workspaceRoot.Trim(), byRoot?.Id ?? workspaceId?.Trim());
         }
 
-        // Last resort — LAN unreachable
-        yield return new[] { $"http://127.0.0.1:{port}/" };
+        if (!allowEmpty)
+        {
+            return (null, null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_workspaceContext.RootPath))
+        {
+            return (_workspaceContext.RootPath, _workspaceContext.WorkspaceId);
+        }
+
+        var first = _settings.Workspaces.FirstOrDefault(w => !string.IsNullOrWhiteSpace(w.RootPath));
+        if (first is not null)
+        {
+            return (first.RootPath.Trim(), first.Id);
+        }
+
+        return (null, null);
     }
 
-    private static string? ResolveInviteHost(IReadOnlyList<string> prefixes)
+    private string? ResolveWorkspaceName(string? workspaceId, string? workspaceRoot)
     {
-        var hosts = new List<string>();
-        foreach (var prefix in prefixes)
+        if (!string.IsNullOrWhiteSpace(workspaceId))
         {
-            if (!Uri.TryCreate(prefix, UriKind.Absolute, out var uri))
+            var match = _settings.Workspaces.FirstOrDefault(w =>
+                string.Equals(w.Id, workspaceId, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
             {
-                continue;
+                return string.IsNullOrWhiteSpace(match.Name) ? match.RootPath : match.Name;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(workspaceRoot))
+        {
+            var byRoot = _settings.Workspaces.FirstOrDefault(w =>
+                !string.IsNullOrWhiteSpace(w.RootPath)
+                && string.Equals(w.RootPath.Trim(), workspaceRoot.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (byRoot is not null)
+            {
+                return string.IsNullOrWhiteSpace(byRoot.Name) ? byRoot.RootPath : byRoot.Name;
             }
 
-            var host = uri.Host;
-            if (string.IsNullOrWhiteSpace(host)
-                || host is "+" or "*"
-                || host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-                || host is "127.0.0.1")
+            try
             {
-                continue;
+                return Path.GetFileName(workspaceRoot.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                    is { Length: > 0 } name
+                    ? name
+                    : workspaceRoot;
             }
-
-            hosts.Add(host);
-        }
-
-        if (hosts.Count == 0)
-        {
-            // Bound to +/* — pick best local address for the invite link.
-            return ResolveLanIpv4();
-        }
-
-        return hosts.OrderByDescending(IsPrivateIpv4).FirstOrDefault();
-    }
-
-    private static bool IsNonLoopbackPrefix(string prefix) =>
-        !prefix.Contains("127.0.0.1", StringComparison.Ordinal)
-        && !prefix.Contains("localhost", StringComparison.OrdinalIgnoreCase);
-
-    private static void TryEnsureUrlAcl(int port)
-    {
-        try
-        {
-            var url = $"http://+:{port}/";
-            var psi = new ProcessStartInfo
+            catch
             {
-                FileName = "netsh",
-                Arguments = $"http add urlacl url={url} user=Everyone",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            using var process = Process.Start(psi);
-            process?.WaitForExit(3000);
+                return workspaceRoot;
+            }
         }
-        catch
-        {
-            // Best effort — may already exist or require elevation.
-        }
+
+        return null;
     }
 
     private static string? ResolveLanIpv4()
@@ -1069,14 +1350,9 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     public static string BuildInviteUrl(string lanIp, int port, string roomId, string token) =>
         $"http://{lanIp}:{port}/r/{roomId}?t={Uri.EscapeDataString(token)}";
 
-    private static string? ResolveStaticRelativePath(Uri? requestUri)
+    private static string? ResolveStaticRelativePath(Uri requestUri, string absolutePath)
     {
-        if (requestUri is null)
-        {
-            return AthlonRoomAssets.EntryFileName;
-        }
-
-        var rawPath = Uri.UnescapeDataString(requestUri.AbsolutePath);
+        var rawPath = Uri.UnescapeDataString(string.IsNullOrWhiteSpace(absolutePath) ? requestUri.AbsolutePath : absolutePath);
         if (string.IsNullOrWhiteSpace(rawPath) || rawPath == "/")
         {
             return AthlonRoomAssets.EntryFileName;
@@ -1127,21 +1403,21 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             : "application/octet-stream";
     }
 
-    private static void AddCors(HttpListenerResponse response)
+    private static void AddCors(RoomHttpResponse response)
     {
         response.Headers["Access-Control-Allow-Origin"] = "*";
         response.Headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-File-Name";
         response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
     }
 
-    private static async Task WriteJsonAsync(HttpListenerResponse response, HttpStatusCode status, object body)
+    private static async Task WriteJsonAsync(RoomHttpResponse response, HttpStatusCode status, object body)
     {
         var json = JsonSerializer.Serialize(body, JsonOptions);
         await WriteTextAsync(response, status, json, "application/json; charset=utf-8").ConfigureAwait(false);
     }
 
     private static async Task WriteTextAsync(
-        HttpListenerResponse response,
+        RoomHttpResponse response,
         HttpStatusCode status,
         string body,
         string contentType = "text/plain; charset=utf-8")
@@ -1150,16 +1426,16 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         response.StatusCode = (int)status;
         response.ContentType = contentType;
         response.ContentLength64 = bytes.Length;
-        await response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
+        await response.WriteBodyAsync(bytes).ConfigureAwait(false);
         response.Close();
     }
 
-    private static async Task WriteSseAsync(Stream output, string eventName, object data)
+    private static async Task WriteSseAsync(RoomHttpResponse response, string eventName, object data)
     {
         var json = JsonSerializer.Serialize(data, JsonOptions);
         var payload = $"event: {eventName}\ndata: {json}\n\n";
         var bytes = Encoding.UTF8.GetBytes(payload);
-        await output.WriteAsync(bytes).ConfigureAwait(false);
-        await output.FlushAsync().ConfigureAwait(false);
+        await response.WriteBodyAsync(bytes).ConfigureAwait(false);
+        await response.FlushAsync().ConfigureAwait(false);
     }
 }

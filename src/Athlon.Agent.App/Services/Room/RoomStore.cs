@@ -34,7 +34,7 @@ public sealed class RoomStore
 
     public string RoomsRoot => _roomsRoot;
 
-    public RoomInfo CreateRoom(string? title = null)
+    public RoomInfo CreateRoom(string? title = null, string? workspaceRoot = null, string? workspaceId = null)
     {
         var id = Guid.NewGuid().ToString("N")[..12];
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
@@ -43,6 +43,8 @@ public sealed class RoomStore
             Id = id,
             Token = token,
             Title = string.IsNullOrWhiteSpace(title) ? "Athlon 聊天房间" : title.Trim(),
+            WorkspaceRoot = NormalizeOptionalPath(workspaceRoot),
+            WorkspaceId = string.IsNullOrWhiteSpace(workspaceId) ? null : workspaceId.Trim(),
             CreatedAt = DateTimeOffset.UtcNow
         };
 
@@ -55,6 +57,28 @@ public sealed class RoomStore
         _rooms[id] = new RoomRuntime(info, new List<RoomMessage>());
         return info;
     }
+
+    public RoomInfo? UpdateWorkspace(string roomId, string? workspaceRoot, string? workspaceId = null)
+    {
+        var room = GetRoom(roomId);
+        if (room is null)
+        {
+            return null;
+        }
+
+        room.WorkspaceRoot = NormalizeOptionalPath(workspaceRoot);
+        room.WorkspaceId = string.IsNullOrWhiteSpace(workspaceId) ? null : workspaceId.Trim();
+        WriteRoomJson(room);
+        if (_rooms.TryGetValue(roomId, out var runtime))
+        {
+            runtime.UpdateInfo(room);
+        }
+
+        return room;
+    }
+
+    private static string? NormalizeOptionalPath(string? path) =>
+        string.IsNullOrWhiteSpace(path) ? null : path.Trim();
 
     public RoomInfo? GetRoom(string roomId)
     {

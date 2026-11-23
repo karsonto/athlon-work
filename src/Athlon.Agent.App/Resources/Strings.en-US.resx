@@ -2025,6 +2025,33 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   <data name="Shell_ChatRoomInviteHint" xml:space="preserve">
     <value>Devices on the same LAN can join with the link below (includes invite token). Stopping the room invalidates the link.</value>
   </data>
+  <data name="Shell_ChatRoomBindLoopbackOnly" xml:space="preserve">
+    <value>The room server is listening on 127.0.0.1:{0} only — LAN peers cannot connect. Free the port and reopen the chat room. ({1}) Do not share local-only links.</value>
+  </data>
+  <data name="Shell_ChatRoomLocalOnlyInvite" xml:space="preserve">
+    <value>(Local only — do not share) {0}</value>
+  </data>
+  <data name="Shell_ChatRoomListHint" xml:space="preserve">
+    <value>Host multiple rooms at once. Switch on the left; unread shows a badge.</value>
+  </data>
+  <data name="Shell_ChatRoomWorkspace" xml:space="preserve">
+    <value>Room workspace</value>
+  </data>
+  <data name="Shell_ChatRoomWorkspaceHint" xml:space="preserve">
+    <value>@agent reads/writes files and runs commands in this workspace. Each room can use a different one.</value>
+  </data>
+  <data name="Shell_ChatRoomNoWorkspace" xml:space="preserve">
+    <value>No workspace set</value>
+  </data>
+  <data name="Shell_ChatRoomNew" xml:space="preserve">
+    <value>New room</value>
+  </data>
+  <data name="Shell_ChatRoomCloseRoom" xml:space="preserve">
+    <value>Close room</value>
+  </data>
+  <data name="Shell_ChatRoomStopAll" xml:space="preserve">
+    <value>Stop all</value>
+  </data>
   <data name="Shell_ChatRoomCopyLink" xml:space="preserve">
     <value>Copy link</value>
   </data>
@@ -2035,7 +2062,7 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
     <value>Stop room</value>
   </data>
   <data name="Shell_ChatRoomStopped" xml:space="preserve">
-    <value>Chat room stopped.</value>
+    <value>All chat rooms stopped.</value>
   </data>
   <data name="Shell_ChatRoomStartFailed" xml:space="preserve">
     <value>Unable to start the chat room: {0}</value>

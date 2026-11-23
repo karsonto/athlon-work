@@ -755,34 +755,33 @@ public partial class MainShellViewModel
     {
         try
         {
-            RoomCreateResult result;
-            if (_athlonRoomServer.IsRunning
-                && _athlonRoomServer.ActiveRoom is { } activeRoom
-                && !string.IsNullOrWhiteSpace(_athlonRoomServer.ActiveInviteUrl))
+            if (!_athlonRoomServer.IsRunning || _athlonRoomServer.ActiveRoomIds.Count == 0)
             {
-                result = new RoomCreateResult
-                {
-                    Room = activeRoom,
-                    InviteUrl = _athlonRoomServer.ActiveInviteUrl!,
-                    LanIp = _athlonRoomServer.LanIp ?? "127.0.0.1",
-                    Port = _athlonRoomServer.Port
-                };
-            }
-            else
-            {
-                result = await _athlonRoomServer.StartOrCreateRoomAsync().ConfigureAwait(true);
+                await _athlonRoomServer.StartOrCreateRoomAsync(
+                    workspaceRoot: _workspaceContext.RootPath ?? _session.ActiveWorkspace,
+                    workspaceId: _workspaceContext.WorkspaceId ?? _session.ActiveWorkspaceId).ConfigureAwait(true);
             }
 
             _roomAgentBridge.AttachToActiveRoom();
+
+            if (!_athlonRoomServer.IsLanReachable
+                && !string.IsNullOrWhiteSpace(_athlonRoomServer.BindWarning))
+            {
+                _notifier.Warning(
+                    "Shell_ChatRoom",
+                    "Shell_ChatRoomBindLoopbackOnly",
+                    _athlonRoomServer.Port.ToString(),
+                    _athlonRoomServer.BindHint);
+            }
 
             var owner = Application.Current?.MainWindow;
             var window = new RoomInviteWindow(
                 _athlonRoomServer,
                 _roomAgentBridge,
                 _roomAgentProfileStore,
+                _roomStore,
                 _roomSkillCatalog,
-                _appSettings,
-                result.InviteUrl);
+                _appSettings);
             if (owner is not null)
             {
                 window.Owner = owner;

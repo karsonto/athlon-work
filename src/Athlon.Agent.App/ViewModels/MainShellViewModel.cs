@@ -79,6 +79,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly AthlonRoomServer _athlonRoomServer;
     private readonly RoomAgentBridge _roomAgentBridge;
     private readonly RoomAgentProfileStore _roomAgentProfileStore;
+    private readonly RoomStore _roomStore;
     private readonly IAgentSkillCatalog _roomSkillCatalog;
 
     private AgentSession _session = AgentSession.Create("New Chat");
@@ -149,6 +150,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         AthlonRoomServer athlonRoomServer,
         RoomAgentBridge roomAgentBridge,
         RoomAgentProfileStore roomAgentProfileStore,
+        RoomStore roomStore,
         IAppLogger logger)
     {
         _storage = storage;
@@ -180,6 +182,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _athlonRoomServer = athlonRoomServer;
         _roomAgentBridge = roomAgentBridge;
         _roomAgentProfileStore = roomAgentProfileStore;
+        _roomStore = roomStore;
         _roomSkillCatalog = skillCatalog;
         _skillCatalog = skillCatalog;
         _logger = logger;

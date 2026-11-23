@@ -5,6 +5,7 @@ import { attachmentUrl, formatBytes } from "../lib/api";
 interface MessageBubbleProps {
   message: RoomMessage;
   isMine: boolean;
+  baseUrl: string;
   roomId: string;
   token: string;
   onPreviewImage: (url: string, alt: string) => void;
@@ -13,6 +14,7 @@ interface MessageBubbleProps {
 export function MessageBubble({
   message,
   isMine,
+  baseUrl,
   roomId,
   token,
   onPreviewImage,
@@ -46,7 +48,7 @@ export function MessageBubble({
       <div className={`rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed ${bubbleClass}`}>
         {message.text ? <p className="whitespace-pre-wrap break-words">{message.text}</p> : null}
         {message.attachments?.map((att) => {
-          const url = attachmentUrl(roomId, token, att.id);
+          const url = attachmentUrl(baseUrl, roomId, token, att.id);
           if (att.isImage || att.mimeType.startsWith("image/")) {
             return (
               <button
@@ -91,12 +93,19 @@ export function MessageBubble({
     </div>
   );
 
+  // Own messages hug the right; everyone else (incl. agent) hugs the left.
   return (
     <div
-      className={`flex w-full gap-2.5 px-3 ${isMine ? "flex-row-reverse" : "flex-row"}`}
+      className={`flex w-full px-3 ${isMine ? "justify-end" : "justify-start"}`}
     >
-      {avatar}
-      {body}
+      <div
+        className={`flex max-w-[min(85%,32rem)] gap-2.5 ${
+          isMine ? "flex-row-reverse" : "flex-row"
+        }`}
+      >
+        {avatar}
+        {body}
+      </div>
     </div>
   );
 }

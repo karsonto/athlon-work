@@ -55,11 +55,19 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         _workspaceContext = workspaceContext;
         _settings = settings;
         _logger = logger;
+        _server.SetRoomLifecycleHooks(AttachRoom, DetachRoom);
     }
 
     public void AttachToActiveRoom()
     {
-        var roomId = _server.ActiveRoomId;
+        foreach (var roomId in _server.ActiveRoomIds)
+        {
+            AttachRoom(roomId);
+        }
+    }
+
+    public void AttachRoom(string roomId)
+    {
         if (string.IsNullOrWhiteSpace(roomId))
         {
             return;
@@ -83,16 +91,22 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         _logger.LogInformation("RoomAgentBridge attached to room {RoomId}", roomId);
     }
 
+    public void DetachRoom(string roomId)
+    {
+        if (_subscriptions.TryRemove(roomId, out var sub))
+        {
+            sub.Dispose();
+        }
+
+        _attachedRooms.TryRemove(roomId, out _);
+        _logger.LogInformation("RoomAgentBridge detached from room {RoomId}", roomId);
+    }
+
     public void DetachAll()
     {
         foreach (var key in _subscriptions.Keys.ToArray())
         {
-            if (_subscriptions.TryRemove(key, out var sub))
-            {
-                sub.Dispose();
-            }
-
-            _attachedRooms.TryRemove(key, out _);
+            DetachRoom(key);
         }
     }
 
@@ -180,17 +194,10 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         var history = _store.GetMessages(roomId);
         var prompt = BuildUserPrompt(trigger, taskText, history);
 
-        var workspaceRoot = _workspaceContext.RootPath;
-        if (string.IsNullOrWhiteSpace(workspaceRoot))
-        {
-            workspaceRoot = _settings.Workspaces
-                .Select(w => w.RootPath)
-                .FirstOrDefault(p => !string.IsNullOrWhiteSpace(p))
-                ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        }
-
+        var room = _store.GetRoom(roomId);
+        var (workspaceRoot, workspaceId) = ResolveRoomWorkspace(room);
         var session = AgentSession.Create($"Room {roomId}")
-            .WithWorkspace(workspaceRoot);
+            .WithWorkspace(workspaceRoot, workspaceId);
 
         var allowList = profile.ToolAllowList.Count > 0
             ? profile.ToolAllowList.ToArray()
@@ -242,7 +249,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             ignorePatterns,
             workspaceKind);
 
-        var completePrompt = BuildSystemPrompt(profile);
+        var completePrompt = BuildSystemPrompt(profile, workspaceRoot);
         var member = parent.CreateTeamMember(
             session.Id,
             teamTaskId: "room-" + roomId,
@@ -334,12 +341,53 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         }
     }
 
-    private static string BuildSystemPrompt(AgentProfile profile)
+    private (string Root, string? Id) ResolveRoomWorkspace(RoomInfo? room)
+    {
+        if (room is not null && !string.IsNullOrWhiteSpace(room.WorkspaceId))
+        {
+            var match = _settings.Workspaces.FirstOrDefault(w =>
+                string.Equals(w.Id, room.WorkspaceId, StringComparison.OrdinalIgnoreCase));
+            if (match is not null && !string.IsNullOrWhiteSpace(match.RootPath))
+            {
+                return (match.RootPath.Trim(), match.Id);
+            }
+        }
+
+        if (room is not null && !string.IsNullOrWhiteSpace(room.WorkspaceRoot))
+        {
+            var byRoot = _settings.Workspaces.FirstOrDefault(w =>
+                !string.IsNullOrWhiteSpace(w.RootPath)
+                && string.Equals(w.RootPath.Trim(), room.WorkspaceRoot.Trim(), StringComparison.OrdinalIgnoreCase));
+            return (room.WorkspaceRoot.Trim(), byRoot?.Id ?? room.WorkspaceId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_workspaceContext.RootPath))
+        {
+            return (_workspaceContext.RootPath, _workspaceContext.WorkspaceId);
+        }
+
+        var first = _settings.Workspaces
+            .FirstOrDefault(w => !string.IsNullOrWhiteSpace(w.RootPath));
+        if (first is not null)
+        {
+            return (first.RootPath.Trim(), first.Id);
+        }
+
+        return (Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), null);
+    }
+
+    private static string BuildSystemPrompt(AgentProfile profile, string workspaceRoot)
     {
         var sb = new StringBuilder();
         sb.AppendLine("You are Athlon, a helpful teammate in a LAN chat room.");
         sb.AppendLine("Reply in the same language the user uses. Keep answers concise and conversational.");
         sb.AppendLine("When the user wants a file shared with the room (especially after editing a Word/docx or other document), call room_share_file with the workspace path.");
+        if (!string.IsNullOrWhiteSpace(workspaceRoot))
+        {
+            sb.Append("Your assigned workspace root for this room is: ").Append(workspaceRoot).AppendLine();
+            sb.AppendLine("Only read/write files inside this workspace unless the user explicitly asks otherwise.");
+        }
+
         if (!string.IsNullOrWhiteSpace(profile.SoulMd))
         {
             sb.AppendLine();

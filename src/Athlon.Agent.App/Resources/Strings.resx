@@ -2034,6 +2034,33 @@
   <data name="Shell_ChatRoomInviteHint" xml:space="preserve">
     <value>同一局域网内的设备可用下方链接进入房间（含邀请令牌）。关闭房间后链接将失效。</value>
   </data>
+  <data name="Shell_ChatRoomBindLoopbackOnly" xml:space="preserve">
+    <value>房间服务当前只监听 127.0.0.1:{0}，局域网设备无法连接。请确认端口未被占用后重新打开聊天房间。（{1}）请勿分享本机专用链接。</value>
+  </data>
+  <data name="Shell_ChatRoomLocalOnlyInvite" xml:space="preserve">
+    <value>（仅本机可用，请勿分享）{0}</value>
+  </data>
+  <data name="Shell_ChatRoomListHint" xml:space="preserve">
+    <value>可同时开多个房间，左侧切换；未读会显示角标。</value>
+  </data>
+  <data name="Shell_ChatRoomWorkspace" xml:space="preserve">
+    <value>房间工作区</value>
+  </data>
+  <data name="Shell_ChatRoomWorkspaceHint" xml:space="preserve">
+    <value>@agent 将在此工作区读写文件与执行命令。每个房间可单独设定。</value>
+  </data>
+  <data name="Shell_ChatRoomNoWorkspace" xml:space="preserve">
+    <value>未设定工作区</value>
+  </data>
+  <data name="Shell_ChatRoomNew" xml:space="preserve">
+    <value>新建房间</value>
+  </data>
+  <data name="Shell_ChatRoomCloseRoom" xml:space="preserve">
+    <value>关闭此房</value>
+  </data>
+  <data name="Shell_ChatRoomStopAll" xml:space="preserve">
+    <value>停止全部</value>
+  </data>
   <data name="Shell_ChatRoomCopyLink" xml:space="preserve">
     <value>复制链接</value>
   </data>
@@ -2044,7 +2071,7 @@
     <value>停止房间</value>
   </data>
   <data name="Shell_ChatRoomStopped" xml:space="preserve">
-    <value>聊天房间已停止。</value>
+    <value>全部聊天房间已停止。</value>
   </data>
   <data name="Shell_ChatRoomStartFailed" xml:space="preserve">
     <value>无法启动聊天房间：{0}</value>

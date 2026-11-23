@@ -29,3 +29,24 @@ export interface PendingFile {
   file: File;
   previewUrl?: string;
 }
+
+export type RoomRole = "host" | "guest";
+
+export interface RoomTab {
+  id: string;
+  title: string;
+  baseUrl: string;
+  token: string;
+  role: RoomRole;
+  unread: number;
+  inviteUrl: string;
+}
+
+export interface RoomSessionState {
+  messages: RoomMessage[];
+  draft: string;
+  pending: PendingFile[];
+  meta: RoomMeta | null;
+  seenIds: Set<string>;
+  error: string | null;
+}
