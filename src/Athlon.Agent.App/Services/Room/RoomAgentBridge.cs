@@ -462,6 +462,21 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             "run_started",
             summary: RoomAgentRuntimeModes.IsCloudSandbox(runtimeMode) ? "云沙箱已就绪" : "开始处理");
 
+        // Room MCP allow-list is independent of Chat Enabled; temporarily connect selected servers.
+        var roomMcpSelected = profile.McpServerNames?
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? [];
+        var appliedRoomMcpOverlay = false;
+        if (roomMcpSelected.Length > 0)
+        {
+            await mcpRegistry
+                .RefreshAsync(BuildRoomMcpRefreshList(_settings.McpServers, roomMcpSelected), cancellationToken)
+                .ConfigureAwait(false);
+            appliedRoomMcpOverlay = true;
+        }
+
         using var roomScope = RoomAgentTurnScope.Enter(
             new RoomAgentTurnOptions(roomId, runtimeMode, pathMap));
         using var profileScope = AgentProfileTurnScope.Enter(profileOptions);
@@ -630,6 +645,20 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         }
         finally
         {
+            if (appliedRoomMcpOverlay)
+            {
+                try
+                {
+                    await mcpRegistry
+                        .RefreshAsync(_settings.McpServers, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception restoreEx)
+                {
+                    _logger.LogDebug(restoreEx, "Failed to restore MCP registry after room turn {RoomId}", roomId);
+                }
+            }
+
             if (sandboxBackend is not null
                 && RoomAgentRuntimeModes.IsCloudSandbox(runtimeMode)
                 && !string.IsNullOrWhiteSpace(workspaceRoot))
@@ -646,6 +675,30 @@ public sealed class RoomAgentBridge : IAsyncDisposable
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Clone MCP configs with room-selected servers force-enabled (Chat Enabled unchanged).
+    /// </summary>
+    private static List<McpServerSettings> BuildRoomMcpRefreshList(
+        IEnumerable<McpServerSettings> servers,
+        IReadOnlyList<string> roomSelected)
+    {
+        var selected = new HashSet<string>(roomSelected, StringComparer.OrdinalIgnoreCase);
+        return servers.Select(s => new McpServerSettings
+        {
+            Name = s.Name,
+            Enabled = s.Enabled
+                || (!string.IsNullOrWhiteSpace(s.Name) && selected.Contains(s.Name.Trim())),
+            TransportType = s.TransportType,
+            Url = s.Url,
+            Command = s.Command,
+            Args = s.Args.ToList(),
+            Env = new Dictionary<string, string>(s.Env, StringComparer.OrdinalIgnoreCase),
+            Headers = new Dictionary<string, string>(s.Headers, StringComparer.OrdinalIgnoreCase),
+            WorkingDirectory = s.WorkingDirectory,
+            ToolCallTimeoutSeconds = s.ToolCallTimeoutSeconds
+        }).ToList();
     }
 
     private AgentSession SyncRoomChatIntoSession(

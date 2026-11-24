@@ -43,16 +43,16 @@ export function EmptyConversation({
     <div className="flex h-full w-full flex-1 items-center justify-center overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.14),transparent_34%),linear-gradient(to_bottom,_#f8fbff,_#eef6ff)] px-6 py-10 dark:bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.16),transparent_34%),linear-gradient(to_bottom,_#111113,_#101012)]">
       <div className="w-full max-w-5xl">
         <div className="mx-auto mb-12 max-w-4xl">
-          <div className="mb-6 flex items-center justify-center gap-3.5">
-            <WelcomeBuddyIcon className="h-11 w-11 shrink-0" />
-            <div className="min-w-0 text-left">
+          <div className="mb-6 flex flex-col items-center">
+            <div className="flex items-center gap-2">
+              <WelcomeBuddyIcon className="h-6 w-6 shrink-0" />
               <h2 className="text-[22px] font-semibold leading-tight tracking-tight text-slate-950 dark:text-zinc-100">
                 与Athlon 共事
               </h2>
-              <p className="mt-1 text-[13px] leading-5 text-slate-500 dark:text-zinc-400">
-                懂代码，懂业务，更懂金融
-              </p>
             </div>
+            <p className="mt-1 text-[13px] leading-5 text-slate-500 dark:text-zinc-400">
+              懂代码，懂业务，更懂金融
+            </p>
           </div>
         </div>
 

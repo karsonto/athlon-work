@@ -265,7 +265,7 @@
         </Style.Triggers>
     </Style>
 
-    <!-- Empty hero: icon + title/subtitle (left-aligned text column) -->
+    <!-- Empty hero: icon + title on one row; subtitle below -->
     <Style x:Key="ComposerWelcomeTitleStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource AppFontFamilyDisplay}" />
         <Setter Property="FontSize" Value="22" />
@@ -275,7 +275,7 @@
         <Setter Property="TextAlignment" Value="Left" />
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="LineHeight" Value="30" />
-        <Setter Property="Margin" Value="0,0,0,4" />
+        <Setter Property="Margin" Value="0" />
         <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
         <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
     </Style>
@@ -287,12 +287,12 @@
         <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="LineHeight" Value="20" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
-        <Setter Property="HorizontalAlignment" Value="Left" />
-        <Setter Property="TextAlignment" Value="Left" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="TextAlignment" Value="Center" />
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="MaxWidth" Value="440" />
         <Setter Property="Opacity" Value="0.9" />
-        <Setter Property="Margin" Value="0" />
+        <Setter Property="Margin" Value="0,4,0,0" />
     </Style>
 
     <Style x:Key="ComposerHintStyle" TargetType="TextBlock">

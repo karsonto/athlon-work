@@ -91,17 +91,15 @@ export function RoomAgentSettingsDialog({
     });
   }, [open, profile]);
 
-  const browserCatalog = (catalog?.tools ?? []).filter(isBrowserTool);
+  const allTools = catalog?.tools ?? [];
+  const baseCatalog = allTools.filter((t) => !isBrowserTool(t));
+  const browserCatalog = allTools.filter(isBrowserTool);
 
-  const save = () => {
-    // Keep non-browser tools from the existing profile; UI only edits browser_* selection.
-    const retained = (profile?.toolAllowList ?? []).filter((t) => !isBrowserTool(t));
-    const selectedBrowser = draft.toolAllowList.filter(isBrowserTool);
-    onSave({
-      ...draft,
-      toolAllowList: [...retained, ...selectedBrowser],
-    });
-  };
+  const toggleTool = (name: string, checked: boolean) =>
+    setDraft((prev) => ({
+      ...prev,
+      toolAllowList: toggle(prev.toolAllowList, name, checked),
+    }));
 
   return (
     <Modal
@@ -123,7 +121,7 @@ export function RoomAgentSettingsDialog({
             type="button"
             className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:opacity-50"
             disabled={saving || !catalog}
-            onClick={save}
+            onClick={() => onSave(draft)}
           >
             {saving ? "保存中…" : "保存"}
           </button>
@@ -131,20 +129,23 @@ export function RoomAgentSettingsDialog({
       }
     >
       <p className="mb-4 text-slate-500 dark:text-zinc-400">
-        为本房间勾选 @agent 可用的浏览器工具；文件/命令等基础能力保持默认，不在此展示。
+        为本房间配置 @agent 可用的 Tools、Skills 与 MCP。各房间互相独立。
       </p>
+
+      <CheckboxGroup
+        title="Tools"
+        items={baseCatalog}
+        selected={draft.toolAllowList}
+        emptyHint="暂无可用工具"
+        onToggle={toggleTool}
+      />
 
       <CheckboxGroup
         title="浏览器 Tools"
         items={browserCatalog}
         selected={draft.toolAllowList}
         emptyHint="暂无浏览器工具"
-        onToggle={(name, checked) =>
-          setDraft((prev) => ({
-            ...prev,
-            toolAllowList: toggle(prev.toolAllowList, name, checked),
-          }))
-        }
+        onToggle={toggleTool}
       />
       <p className="-mt-2 mb-4 text-xs text-slate-400 dark:text-zinc-500">
         需先勾选 browser_navigate 打开页面后，ARIA / 网络 / 截图等工具才能在同轮后续步骤使用。
@@ -170,7 +171,7 @@ export function RoomAgentSettingsDialog({
         title="MCP"
         items={(catalog?.mcpServers ?? []).map((s) => s.name)}
         selected={draft.mcpServerNames}
-        emptyHint="暂无已启用的 MCP 服务"
+        emptyHint="暂无已配置的 MCP 服务"
         onToggle={(name, checked) =>
           setDraft((prev) => ({
             ...prev,

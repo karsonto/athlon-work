@@ -1787,9 +1787,11 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
             .Select(s => new { name = s.Name })
             .ToArray();
+        // Room MCP picks are independent of Chat sidebar Enabled — list every configured server.
         var mcp = _settings.McpServers
-            .Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Name))
-            .Select(s => new { name = s.Name })
+            .Where(s => !string.IsNullOrWhiteSpace(s.Name))
+            .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(s => new { name = s.Name.Trim() })
             .ToArray();
 
         await WriteJsonAsync(response, HttpStatusCode.OK, new
