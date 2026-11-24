@@ -1,0 +1,67 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  font-family:
+    "Inter",
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Hiragino Sans GB",
+    sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f1f5f9;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.55);
+  background-clip: padding-box;
+}

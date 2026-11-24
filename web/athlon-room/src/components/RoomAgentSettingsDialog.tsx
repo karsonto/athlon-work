@@ -19,6 +19,10 @@ function toggle(list: string[], name: string, checked: boolean): string[] {
   return [...next];
 }
 
+function isBrowserTool(name: string): boolean {
+  return name.trim().toLowerCase().startsWith("browser_");
+}
+
 function CheckboxGroup({
   title,
   items,
@@ -87,6 +91,18 @@ export function RoomAgentSettingsDialog({
     });
   }, [open, profile]);
 
+  const browserCatalog = (catalog?.tools ?? []).filter(isBrowserTool);
+
+  const save = () => {
+    // Keep non-browser tools from the existing profile; UI only edits browser_* selection.
+    const retained = (profile?.toolAllowList ?? []).filter((t) => !isBrowserTool(t));
+    const selectedBrowser = draft.toolAllowList.filter(isBrowserTool);
+    onSave({
+      ...draft,
+      toolAllowList: [...retained, ...selectedBrowser],
+    });
+  };
+
   return (
     <Modal
       open={open}
@@ -107,7 +123,7 @@ export function RoomAgentSettingsDialog({
             type="button"
             className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:opacity-50"
             disabled={saving || !catalog}
-            onClick={() => onSave(draft)}
+            onClick={save}
           >
             {saving ? "保存中…" : "保存"}
           </button>
@@ -115,14 +131,14 @@ export function RoomAgentSettingsDialog({
       }
     >
       <p className="mb-4 text-slate-500 dark:text-zinc-400">
-        为本房间配置 @agent 可用的 Tools、Skills 与 MCP。各房间互相独立。
+        为本房间勾选 @agent 可用的浏览器工具；文件/命令等基础能力保持默认，不在此展示。
       </p>
 
       <CheckboxGroup
-        title="Tools"
-        items={catalog?.tools ?? []}
+        title="浏览器 Tools"
+        items={browserCatalog}
         selected={draft.toolAllowList}
-        emptyHint="暂无可用工具"
+        emptyHint="暂无浏览器工具"
         onToggle={(name, checked) =>
           setDraft((prev) => ({
             ...prev,
@@ -130,6 +146,9 @@ export function RoomAgentSettingsDialog({
           }))
         }
       />
+      <p className="-mt-2 mb-4 text-xs text-slate-400 dark:text-zinc-500">
+        需先勾选 browser_navigate 打开页面后，ARIA / 网络 / 截图等工具才能在同轮后续步骤使用。
+      </p>
 
       <CheckboxGroup
         title="Skills"

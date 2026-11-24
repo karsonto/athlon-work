@@ -1,0 +1,76 @@
+import type { DocumentParseMode, FileAttachment } from "../types";
+import { AthlonIcon } from "./AthlonIcon";
+import { Composer, type PendingDocumentItem } from "./Composer";
+
+interface EmptyConversationProps {
+  draft: string;
+  attachments: FileAttachment[];
+  pendingDocuments: PendingDocumentItem[];
+  documentParseMode: DocumentParseMode;
+  isSending?: boolean;
+  isReadingAttachments?: boolean;
+  disabled?: boolean;
+  onDraftChange: (value: string) => void;
+  onDocumentParseModeChange: (value: DocumentParseMode) => void;
+  onSend: () => void;
+  onStop: () => void;
+  onSelectFiles: (files: FileList | null) => void;
+  onRemoveFile: (id: string) => void;
+  onRemovePendingDocument: (id: string) => void;
+  deepThinkEnabled: boolean;
+  onDeepThinkChange: (value: boolean) => void;
+}
+
+export function EmptyConversation({
+  draft,
+  attachments,
+  pendingDocuments,
+  documentParseMode,
+  isSending,
+  isReadingAttachments,
+  disabled,
+  onDraftChange,
+  onDocumentParseModeChange,
+  onSend,
+  onStop,
+  onSelectFiles,
+  onRemoveFile,
+  onRemovePendingDocument,
+  deepThinkEnabled,
+  onDeepThinkChange,
+}: EmptyConversationProps) {
+  return (
+    <div className="flex h-full w-full flex-1 items-center justify-center overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.14),transparent_34%),linear-gradient(to_bottom,_#f8fbff,_#eef6ff)] px-6 py-10 dark:bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.16),transparent_34%),linear-gradient(to_bottom,_#111113,_#101012)]">
+      <div className="w-full max-w-5xl">
+        <div className="mx-auto mb-12 max-w-4xl text-center">
+          <div className="mb-6 flex items-center justify-center gap-4">
+            <AthlonIcon className="h-9 w-9 rounded-2xl shadow-sm" />
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-zinc-100">
+              Start chatting with Athlon
+            </h2>
+          </div>
+        </div>
+
+        <Composer
+          variant="hero"
+          draft={draft}
+          attachments={attachments}
+          pendingDocuments={pendingDocuments}
+          documentParseMode={documentParseMode}
+          isSending={isSending}
+          isReadingAttachments={isReadingAttachments}
+          disabled={disabled}
+          onDraftChange={onDraftChange}
+          onDocumentParseModeChange={onDocumentParseModeChange}
+          onSend={onSend}
+          onStop={onStop}
+          onSelectFiles={onSelectFiles}
+          onRemoveFile={onRemoveFile}
+          onRemovePendingDocument={onRemovePendingDocument}
+          deepThinkEnabled={deepThinkEnabled}
+          onDeepThinkChange={onDeepThinkChange}
+        />
+      </div>
+    </div>
+  );
+}

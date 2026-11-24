@@ -18,7 +18,20 @@ public sealed class RoomAgentProfileStore
         "grep_files",
         "glob_files",
         "execute_command",
+        // Browser tab tools (same set as desktop IAgentTool registrations)
         "browser_navigate",
+        "browser_screenshot",
+        "browser_get_page_info",
+        "browser_read_aria_tree",
+        "browser_find_aria_nodes",
+        "browser_resolve_aria_ref",
+        "browser_aria_inspect",
+        "browser_aria_interact",
+        "browser_wait_for_aria",
+        "browser_network_list",
+        "browser_network_get",
+        "browser_console_read",
+        "browser_get_cookies",
         "room_share_file"
     ];
 

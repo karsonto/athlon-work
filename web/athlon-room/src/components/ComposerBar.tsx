@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Paperclip, Send, Smile, X } from "lucide-react";
 import type { PendingFile } from "../types";
 import { formatBytes } from "../lib/api";
+import { AthlonIcon } from "./AthlonIcon";
 
 interface ComposerBarProps {
   draft: string;
@@ -175,9 +176,7 @@ export function ComposerBar({
                 applyAgentMention();
               }}
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-sky-600 text-sm font-bold text-white">
-                A
-              </span>
+              <AthlonIcon className="h-9 w-9 shrink-0 rounded-2xl shadow-sm" alt="" />
               <span className="min-w-0">
                 <span className="block text-sm font-medium text-slate-900 dark:text-zinc-100">@agent</span>
                 <span className="block text-xs text-slate-500 dark:text-zinc-400">Athlon 助手</span>

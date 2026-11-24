@@ -21,6 +21,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            web/athlon-web/package-lock.json
+            web/athlon-room/package-lock.json
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -37,6 +46,10 @@ jobs:
           }
           "version=$version" >> $env:GITHUB_OUTPUT
           Write-Host "Version: $version"
+
+      - name: Build web SPAs
+        shell: pwsh
+        run: ./tools/build-web.ps1
 
       - name: Restore
         run: dotnet restore src/Athlon.Agent.App/Athlon.Agent.App.csproj

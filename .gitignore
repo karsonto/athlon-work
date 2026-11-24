@@ -46,6 +46,7 @@ Desktop.ini
 # Node (icon generation, etc.)
 **/node_modules/
 **/.npm-cache/
+web/**/.env
 
 # Python bytecode (tools/wikiskill)
 __pycache__/

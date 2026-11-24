@@ -4,6 +4,7 @@ import type { AgentTraceStep, RoomMessage } from "../types";
 import { attachmentUrl, formatBytes } from "../lib/api";
 import { isHtmlAttachment } from "../lib/htmlPreview";
 import { AgentTracePanel } from "./AgentTracePanel";
+import { AthlonIcon } from "./AthlonIcon";
 import { MarkdownContent } from "./MarkdownContent";
 
 interface MessageBubbleProps {
@@ -37,12 +38,7 @@ export function MessageBubble({
   const name = message.displayName || (isAgent ? "Athlon" : "用户");
 
   const avatar = isAgent ? (
-    <div
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-600 text-sm font-semibold text-white shadow-sm"
-      title={name}
-    >
-      A
-    </div>
+    <AthlonIcon className="h-10 w-10 shrink-0 rounded-2xl shadow-sm" alt={name} />
   ) : (
     <div
       className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold text-white shadow-sm"

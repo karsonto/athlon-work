@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Athlon Icon</title>
+  <desc id="desc">A rounded blue AI coding assistant icon with an abstract A mark, bot face, and spark.</desc>
+  <defs>
+    <linearGradient id="bg" x1="72" y1="56" x2="440" y2="456" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e0f2fe" />
+      <stop offset="0.55" stop-color="#7dd3fc" />
+      <stop offset="1" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="mark" x1="151" y1="121" x2="361" y2="389" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="1" stop-color="#dbeafe" />
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#0369a1" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="116" fill="url(#bg)" />
+  <circle cx="386" cy="120" r="70" fill="#ffffff" opacity="0.18" />
+  <circle cx="118" cy="394" r="96" fill="#0ea5e9" opacity="0.24" />
+
+  <g filter="url(#softShadow)">
+    <path
+      fill="#0f172a"
+      opacity="0.12"
+      d="M153 318c0 34 28 62 62 62h82c34 0 62-28 62-62v-90c0-34-28-62-62-62h-82c-34 0-62 28-62 62v90Z"
+    />
+    <path
+      fill="url(#mark)"
+      d="M256 121c15 0 29 8 37 21l108 183c12 20-3 45-26 45h-27c-12 0-22-6-28-16l-18-32h-92l-18 32c-6 10-16 16-28 16h-27c-23 0-38-25-26-45l108-183c8-13 22-21 37-21Zm-25 148h50l-25-44-25 44Z"
+    />
+    <path
+      fill="#0369a1"
+      d="M183 212c0-16 13-29 29-29h88c16 0 29 13 29 29v74c0 16-13 29-29 29h-88c-16 0-29-13-29-29v-74Zm52 38a15 15 0 1 0-30 0 15 15 0 0 0 30 0Zm72 0a15 15 0 1 0-30 0 15 15 0 0 0 30 0Zm-74 40c-7 0-12 5-12 12s5 12 12 12h46c7 0 12-5 12-12s-5-12-12-12h-46Z"
+      opacity="0.9"
+    />
+    <path
+      fill="#ffffff"
+      d="M159 183c-6-6-6-15 0-21l25-25c6-6 15-6 21 0s6 15 0 21l-14 14 14 14c6 6 6 15 0 21s-15 6-21 0l-25-24Zm194 24c-6-6-6-15 0-21l14-14-14-14c-6-6-6-15 0-21s15-6 21 0l25 25c6 6 6 15 0 21l-25 24c-6 6-15 6-21 0Z"
+      opacity="0.94"
+    />
+  </g>
+
+  <path
+    fill="#ffffff"
+    d="M387 90c5 0 9 4 10 9l4 21 21 4c5 1 9 5 9 10s-4 9-9 10l-21 4-4 21c-1 5-5 9-10 9s-9-4-10-9l-4-21-21-4c-5-1-9-5-9-10s4-9 9-10l21-4 4-21c1-5 5-9 10-9Z"
+    opacity="0.92"
+  />
+</svg>

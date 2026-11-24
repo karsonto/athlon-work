@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import { agentRuntimeModeLabel } from "../lib/runtimeMode";
 import { isAgentTraceRunning } from "./AgentTracePanel";
+import { AthlonIcon } from "./AthlonIcon";
 import { ComposerBar } from "./ComposerBar";
 import { HtmlPreviewModal } from "./HtmlPreviewModal";
 import { MessageBubble } from "./MessageBubble";
@@ -108,9 +109,7 @@ export function ChatPane({
     <div className="flex h-full min-w-0 flex-1 flex-col bg-[#f1f5f9] dark:bg-[#0f0f10]">
       <header className="flex h-16 items-center justify-between border-b border-sky-100 bg-white px-6 shadow-sm dark:border-zinc-800 dark:bg-[#18181b] dark:shadow-none">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-600 text-sm font-bold text-white shadow-sm">
-            A
-          </div>
+          <AthlonIcon className="h-10 w-10 shrink-0 rounded-2xl shadow-sm" />
           <div className="min-w-0">
             <h1 className="truncate text-lg font-semibold text-slate-900 dark:text-zinc-100">{title}</h1>
             <p className="truncate text-sm text-slate-500 dark:text-zinc-400">

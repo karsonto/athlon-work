@@ -37,6 +37,7 @@ import type {
   RoomTab,
   WorkspaceItem,
 } from "./types";
+import { AthlonIcon } from "./components/AthlonIcon";
 import { ChatPane } from "./components/ChatPane";
 import { JoinRoomDialog } from "./components/JoinRoomDialog";
 import { Lightbox } from "./components/Lightbox";
@@ -774,9 +775,7 @@ export default function App() {
           className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-sky-100/70 dark:border-zinc-800 dark:bg-[#1f1f22] dark:shadow-none"
         >
           <div className="mb-1 flex justify-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-600 text-lg font-bold text-white shadow-sm">
-              A
-            </div>
+            <AthlonIcon className="h-12 w-12 rounded-2xl shadow-sm shadow-sky-100" />
           </div>
           <h1 className="text-center text-lg font-semibold text-slate-900 dark:text-zinc-100">
             Athlon 团队房间
