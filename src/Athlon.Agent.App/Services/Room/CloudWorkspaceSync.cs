@@ -1,8 +1,13 @@
 using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 
 namespace Athlon.Agent.App.Services.Room;
+
+internal sealed record CloudFileManifestEntry(string Path, long Size, long MtimeUnixMs, string Sha256);
 
 /// <summary>Pack / unpack host workspace and skills for cloud sandbox sync.</summary>
 internal static class CloudWorkspaceSync
@@ -171,5 +176,64 @@ internal static class CloudWorkspaceSync
         }
 
         return relative.Replace('\\', '/');
+    }
+
+    public static List<CloudFileManifestEntry> BuildManifest(
+        string hostRoot,
+        IReadOnlyList<string>? onlyTopLevelNames = null)
+    {
+        var list = new List<CloudFileManifestEntry>();
+        if (!Directory.Exists(hostRoot))
+        {
+            return list;
+        }
+
+        var root = Path.GetFullPath(hostRoot);
+        IEnumerable<string> files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories);
+        if (onlyTopLevelNames is { Count: > 0 })
+        {
+            var allow = new HashSet<string>(onlyTopLevelNames, StringComparer.OrdinalIgnoreCase);
+            files = files.Where(f =>
+            {
+                var rel = Path.GetRelativePath(root, f);
+                var top = rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+                return allow.Contains(top);
+            });
+        }
+
+        foreach (var file in files)
+        {
+            var full = Path.GetFullPath(file);
+            var relative = Path.GetRelativePath(root, full).Replace('\\', '/');
+            if (relative.Split('/').Any(p => IgnoredDirectoryNames.Contains(p)))
+            {
+                continue;
+            }
+
+            var info = new FileInfo(full);
+            list.Add(new CloudFileManifestEntry(
+                relative,
+                info.Length,
+                new DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds(),
+                Sha256File(full)));
+        }
+
+        return list;
+    }
+
+    public static string SerializeManifest(IReadOnlyList<CloudFileManifestEntry> entries) =>
+        JsonSerializer.Serialize(entries, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+    private static string Sha256File(string path)
+    {
+        using var fs = File.OpenRead(path);
+        var hash = SHA256.HashData(fs);
+        var sb = new StringBuilder(hash.Length * 2);
+        foreach (var b in hash)
+        {
+            sb.Append(b.ToString("x2"));
+        }
+
+        return sb.ToString();
     }
 }

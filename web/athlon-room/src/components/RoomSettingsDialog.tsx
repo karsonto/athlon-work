@@ -284,7 +284,7 @@ export function RoomSettingsDialog({
         {sandboxLoading
           ? "正在检测 Docker / 云沙箱…"
           : runtimeMode === "cloud_sandbox"
-            ? (cloud?.message ?? "云沙箱需 Imp SSO 登录，且已配置 CloudSandbox:BaseUrl。")
+            ? (cloud?.message ?? "云沙箱需配置 CloudSandbox:BaseUrl 与 ApiKey（经企业网关鉴权/计量）。")
             : runtimeMode === "sandbox"
               ? (localDocker?.message ?? "选择 Docker Sandbox 前请确保 Docker Desktop 已启动。")
               : "本地模式不依赖 Docker 或云沙箱。"}

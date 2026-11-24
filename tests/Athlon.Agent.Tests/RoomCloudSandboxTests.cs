@@ -34,7 +34,7 @@ public sealed class RoomCloudSandboxTests
     }
 
     [Fact]
-    public async Task Probe_WithoutSso_IsUnavailable()
+    public async Task Probe_WithoutApiKey_IsUnavailable()
     {
         var settings = new AppSettings
         {
@@ -45,7 +45,7 @@ public sealed class RoomCloudSandboxTests
 
         var probe = await sut.ProbeAsync();
         Assert.False(probe.Available);
-        Assert.Contains("SSO", probe.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ApiKey", probe.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -117,7 +117,9 @@ public sealed class RoomCloudSandboxTests
             CloudSandbox = new CloudSandboxSettings
             {
                 BaseUrl = "http://cloud.test",
-                ImageTag = "athlon-room-sandbox:2"
+                ApiKey = "test-key",
+                ImageTag = "athlon-room-sandbox:2",
+                PreferIncrementalSync = false
             }
         };
         var sut = CreateSut(settings, new FakeSsoStore("sso-token"), handler);
@@ -168,7 +170,7 @@ public sealed class RoomCloudSandboxTests
         using var skills = new TempDirectoryScope("cloud-skills-q");
         var settings = new AppSettings
         {
-            CloudSandbox = new CloudSandboxSettings { BaseUrl = "http://cloud.test" }
+            CloudSandbox = new CloudSandboxSettings { BaseUrl = "http://cloud.test", ApiKey = "test-key", PreferIncrementalSync = false }
         };
         var sut = CreateSut(settings, new FakeSsoStore("tok"), handler);
 
@@ -198,7 +200,7 @@ public sealed class RoomCloudSandboxTests
     {
         var docker = new RoomDockerSandbox(NullLogger<RoomDockerSandbox>.Instance);
         var cloud = CreateSut(
-            new AppSettings { CloudSandbox = new CloudSandboxSettings { BaseUrl = "http://x" } },
+            new AppSettings { CloudSandbox = new CloudSandboxSettings { BaseUrl = "http://x", ApiKey = "k" } },
             new FakeSsoStore("t"),
             new ScriptHandler(_ => Json(HttpStatusCode.OK, new { available = true })));
         var resolver = new RoomSandboxBackendResolver(docker, cloud);
@@ -222,7 +224,7 @@ public sealed class RoomCloudSandboxTests
         HttpMessageHandler handler)
     {
         var http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
-        return new RoomCloudSandbox(settings, sso, NullLogger<RoomCloudSandbox>.Instance, http);
+        return new RoomCloudSandbox(settings, NullLogger<RoomCloudSandbox>.Instance, http);
     }
 
     private static HttpResponseMessage Json(HttpStatusCode status, object body) =>
