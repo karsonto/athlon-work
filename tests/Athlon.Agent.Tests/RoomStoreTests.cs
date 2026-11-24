@@ -114,17 +114,43 @@ public sealed class RoomStoreTests
     }
 
     [Fact]
+    public void SaveAttachment_WithWorkspace_WritesOnlyUnderAthlonRoom()
+    {
+        using var temp = new TempDirectoryScope("athlon-room-ws");
+        var store = new RoomStore(new TempPathProvider(temp.Root));
+        var workspace = Path.Combine(temp.Root, "proj");
+        Directory.CreateDirectory(workspace);
+        var room = store.CreateRoom(workspaceRoot: workspace);
+
+        using var ok = new MemoryStream(Encoding.UTF8.GetBytes("only-once"));
+        var meta = store.SaveAttachment(room.Id, "shot.png", "image/png", ok, workspaceRoot: workspace);
+
+        Assert.NotNull(meta.WorkspacePath);
+        Assert.True(File.Exists(meta.WorkspacePath));
+        Assert.Contains(Path.Combine(".athlon-room", room.Id), meta.WorkspacePath!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("only-once", File.ReadAllText(meta.WorkspacePath!));
+
+        var storeBlob = Path.Combine(temp.Root, "rooms", room.Id, "files", meta.Id, meta.StoredName);
+        Assert.False(File.Exists(storeBlob));
+        Assert.Equal(meta.WorkspacePath, store.GetAttachmentFilePath(room.Id, meta.Id));
+    }
+
+    [Fact]
     public void SaveAttachmentFromPath_PostsFileMessageLikeShareTool()
     {
         using var temp = new TempDirectoryScope("athlon-room-share");
         var store = new RoomStore(new TempPathProvider(temp.Root));
-        var room = store.CreateRoom();
-        var docx = Path.Combine(temp.Root, "notes.docx");
+        var workspace = Path.Combine(temp.Root, "ws");
+        Directory.CreateDirectory(workspace);
+        var room = store.CreateRoom(workspaceRoot: workspace);
+        var docx = Path.Combine(workspace, "notes.docx");
         File.WriteAllBytes(docx, Encoding.UTF8.GetBytes("PK fake-docx"));
 
-        var attachment = store.SaveAttachmentFromPath(room.Id, docx);
+        var attachment = store.SaveAttachmentFromPath(room.Id, docx, workspace);
         Assert.Equal("notes.docx", attachment.FileName);
         Assert.False(attachment.IsImage);
+        Assert.Equal(Path.GetFullPath(docx), attachment.WorkspacePath);
+        Assert.False(File.Exists(Path.Combine(temp.Root, "rooms", room.Id, "files", attachment.Id, "notes.docx")));
 
         store.AppendMessage(room.Id, new RoomMessage
         {
@@ -138,7 +164,7 @@ public sealed class RoomStoreTests
         var last = store.GetMessages(room.Id).Last();
         Assert.Equal("file", last.Kind);
         Assert.Single(last.Attachments);
-        Assert.NotNull(store.GetAttachmentFilePath(room.Id, last.Attachments[0].Id));
+        Assert.Equal(Path.GetFullPath(docx), store.GetAttachmentFilePath(room.Id, last.Attachments[0].Id));
     }
 
     private sealed class TempPathProvider(string root) : IAppPathProvider

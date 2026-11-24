@@ -233,6 +233,8 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<RoomStore>();
 
+        services.AddSingleton<IRoomDockerSandbox, RoomDockerSandbox>();
+
         services.AddSingleton<AthlonRoomServer>();
 
         services.AddSingleton<RoomAgentProfileStore>();

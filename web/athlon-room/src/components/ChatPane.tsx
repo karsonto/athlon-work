@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import { isAgentTraceRunning } from "./AgentTracePanel";
 import { ComposerBar } from "./ComposerBar";
+import { HtmlPreviewModal } from "./HtmlPreviewModal";
 import { MessageBubble } from "./MessageBubble";
 
 interface ChatPaneProps {
@@ -67,10 +68,13 @@ export function ChatPane({
   const listRef = useRef<HTMLDivElement>(null);
   const membersRef = useRef<HTMLDivElement>(null);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<{ html: string; title?: string } | null>(null);
   const lastText = messages[messages.length - 1]?.text ?? "";
   const title = meta?.title ?? tab.title;
   const workspaceLabel =
     meta?.workspaceName ?? tab.workspaceName ?? meta?.workspaceRoot ?? tab.workspaceRoot;
+  const runtimeLabel =
+    (meta?.agentRuntimeMode ?? tab.agentRuntimeMode) === "sandbox" ? "Sandbox" : "本地";
   const traceCount = agentTraces ? Object.values(agentTraces).reduce((n, s) => n + s.length, 0) : 0;
   const memberCount = members.length;
   const agentRunning =
@@ -109,7 +113,8 @@ export function ChatPane({
           <div className="min-w-0">
             <h1 className="truncate text-lg font-semibold text-slate-900 dark:text-zinc-100">{title}</h1>
             <p className="truncate text-sm text-slate-500 dark:text-zinc-400">
-              {nickname} · {tab.role === "host" ? "本机房间" : "已加入"}
+              {nickname} · {tab.role === "host" ? "本机团队房间" : "已加入"}
+              {` · ${runtimeLabel}`}
               {workspaceLabel ? ` · ${workspaceLabel}` : ""}
               {` · ${memberCount} 人在线`}
             </p>
@@ -203,6 +208,7 @@ export function ChatPane({
               roomId={tab.id}
               token={tab.token}
               onPreviewImage={onPreviewImage}
+              onPreviewHtml={(html, title) => setPreviewHtml({ html, title })}
               agentTrace={agentTraces?.[m.id]}
               onStopAgent={
                 tab.role === "host" && onStopAgent && isAgentTraceRunning(agentTraces?.[m.id])
@@ -214,6 +220,12 @@ export function ChatPane({
           ))
         )}
       </div>
+
+      <HtmlPreviewModal
+        html={previewHtml?.html ?? null}
+        title={previewHtml?.title}
+        onClose={() => setPreviewHtml(null)}
+      />
 
       {error ? (
         <div className="bg-rose-50 px-4 py-2 text-center text-sm text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">

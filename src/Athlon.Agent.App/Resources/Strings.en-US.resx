@@ -2014,19 +2014,19 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
     <value>Unable to start the Athlon Web local service: {0}</value>
   </data>
   <data name="Shell_ChatRoom" xml:space="preserve">
-    <value>Chat Room</value>
+    <value>Team Room</value>
   </data>
   <data name="Shell_ChatRoomTooltip" xml:space="preserve">
-    <value>Start the chat room server and open it in the browser</value>
+    <value>Start the team room server and open it in the browser</value>
   </data>
   <data name="Shell_ChatRoomTitle" xml:space="preserve">
-    <value>Athlon Chat Room</value>
+    <value>Athlon Team Room</value>
   </data>
   <data name="Shell_ChatRoomInviteHint" xml:space="preserve">
     <value>Devices on the same LAN can join with the link below (includes invite token). Stopping the room invalidates the link.</value>
   </data>
   <data name="Shell_ChatRoomBindLoopbackOnly" xml:space="preserve">
-    <value>The room server is listening on 127.0.0.1:{0} only — LAN peers cannot connect. Free the port and reopen the chat room. ({1}) Do not share local-only links.</value>
+    <value>The room server is listening on 127.0.0.1:{0} only — LAN peers cannot connect. Free the port and reopen the team room. ({1}) Do not share local-only links.</value>
   </data>
   <data name="Shell_ChatRoomLocalOnlyInvite" xml:space="preserve">
     <value>(Local only — do not share) {0}</value>
@@ -2062,10 +2062,10 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
     <value>Stop room</value>
   </data>
   <data name="Shell_ChatRoomStopped" xml:space="preserve">
-    <value>All chat rooms stopped.</value>
+    <value>All team rooms stopped.</value>
   </data>
   <data name="Shell_ChatRoomStartFailed" xml:space="preserve">
-    <value>Unable to start the chat room: {0}</value>
+    <value>Unable to start the team room: {0}</value>
   </data>
   <data name="Shell_ChatRoomAgentCaps" xml:space="preserve">
     <value>Room Agent capabilities</value>

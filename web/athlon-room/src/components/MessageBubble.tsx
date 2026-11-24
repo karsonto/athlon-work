@@ -1,6 +1,8 @@
-import { Download, FileIcon } from "lucide-react";
+import { useState } from "react";
+import { Download, Eye, FileIcon } from "lucide-react";
 import type { AgentTraceStep, RoomMessage } from "../types";
 import { attachmentUrl, formatBytes } from "../lib/api";
+import { isHtmlAttachment } from "../lib/htmlPreview";
 import { AgentTracePanel } from "./AgentTracePanel";
 import { MarkdownContent } from "./MarkdownContent";
 
@@ -11,6 +13,7 @@ interface MessageBubbleProps {
   roomId: string;
   token: string;
   onPreviewImage: (url: string, alt: string) => void;
+  onPreviewHtml?: (html: string, title?: string) => void;
   /** Host-only live @agent tool/model trace for this bubble. */
   agentTrace?: AgentTraceStep[];
   onStopAgent?: () => void;
@@ -24,10 +27,12 @@ export function MessageBubble({
   roomId,
   token,
   onPreviewImage,
+  onPreviewHtml,
   agentTrace,
   onStopAgent,
   stoppingAgent,
 }: MessageBubbleProps) {
+  const [htmlLoadingId, setHtmlLoadingId] = useState<string | null>(null);
   const isAgent = message.kind === "agent" || message.senderId === "athlon-agent";
   const name = message.displayName || (isAgent ? "Athlon" : "用户");
 
@@ -70,7 +75,7 @@ export function MessageBubble({
       <div className={`text-[15px] leading-relaxed ${bubbleClass}`}>
         {message.text ? (
           isAgent ? (
-            <MarkdownContent content={message.text} />
+            <MarkdownContent content={message.text} onPreviewHtml={onPreviewHtml} />
           ) : (
             <p className="whitespace-pre-wrap break-words">{message.text}</p>
           )
@@ -95,17 +100,16 @@ export function MessageBubble({
             );
           }
 
+          const canPreviewHtml = !!onPreviewHtml && isHtmlAttachment(att.fileName, att.mimeType);
+          const loading = htmlLoadingId === att.id;
+
           return (
-            <a
+            <div
               key={att.id}
-              href={url}
-              download={att.fileName}
-              target="_blank"
-              rel="noreferrer"
               className={`flex min-w-[200px] items-center gap-3 rounded-2xl px-3 py-2.5 ${
                 isMine
-                  ? "bg-sky-700/40 hover:bg-sky-700/55"
-                  : "bg-slate-50 hover:bg-slate-100 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                  ? "bg-sky-700/40"
+                  : "bg-slate-50 dark:bg-zinc-800"
               } ${message.text ? "mt-2" : ""}`}
             >
               <div
@@ -121,8 +125,46 @@ export function MessageBubble({
                   {formatBytes(att.size)}
                 </div>
               </div>
-              <Download size={16} className="shrink-0 opacity-80" />
-            </a>
+              {canPreviewHtml ? (
+                <button
+                  type="button"
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                    isMine
+                      ? "bg-white/15 text-white hover:bg-white/25"
+                      : "bg-sky-600 text-white hover:bg-sky-700"
+                  } disabled:opacity-50`}
+                  disabled={loading}
+                  onClick={() => {
+                    setHtmlLoadingId(att.id);
+                    void fetch(url)
+                      .then(async (res) => {
+                        if (!res.ok) throw new Error("load failed");
+                        const text = await res.text();
+                        onPreviewHtml?.(text, att.fileName);
+                      })
+                      .catch(() => {
+                        /* ignore */
+                      })
+                      .finally(() => setHtmlLoadingId(null));
+                  }}
+                >
+                  <Eye size={14} />
+                  {loading ? "…" : "预览"}
+                </button>
+              ) : null}
+              <a
+                href={url}
+                download={att.fileName}
+                target="_blank"
+                rel="noreferrer"
+                className={`shrink-0 opacity-80 transition hover:opacity-100 ${
+                  isMine ? "text-white" : "text-slate-600 dark:text-zinc-300"
+                }`}
+                title="下载"
+              >
+                <Download size={16} />
+              </a>
+            </div>
           );
         })}
         {isAgent && agentTrace && agentTrace.length > 0 ? (

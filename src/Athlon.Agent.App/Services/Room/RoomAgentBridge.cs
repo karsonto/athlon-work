@@ -33,6 +33,8 @@ public sealed class RoomAgentBridge : IAsyncDisposable
     private readonly IAgentRuntime _runtime;
     private readonly IServiceProvider _services;
     private readonly IActiveWorkspaceContext _workspaceContext;
+    private readonly IRoomDockerSandbox _dockerSandbox;
+    private readonly IAppPathProvider _paths;
     private readonly AppSettings _settings;
     private readonly ILogger<RoomAgentBridge> _logger;
     private readonly ConcurrentDictionary<string, byte> _attachedRooms = new(StringComparer.OrdinalIgnoreCase);
@@ -49,6 +51,8 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         IAgentRuntime runtime,
         IServiceProvider services,
         IActiveWorkspaceContext workspaceContext,
+        IRoomDockerSandbox dockerSandbox,
+        IAppPathProvider paths,
         AppSettings settings,
         ILogger<RoomAgentBridge> logger)
     {
@@ -59,6 +63,8 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         _runtime = runtime;
         _services = services;
         _workspaceContext = workspaceContext;
+        _dockerSandbox = dockerSandbox;
+        _paths = paths;
         _settings = settings;
         _logger = logger;
         _server.SetRoomLifecycleHooks(AttachRoom, DetachRoom);
@@ -136,6 +142,17 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         }
 
         _attachedRooms.TryRemove(roomId, out _);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _dockerSandbox.DisposeRoomAsync(roomId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to dispose sandbox for room {RoomId}", roomId);
+            }
+        });
         _logger.LogInformation("RoomAgentBridge detached from room {RoomId}", roomId);
     }
 
@@ -147,7 +164,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         }
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         DetachAll();
         foreach (var gate in _roomGates.Values)
@@ -156,7 +173,10 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         }
 
         _roomGates.Clear();
-        return ValueTask.CompletedTask;
+        if (_dockerSandbox is IAsyncDisposable disposable)
+        {
+            await disposable.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     private async Task HandleMessageAsync(string roomId, RoomMessage message)
@@ -263,7 +283,38 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         // Selecting Skills in room settings auto-attaches load_skill_through_path.
         var allowList = RoomAgentProfileStore.ResolveToolAllowList(profile);
 
-        var localTools = _services.GetServices<IAgentTool>();
+        var runtimeMode = RoomAgentRuntimeModes.Normalize(room?.AgentRuntimeMode);
+        RoomSandboxPathMap? pathMap = null;
+        if (RoomAgentRuntimeModes.IsSandbox(runtimeMode))
+        {
+            if (string.IsNullOrWhiteSpace(workspaceRoot))
+            {
+                throw new InvalidOperationException("Sandbox 模式需要先在房间设置中配置本机工作区。");
+            }
+
+            await _dockerSandbox
+                .EnsureRoomContainerAsync(roomId, workspaceRoot, _paths.SkillsPath, cancellationToken)
+                .ConfigureAwait(false);
+            pathMap = new RoomSandboxPathMap(workspaceRoot, _paths.SkillsPath);
+        }
+
+        var hostTools = _services.GetServices<IAgentTool>();
+        IEnumerable<IAgentTool> localTools = hostTools;
+        if (pathMap is not null)
+        {
+            var workspaceGuardForTools = _services.GetRequiredService<WorkspaceGuard>();
+            var dockerTools = RoomDockerToolFactory.Create(
+                _dockerSandbox,
+                workspaceGuardForTools,
+                _settings,
+                _services.GetRequiredService<ISkillRuntime>(),
+                _services.GetRequiredService<Athlon.Agent.Skills.IAgentSkillCatalog>(),
+                _paths);
+            localTools = hostTools
+                .Where(t => !RoomDockerToolFactory.ReplacedToolNames.Contains(t.Definition.Name))
+                .Concat(dockerTools);
+        }
+
         var mcpRegistry = _services.GetRequiredService<IMcpRegistry>();
         var activeSessionContext = _services.GetRequiredService<IActiveAgentSessionContext>();
         var sessionKnowledgeState = _services.GetRequiredService<ISessionKnowledgeState>();
@@ -373,7 +424,8 @@ public sealed class RoomAgentBridge : IAsyncDisposable
 
         PublishTrace("run_started", summary: "开始处理");
 
-        using var roomScope = RoomAgentTurnScope.Enter(new RoomAgentTurnOptions(roomId));
+        using var roomScope = RoomAgentTurnScope.Enter(
+            new RoomAgentTurnOptions(roomId, runtimeMode, pathMap));
         using var profileScope = AgentProfileTurnScope.Enter(profileOptions);
         using var runScope = runContextAccessor.Push(member);
 
@@ -689,7 +741,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
     private static string BuildSystemPrompt(AgentProfile profile, string workspaceRoot)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are Athlon, a helpful teammate in a LAN chat room.");
+        sb.AppendLine("You are Athlon, a helpful teammate in a LAN team room.");
         sb.AppendLine("Reply in the same language the user uses. Keep answers concise and conversational.");
         sb.AppendLine("When the user wants a file shared with the room (especially after editing a Word/docx or other document), call room_share_file with the workspace path.");
         if (!string.IsNullOrWhiteSpace(workspaceRoot))

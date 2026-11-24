@@ -42,7 +42,7 @@ public sealed class RoomStore
         {
             Id = id,
             Token = token,
-            Title = string.IsNullOrWhiteSpace(title) ? "Athlon 聊天房间" : title.Trim(),
+            Title = string.IsNullOrWhiteSpace(title) ? "Athlon 团队房间" : title.Trim(),
             WorkspaceRoot = NormalizeOptionalPath(workspaceRoot),
             WorkspaceId = string.IsNullOrWhiteSpace(workspaceId) ? null : workspaceId.Trim(),
             CreatedAt = DateTimeOffset.UtcNow
@@ -58,7 +58,11 @@ public sealed class RoomStore
         return info;
     }
 
-    public RoomInfo? UpdateWorkspace(string roomId, string? workspaceRoot, string? workspaceId = null)
+    public RoomInfo? UpdateWorkspace(
+        string roomId,
+        string? workspaceRoot,
+        string? workspaceId = null,
+        string? agentRuntimeMode = null)
     {
         var room = GetRoom(roomId);
         if (room is null)
@@ -68,6 +72,11 @@ public sealed class RoomStore
 
         room.WorkspaceRoot = NormalizeOptionalPath(workspaceRoot);
         room.WorkspaceId = string.IsNullOrWhiteSpace(workspaceId) ? null : workspaceId.Trim();
+        if (agentRuntimeMode is not null)
+        {
+            room.AgentRuntimeMode = RoomAgentRuntimeModes.Normalize(agentRuntimeMode);
+        }
+
         WriteRoomJson(room);
         if (_rooms.TryGetValue(roomId, out var runtime))
         {
@@ -85,7 +94,7 @@ public sealed class RoomStore
             return null;
         }
 
-        var trimmed = string.IsNullOrWhiteSpace(title) ? "Athlon 聊天房间" : title.Trim();
+        var trimmed = string.IsNullOrWhiteSpace(title) ? "Athlon 团队房间" : title.Trim();
         if (trimmed.Length > 80)
         {
             trimmed = trimmed[..80];
@@ -126,6 +135,7 @@ public sealed class RoomStore
                 return null;
             }
 
+            info.AgentRuntimeMode = RoomAgentRuntimeModes.Normalize(info.AgentRuntimeMode);
             var messages = ReadAllMessagesFromDisk(info.Id);
             _rooms[info.Id] = new RoomRuntime(info, messages);
             return info;
@@ -215,46 +225,77 @@ public sealed class RoomStore
         }
     }
 
+    /// <summary>
+    /// Persist an upload. When <paramref name="workspaceRoot"/> is set, bytes live only under
+    /// <c>{workspace}/.athlon-room/{roomId}/</c> (single copy for local + Docker mount).
+    /// Room store keeps metadata only. Without workspace, falls back to app-data <c>rooms/.../files</c>.
+    /// </summary>
     public RoomAttachmentInfo SaveAttachment(
         string roomId,
         string fileName,
         string mimeType,
         Stream content,
-        long? declaredLength = null)
+        long? declaredLength = null,
+        string? workspaceRoot = null)
     {
         EnsureRuntime(roomId);
         var safeName = SanitizeFileName(fileName);
         var attachmentId = Guid.NewGuid().ToString("N");
-        var dir = Path.Combine(GetRoomDirectory(roomId), "files", attachmentId);
-        Directory.CreateDirectory(dir);
-        var storedPath = Path.Combine(dir, safeName);
+        var metaDir = Path.Combine(GetRoomDirectory(roomId), "files", attachmentId);
+        Directory.CreateDirectory(metaDir);
+
+        string? workspacePath = null;
+        string storedPath;
+        string? cleanupOnFail = null;
+        var workspaceFull = NormalizeOptionalPath(workspaceRoot) is { } wr
+            ? Path.GetFullPath(wr)
+            : null;
+
+        if (!string.IsNullOrWhiteSpace(workspaceFull))
+        {
+            Directory.CreateDirectory(workspaceFull);
+            var targetDir = Path.Combine(workspaceFull, ".athlon-room", roomId);
+            Directory.CreateDirectory(targetDir);
+            storedPath = AllocateUniquePath(targetDir, safeName, attachmentId);
+            var storedFull = Path.GetFullPath(storedPath);
+            if (!IsPathUnderRoot(storedFull, workspaceFull))
+            {
+                throw new InvalidOperationException("Invalid workspace attachment path.");
+            }
+
+            workspacePath = storedFull;
+            cleanupOnFail = storedFull;
+        }
+        else
+        {
+            storedPath = Path.Combine(metaDir, safeName);
+            cleanupOnFail = metaDir;
+        }
 
         long size;
-        using (var fs = File.Create(storedPath))
+        try
         {
-            var buffer = new byte[81920];
-            size = 0;
-            int read;
-            while ((read = content.Read(buffer, 0, buffer.Length)) > 0)
+            using (var fs = File.Create(storedPath))
             {
-                size += read;
-                if (size > MaxAttachmentBytes)
+                var buffer = new byte[81920];
+                size = 0;
+                int read;
+                while ((read = content.Read(buffer, 0, buffer.Length)) > 0)
                 {
-                    fs.Dispose();
-                    try
+                    size += read;
+                    if (size > MaxAttachmentBytes)
                     {
-                        Directory.Delete(dir, recursive: true);
-                    }
-                    catch
-                    {
-                        // best effort
+                        throw new InvalidOperationException($"Attachment exceeds {MaxAttachmentBytes} bytes.");
                     }
 
-                    throw new InvalidOperationException($"Attachment exceeds {MaxAttachmentBytes} bytes.");
+                    fs.Write(buffer, 0, read);
                 }
-
-                fs.Write(buffer, 0, read);
             }
+        }
+        catch
+        {
+            TryDeleteAttachmentArtifacts(cleanupOnFail, workspacePath is not null);
+            throw;
         }
 
         _ = declaredLength;
@@ -269,7 +310,8 @@ public sealed class RoomStore
             MimeType = string.IsNullOrWhiteSpace(mimeType) ? GuessMime(safeName) : mimeType,
             Size = size,
             IsImage = isImage,
-            StoredName = safeName
+            StoredName = safeName,
+            WorkspacePath = workspacePath
         };
 
         WriteAttachmentMeta(roomId, info);
@@ -277,8 +319,8 @@ public sealed class RoomStore
     }
 
     /// <summary>
-    /// Copy a room attachment into the host workspace so @agent can read/analyze it.
-    /// Layout: {workspaceRoot}/.athlon-room/{roomId}/{fileName}
+    /// Legacy helper: if bytes still live only under app-data, move them into workspace once.
+    /// Prefer <see cref="SaveAttachment"/> with workspaceRoot so a second copy is never created.
     /// </summary>
     public RoomAttachmentInfo? MirrorAttachmentToWorkspace(string roomId, string attachmentId, string workspaceRoot)
     {
@@ -288,37 +330,35 @@ public sealed class RoomStore
         }
 
         var info = GetAttachmentMeta(roomId, attachmentId);
-        var sourcePath = GetAttachmentFilePath(roomId, attachmentId);
-        if (info is null || sourcePath is null)
+        if (info is null)
         {
             return null;
         }
 
-        string targetDir;
-        string targetPath;
+        if (!string.IsNullOrWhiteSpace(info.WorkspacePath) && File.Exists(info.WorkspacePath))
+        {
+            return info;
+        }
+
+        var sourcePath = GetAttachmentStoreBlobPath(roomId, info);
+        if (sourcePath is null || !File.Exists(sourcePath))
+        {
+            return info;
+        }
+
         try
         {
             var rootFull = Path.GetFullPath(workspaceRoot.Trim());
-            targetDir = Path.Combine(rootFull, ".athlon-room", roomId);
+            var targetDir = Path.Combine(rootFull, ".athlon-room", roomId);
             Directory.CreateDirectory(targetDir);
-
-            var safeName = SanitizeFileName(info.FileName);
-            targetPath = Path.Combine(targetDir, safeName);
-            if (File.Exists(targetPath))
-            {
-                var stem = Path.GetFileNameWithoutExtension(safeName);
-                var ext = Path.GetExtension(safeName);
-                targetPath = Path.Combine(targetDir, $"{stem}_{attachmentId[..Math.Min(8, attachmentId.Length)]}{ext}");
-            }
-
-            var targetFull = Path.GetFullPath(targetPath);
-            if (!targetFull.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(targetFull, rootFull, StringComparison.OrdinalIgnoreCase))
+            var targetFull = AllocateUniquePath(targetDir, SanitizeFileName(info.FileName), attachmentId);
+            if (!IsPathUnderRoot(targetFull, rootFull))
             {
                 return null;
             }
 
-            File.Copy(sourcePath, targetFull, overwrite: true);
+            File.Move(sourcePath, targetFull, overwrite: true);
+            TryDeleteEmptyDir(Path.GetDirectoryName(sourcePath));
             info.WorkspacePath = targetFull;
             WriteAttachmentMeta(roomId, info);
             return info;
@@ -341,23 +381,51 @@ public sealed class RoomStore
         File.WriteAllText(metaPath, JsonSerializer.Serialize(info, JsonOptions), Encoding.UTF8);
     }
 
-    public RoomAttachmentInfo SaveAttachmentFromPath(string roomId, string absolutePath)
+    /// <summary>
+    /// Register an existing workspace file for chat download without duplicating bytes.
+    /// When the file is already under the room workspace, only metadata is written.
+    /// </summary>
+    public RoomAttachmentInfo SaveAttachmentFromPath(string roomId, string absolutePath, string? workspaceRoot = null)
     {
         if (!File.Exists(absolutePath))
         {
             throw new FileNotFoundException("File not found.", absolutePath);
         }
 
-        var info = new FileInfo(absolutePath);
-        if (info.Length > MaxAttachmentBytes)
+        var fileInfo = new FileInfo(absolutePath);
+        if (fileInfo.Length > MaxAttachmentBytes)
         {
             throw new InvalidOperationException($"Attachment exceeds {MaxAttachmentBytes} bytes.");
         }
 
-        var fileName = info.Name;
-        var mime = GuessMime(fileName);
-        using var stream = File.OpenRead(absolutePath);
-        return SaveAttachment(roomId, fileName, mime, stream, info.Length);
+        var fullPath = Path.GetFullPath(absolutePath);
+        var workspaceFull = NormalizeOptionalPath(workspaceRoot) is { } wr
+            ? Path.GetFullPath(wr)
+            : null;
+
+        if (!string.IsNullOrWhiteSpace(workspaceFull) && IsPathUnderRoot(fullPath, workspaceFull))
+        {
+            EnsureRuntime(roomId);
+            var safeName = SanitizeFileName(fileInfo.Name);
+            var attachmentId = Guid.NewGuid().ToString("N");
+            var isImage = IsImageExtension(Path.GetExtension(safeName))
+                || GuessMime(safeName).StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+            var meta = new RoomAttachmentInfo
+            {
+                Id = attachmentId,
+                FileName = safeName,
+                MimeType = GuessMime(safeName),
+                Size = fileInfo.Length,
+                IsImage = isImage,
+                StoredName = safeName,
+                WorkspacePath = fullPath
+            };
+            WriteAttachmentMeta(roomId, meta);
+            return meta;
+        }
+
+        using var stream = File.OpenRead(fullPath);
+        return SaveAttachment(roomId, fileInfo.Name, GuessMime(fileInfo.Name), stream, fileInfo.Length, workspaceFull);
     }
 
     public RoomAttachmentInfo? GetAttachmentMeta(string roomId, string attachmentId)
@@ -391,16 +459,115 @@ public sealed class RoomStore
             return null;
         }
 
-        var path = Path.Combine(GetRoomDirectory(roomId), "files", attachmentId, meta.StoredName);
+        if (!string.IsNullOrWhiteSpace(meta.WorkspacePath))
+        {
+            try
+            {
+                var workspaceFull = Path.GetFullPath(meta.WorkspacePath);
+                if (File.Exists(workspaceFull))
+                {
+                    return workspaceFull;
+                }
+            }
+            catch
+            {
+                // fall through to store blob
+            }
+        }
+
+        return GetAttachmentStoreBlobPath(roomId, meta);
+    }
+
+    private string? GetAttachmentStoreBlobPath(string roomId, RoomAttachmentInfo meta)
+    {
+        var path = Path.Combine(GetRoomDirectory(roomId), "files", meta.Id, meta.StoredName);
         var root = Path.GetFullPath(GetRoomDirectory(roomId));
         var full = Path.GetFullPath(path);
-        if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(full, root, StringComparison.OrdinalIgnoreCase))
+        if (!IsPathUnderRoot(full, root))
         {
             return null;
         }
 
         return File.Exists(full) ? full : null;
+    }
+
+    private static string AllocateUniquePath(string targetDir, string safeName, string attachmentId)
+    {
+        var targetPath = Path.Combine(targetDir, safeName);
+        if (!File.Exists(targetPath))
+        {
+            return Path.GetFullPath(targetPath);
+        }
+
+        var stem = Path.GetFileNameWithoutExtension(safeName);
+        var ext = Path.GetExtension(safeName);
+        var suffix = attachmentId[..Math.Min(8, attachmentId.Length)];
+        return Path.GetFullPath(Path.Combine(targetDir, $"{stem}_{suffix}{ext}"));
+    }
+
+    private static bool IsPathUnderRoot(string fullPath, string root)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (string.Equals(fullPath, root, comparison))
+        {
+            return true;
+        }
+
+        var prefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        return fullPath.StartsWith(prefix, comparison);
+    }
+
+    private static void TryDeleteAttachmentArtifacts(string? path, bool isFile)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            if (isFile)
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+
+                return;
+            }
+
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch
+        {
+            // best effort
+        }
+    }
+
+    private static void TryDeleteEmptyDir(string? dir)
+    {
+        if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+        {
+            return;
+        }
+
+        try
+        {
+            if (!Directory.EnumerateFileSystemEntries(dir).Any())
+            {
+                Directory.Delete(dir);
+            }
+        }
+        catch
+        {
+            // best effort
+        }
     }
 
     public IDisposable Subscribe(string roomId, Action<RoomMessage> handler) =>

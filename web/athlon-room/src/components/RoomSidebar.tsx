@@ -119,7 +119,7 @@ export function RoomSidebar({
         <div className={collapsed ? "mb-3 flex justify-center" : "mb-3 px-1"}>
           {!collapsed ? (
             <div>
-              <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100">Athlon 房间</div>
+              <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100">Athlon 团队房间</div>
               <div className="text-xs text-slate-500 dark:text-zinc-400">局域网多人协作</div>
             </div>
           ) : (
@@ -191,6 +191,7 @@ export function RoomSidebar({
                       <div className="truncate text-sm font-medium">{tab.title}</div>
                       <div className="truncate text-[11px] opacity-70">
                         {tab.role === "host" ? "我创建的" : "已加入"}
+                        {` · ${tab.agentRuntimeMode === "sandbox" ? "Sandbox" : "本地"}`}
                         {tab.workspaceName || tab.workspaceRoot
                           ? ` · ${tab.workspaceName || tab.workspaceRoot}`
                           : ""}

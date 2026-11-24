@@ -14,7 +14,7 @@ using Microsoft.Extensions.Logging;
 namespace Athlon.Agent.App.Services.Room;
 
 /// <summary>
-/// LAN-bound HTTP server for Athlon chat rooms (static SPA + REST + SSE).
+/// LAN-bound HTTP server for Athlon team rooms (static SPA + REST + SSE).
 /// </summary>
 public sealed class AthlonRoomServer : IAsyncDisposable
 {
@@ -49,6 +49,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     private readonly IActiveWorkspaceContext _workspaceContext;
     private readonly RoomAgentProfileStore _profileStore;
     private readonly IAgentSkillCatalog _skillCatalog;
+    private readonly IRoomDockerSandbox _dockerSandbox;
     private readonly ILogger<AthlonRoomServer> _logger;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private readonly ConcurrentDictionary<string, byte> _sseConnections = new();
@@ -84,6 +85,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         IActiveWorkspaceContext workspaceContext,
         RoomAgentProfileStore profileStore,
         IAgentSkillCatalog skillCatalog,
+        IRoomDockerSandbox dockerSandbox,
         ILogger<AthlonRoomServer> logger)
     {
         _store = store;
@@ -91,6 +93,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         _workspaceContext = workspaceContext;
         _profileStore = profileStore;
         _skillCatalog = skillCatalog;
+        _dockerSandbox = dockerSandbox;
         _logger = logger;
     }
 
@@ -173,7 +176,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     }
 
     public string BindHint =>
-        $"Ensure nothing else is using TCP port {_port}, then reopen the chat room.";
+        $"Ensure nothing else is using TCP port {_port}, then reopen the team room.";
 
     public IReadOnlyList<RoomSummary> ListActiveRooms()
     {
@@ -199,7 +202,8 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 CreatedAt = room.CreatedAt,
                 WorkspaceRoot = room.WorkspaceRoot,
                 WorkspaceId = room.WorkspaceId,
-                WorkspaceName = ResolveWorkspaceName(room.WorkspaceId, room.WorkspaceRoot)
+                WorkspaceName = ResolveWorkspaceName(room.WorkspaceId, room.WorkspaceRoot),
+                AgentRuntimeMode = RoomAgentRuntimeModes.Normalize(room.AgentRuntimeMode)
             });
         }
 
@@ -289,10 +293,14 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
     }
 
-    public RoomInfo? SetRoomWorkspace(string roomId, string? workspaceRoot, string? workspaceId = null)
+    public RoomInfo? SetRoomWorkspace(
+        string roomId,
+        string? workspaceRoot,
+        string? workspaceId = null,
+        string? agentRuntimeMode = null)
     {
         var (root, id) = ResolveWorkspaceInputs(workspaceRoot, workspaceId, allowEmpty: false);
-        return _store.UpdateWorkspace(roomId, root, id);
+        return _store.UpdateWorkspace(roomId, root, id, agentRuntimeMode);
     }
 
     /// <returns>null if ok; otherwise an error code such as workspace_not_found.</returns>
@@ -687,10 +695,36 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                     token = result.Room.Token,
                     workspaceRoot = result.Room.WorkspaceRoot,
                     workspaceId = result.Room.WorkspaceId,
-                    workspaceName = ResolveWorkspaceName(result.Room.WorkspaceId, result.Room.WorkspaceRoot)
+                    workspaceName = ResolveWorkspaceName(result.Room.WorkspaceId, result.Room.WorkspaceRoot),
+                    agentRuntimeMode = RoomAgentRuntimeModes.Normalize(result.Room.AgentRuntimeMode)
                 }).ConfigureAwait(false);
                 return;
             }
+        }
+
+        // GET /api/rooms/sandbox-status — localhost only
+        if (segments.Length == 3
+            && segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
+            && segments[1].Equals("rooms", StringComparison.OrdinalIgnoreCase)
+            && segments[2].Equals("sandbox-status", StringComparison.OrdinalIgnoreCase)
+            && method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsLocalRequest(context.Request))
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.Forbidden, new { error = "local_only" }).ConfigureAwait(false);
+                return;
+            }
+
+            var probe = await _dockerSandbox.ProbeAsync().ConfigureAwait(false);
+            await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
+            {
+                available = probe.Available,
+                imageReady = probe.ImageReady,
+                dockerVersion = probe.DockerVersion,
+                message = probe.Message,
+                runtimeHints = probe.RuntimeHints
+            }).ConfigureAwait(false);
+            return;
         }
 
         // /api/rooms/{id}/...
@@ -738,6 +772,8 @@ public sealed class AthlonRoomServer : IAsyncDisposable
 
             string? workspaceRoot = null;
             string? workspaceId = null;
+            string? agentRuntimeMode = null;
+            var hasAgentRuntimeMode = false;
             try
             {
                 using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
@@ -753,6 +789,12 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                     if (doc.RootElement.TryGetProperty("workspaceId", out var wid))
                     {
                         workspaceId = wid.GetString();
+                    }
+
+                    if (doc.RootElement.TryGetProperty("agentRuntimeMode", out var arm))
+                    {
+                        hasAgentRuntimeMode = true;
+                        agentRuntimeMode = arm.GetString();
                     }
                 }
             }
@@ -778,11 +820,71 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 return;
             }
 
-            var updated = SetRoomWorkspace(roomId, workspaceRoot, workspaceId);
+            var previous = _store.GetRoom(roomId);
+            var effectiveMode = hasAgentRuntimeMode
+                ? RoomAgentRuntimeModes.Normalize(agentRuntimeMode)
+                : RoomAgentRuntimeModes.Normalize(previous?.AgentRuntimeMode);
+
+            if (RoomAgentRuntimeModes.IsSandbox(effectiveMode))
+            {
+                var probe = await _dockerSandbox.ProbeAsync().ConfigureAwait(false);
+                if (!probe.Available)
+                {
+                    await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new
+                    {
+                        error = "docker_unavailable",
+                        message = probe.Message
+                    }).ConfigureAwait(false);
+                    return;
+                }
+
+                try
+                {
+                    await _dockerSandbox.EnsureReadyAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new
+                    {
+                        error = "docker_image_failed",
+                        message = ex.Message
+                    }).ConfigureAwait(false);
+                    return;
+                }
+            }
+
+            var updated = SetRoomWorkspace(
+                roomId,
+                workspaceRoot,
+                workspaceId,
+                hasAgentRuntimeMode ? effectiveMode : null);
             if (updated is null)
             {
                 await WriteJsonAsync(context.Response, HttpStatusCode.NotFound, new { error = "room_not_found" }).ConfigureAwait(false);
                 return;
+            }
+
+            // Recreate/drop container when leaving sandbox or remounting a different workspace.
+            if (previous is not null)
+            {
+                var leftSandbox = RoomAgentRuntimeModes.IsSandbox(previous.AgentRuntimeMode)
+                    && !RoomAgentRuntimeModes.IsSandbox(effectiveMode);
+                var remount = RoomAgentRuntimeModes.IsSandbox(effectiveMode)
+                    && !string.Equals(
+                        previous.WorkspaceRoot?.Trim(),
+                        updated.WorkspaceRoot?.Trim(),
+                        StringComparison.OrdinalIgnoreCase);
+                if (leftSandbox || remount)
+                {
+                    try
+                    {
+                        await _dockerSandbox.DisposeRoomAsync(roomId).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to reset sandbox after workspace/mode change.");
+                    }
+                }
             }
 
             await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
@@ -790,7 +892,8 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 id = updated.Id,
                 workspaceRoot = updated.WorkspaceRoot,
                 workspaceId = updated.WorkspaceId,
-                workspaceName = ResolveWorkspaceName(updated.WorkspaceId, updated.WorkspaceRoot)
+                workspaceName = ResolveWorkspaceName(updated.WorkspaceId, updated.WorkspaceRoot),
+                agentRuntimeMode = RoomAgentRuntimeModes.Normalize(updated.AgentRuntimeMode)
             }).ConfigureAwait(false);
             return;
         }
@@ -911,6 +1014,9 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 workspaceId = IsLocalRequest(context.Request) ? room.WorkspaceId : null,
                 workspaceName = IsLocalRequest(context.Request)
                     ? ResolveWorkspaceName(room.WorkspaceId, room.WorkspaceRoot)
+                    : null,
+                agentRuntimeMode = IsLocalRequest(context.Request)
+                    ? RoomAgentRuntimeModes.Normalize(room.AgentRuntimeMode)
                     : null,
                 createdAt = room.CreatedAt
             }).ConfigureAwait(false);
@@ -1083,12 +1189,15 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                     return;
                 }
 
-                var info = _store.SaveAttachment(roomId, fileName, mime, contentStream, context.Request.ContentLength64);
                 var workspaceRoot = ResolveRoomWorkspaceRoot(roomId);
-                if (!string.IsNullOrWhiteSpace(workspaceRoot))
-                {
-                    info = _store.MirrorAttachmentToWorkspace(roomId, info.Id, workspaceRoot) ?? info;
-                }
+                // Single copy: workspace .athlon-room when configured (local + Docker share the same mount).
+                var info = _store.SaveAttachment(
+                    roomId,
+                    fileName,
+                    mime,
+                    contentStream,
+                    context.Request.ContentLength64,
+                    workspaceRoot);
 
                 var previewUrl = $"/api/rooms/{roomId}/attachments/{info.Id}?t={Uri.EscapeDataString(ExtractToken(context.Request) ?? "")}";
                 await WriteJsonAsync(context.Response, HttpStatusCode.OK, new

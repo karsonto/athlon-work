@@ -9,19 +9,34 @@ public static class RoomAgentIds
     public const string ProfileId = "room-agent";
 }
 
+public static class RoomAgentRuntimeModes
+{
+    public const string Local = "local";
+    public const string Sandbox = "sandbox";
+
+    public static bool IsSandbox(string? mode) =>
+        string.Equals(Normalize(mode), Sandbox, StringComparison.OrdinalIgnoreCase);
+
+    public static string Normalize(string? mode) =>
+        string.Equals(mode?.Trim(), Sandbox, StringComparison.OrdinalIgnoreCase) ? Sandbox : Local;
+}
+
 public sealed class RoomInfo
 {
     public string Id { get; set; } = "";
 
     public string Token { get; set; } = "";
 
-    public string Title { get; set; } = "Athlon 聊天房间";
+    public string Title { get; set; } = "Athlon 团队房间";
 
     /// <summary>Host workspace root where @agent runs tools for this room.</summary>
     public string? WorkspaceRoot { get; set; }
 
     /// <summary>Optional configured workspace id (local or SSH).</summary>
     public string? WorkspaceId { get; set; }
+
+    /// <summary>local | sandbox — where @agent file/shell tools execute.</summary>
+    public string AgentRuntimeMode { get; set; } = RoomAgentRuntimeModes.Local;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -88,6 +103,8 @@ public sealed class RoomSummary
     public string? WorkspaceId { get; init; }
 
     public string? WorkspaceName { get; init; }
+
+    public string AgentRuntimeMode { get; init; } = RoomAgentRuntimeModes.Local;
 }
 
 public sealed class PostMessageRequest

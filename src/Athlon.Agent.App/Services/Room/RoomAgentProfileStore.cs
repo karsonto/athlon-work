@@ -18,6 +18,7 @@ public sealed class RoomAgentProfileStore
         "grep_files",
         "glob_files",
         "execute_command",
+        "browser_navigate",
         "room_share_file"
     ];
 
@@ -144,9 +145,9 @@ public sealed class RoomAgentProfileStore
         {
             Id = RoomAgentIds.ProfileId,
             Name = "Room Agent",
-            Description = "LAN chat room agent",
+            Description = "LAN team room agent",
             AgentMd =
-                "You are Athlon in a shared LAN chat room. Reply concisely like a teammate. "
+                "You are Athlon in a shared LAN team room. Reply concisely like a teammate. "
                 + "When the user asks you to create or edit a file and share it with the room, "
                 + "edit it in the workspace then call room_share_file with the file path.",
             ToolAllowList = CatalogTools.Where(t => t != "room_share_file").Take(5).Append("room_share_file").ToList(),

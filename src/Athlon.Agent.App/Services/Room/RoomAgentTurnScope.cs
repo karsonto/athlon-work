@@ -1,6 +1,9 @@
 namespace Athlon.Agent.App.Services.Room;
 
-public sealed record RoomAgentTurnOptions(string RoomId);
+public sealed record RoomAgentTurnOptions(
+    string RoomId,
+    string AgentRuntimeMode = RoomAgentRuntimeModes.Local,
+    RoomSandboxPathMap? PathMap = null);
 
 /// <summary>Ambient scope so room-only tools know the active room.</summary>
 public sealed class RoomAgentTurnScope : IDisposable

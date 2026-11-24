@@ -55,7 +55,9 @@ public sealed class RoomShareFileTool(RoomStore roomStore, WorkspaceGuard worksp
 
         try
         {
-            var attachment = roomStore.SaveAttachmentFromPath(roomId, fullPath);
+            var workspaceRoot = roomStore.GetRoom(roomId)?.WorkspaceRoot;
+            // Reference the workspace file in place — no second copy under rooms/ or .athlon-room.
+            var attachment = roomStore.SaveAttachmentFromPath(roomId, fullPath, workspaceRoot);
             var caption = invocation.Arguments.TryGetString("caption", out var cap) ? cap : null;
 
             var kind = attachment.IsImage ? "image" : "file";

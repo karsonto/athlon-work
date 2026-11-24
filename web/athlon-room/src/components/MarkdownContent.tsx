@@ -13,7 +13,7 @@ import markdown from "highlight.js/lib/languages/markdown";
 import csharp from "highlight.js/lib/languages/csharp";
 import bash from "highlight.js/lib/languages/bash";
 import type { Components } from "react-markdown";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Eye } from "lucide-react";
 
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("js", javascript);
@@ -37,6 +37,7 @@ hljs.registerLanguage("sh", bash);
 
 interface MarkdownContentProps {
   content: string;
+  onPreviewHtml?: (code: string) => void;
 }
 
 async function copyTextToClipboard(text: string) {
@@ -74,7 +75,7 @@ function InlineCode({ children }: { children?: React.ReactNode }) {
   );
 }
 
-export function MarkdownContent({ content }: MarkdownContentProps) {
+export function MarkdownContent({ content, onPreviewHtml }: MarkdownContentProps) {
   const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -88,6 +89,7 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
       code({ className, children, node, ...props }) {
         const rawCode = String(children ?? "").replace(/\n$/, "");
         const language = extractLanguage(className);
+        const canPreviewHtml = language === "html" || language === "htm";
         const blockId =
           node?.position?.start.offset !== undefined
             ? `${node.position.start.offset}-${node.position.end?.offset ?? node.position.start.offset}`
@@ -107,25 +109,37 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
           <div className="group relative my-3 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
             <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2 text-xs text-slate-300">
               <span>{language || "代码"}</span>
-              <button
-                type="button"
-                className={[
-                  "inline-flex items-center gap-1 rounded-md border px-2 py-1 transition",
-                  isCopied
-                    ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
-                    : "border-slate-700 text-slate-300 hover:border-slate-500 hover:text-white",
-                ].join(" ")}
-                onClick={() => {
-                  void copyTextToClipboard(rawCode)
-                    .then(() => setCopiedBlockId(blockId))
-                    .catch(() => {
-                      /* ignore */
-                    });
-                }}
-              >
-                {isCopied ? <Check size={14} /> : <Copy size={14} />}
-                {isCopied ? "已复制" : "复制"}
-              </button>
+              <div className="flex items-center gap-2">
+                {canPreviewHtml && onPreviewHtml ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-slate-300 transition hover:border-slate-500 hover:text-white"
+                    onClick={() => onPreviewHtml(rawCode)}
+                  >
+                    <Eye size={14} />
+                    预览
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={[
+                    "inline-flex items-center gap-1 rounded-md border px-2 py-1 transition",
+                    isCopied
+                      ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
+                      : "border-slate-700 text-slate-300 hover:border-slate-500 hover:text-white",
+                  ].join(" ")}
+                  onClick={() => {
+                    void copyTextToClipboard(rawCode)
+                      .then(() => setCopiedBlockId(blockId))
+                      .catch(() => {
+                        /* ignore */
+                      });
+                  }}
+                >
+                  {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                  {isCopied ? "已复制" : "复制"}
+                </button>
+              </div>
             </div>
             <pre className="overflow-x-auto p-3 text-sm leading-6 text-slate-100">
               <code
@@ -192,7 +206,7 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
         );
       },
     }),
-    [copiedBlockId],
+    [copiedBlockId, onPreviewHtml],
   );
 
   return (

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import type { RoomTab, WorkspaceItem } from "../types";
+import type { AgentRuntimeMode, RoomTab, SandboxStatus, WorkspaceItem } from "../types";
+import { fetchSandboxStatus } from "../lib/api";
 import { Modal } from "./Modal";
 
 interface RoomSettingsDialogProps {
@@ -13,6 +14,7 @@ interface RoomSettingsDialogProps {
     title: string;
     workspaceId: string | null;
     workspaceRoot: string | null;
+    agentRuntimeMode: AgentRuntimeMode;
   }) => void;
   onOpenAgentCaps?: () => void;
 }
@@ -30,11 +32,15 @@ export function RoomSettingsDialog({
   const [title, setTitle] = useState("");
   const [presetKey, setPresetKey] = useState("");
   const [customPath, setCustomPath] = useState("");
+  const [runtimeMode, setRuntimeMode] = useState<AgentRuntimeMode>("local");
+  const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus | null>(null);
+  const [sandboxLoading, setSandboxLoading] = useState(false);
 
   useEffect(() => {
     if (!open || !tab) return;
     setTitle(tab.title);
     setCustomPath(tab.workspaceRoot?.trim() ?? "");
+    setRuntimeMode(tab.agentRuntimeMode === "sandbox" ? "sandbox" : "local");
     if (tab.workspaceId) {
       setPresetKey(`id:${tab.workspaceId}`);
     } else if (tab.workspaceRoot) {
@@ -50,7 +56,34 @@ export function RoomSettingsDialog({
     }
   }, [open, tab, workspaces]);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setSandboxLoading(true);
+    void fetchSandboxStatus()
+      .then((s) => {
+        if (!cancelled) setSandboxStatus(s);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSandboxStatus({
+            available: false,
+            imageReady: false,
+            message: "无法探测 Docker 状态",
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSandboxLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   if (!tab) return null;
+
+  const sandboxDisabled = sandboxLoading || !sandboxStatus?.available;
 
   return (
     <Modal
@@ -80,7 +113,12 @@ export function RoomSettingsDialog({
           <button
             type="button"
             className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:opacity-50"
-            disabled={saving || !title.trim() || !customPath.trim()}
+            disabled={
+              saving ||
+              !title.trim() ||
+              !customPath.trim() ||
+              (runtimeMode === "sandbox" && sandboxDisabled)
+            }
             onClick={() => {
               const trimmedPath = customPath.trim();
               if (!trimmedPath) {
@@ -98,6 +136,7 @@ export function RoomSettingsDialog({
                   title: title.trim(),
                   workspaceId: sameRoot ? workspaceId : null,
                   workspaceRoot: trimmedPath,
+                  agentRuntimeMode: runtimeMode,
                 });
                 return;
               }
@@ -106,6 +145,7 @@ export function RoomSettingsDialog({
                 title: title.trim(),
                 workspaceId: null,
                 workspaceRoot: trimmedPath,
+                agentRuntimeMode: runtimeMode,
               });
             }}
           >
@@ -157,7 +197,7 @@ export function RoomSettingsDialog({
         <option value="custom">自定义路径…</option>
       </select>
       <input
-        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-slate-900 outline-none placeholder:font-sans placeholder:text-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+        className="mb-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-slate-900 outline-none placeholder:font-sans placeholder:text-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500"
         placeholder="C:\xxxx 或 D:\projects\foo"
         value={customPath}
         onChange={(e) => {
@@ -165,6 +205,57 @@ export function RoomSettingsDialog({
           setPresetKey(e.target.value.trim() ? "custom" : "");
         }}
       />
+
+      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-zinc-200">
+        Agent 执行环境
+      </label>
+      <p className="mb-2 text-xs text-slate-500 dark:text-zinc-400">
+        本地运行与现网一致；Docker Sandbox 将文件与命令工具放入硬化 Linux 容器（自动挂载工作区与
+        Skills）。
+      </p>
+      <div className="mb-2 flex flex-col gap-2">
+        <label className="flex cursor-pointer items-start gap-2 rounded-2xl border border-slate-200 px-3 py-2.5 text-sm dark:border-zinc-700">
+          <input
+            type="radio"
+            className="mt-1"
+            name="agentRuntimeMode"
+            checked={runtimeMode === "local"}
+            onChange={() => setRuntimeMode("local")}
+          />
+          <span>
+            <span className="font-medium text-slate-800 dark:text-zinc-100">本地运行</span>
+            <span className="mt-0.5 block text-xs text-slate-500 dark:text-zinc-400">
+              文件与命令在宿主机执行
+            </span>
+          </span>
+        </label>
+        <label
+          className={`flex items-start gap-2 rounded-2xl border border-slate-200 px-3 py-2.5 text-sm dark:border-zinc-700 ${
+            sandboxDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+          }`}
+        >
+          <input
+            type="radio"
+            className="mt-1"
+            name="agentRuntimeMode"
+            checked={runtimeMode === "sandbox"}
+            disabled={sandboxDisabled}
+            onChange={() => setRuntimeMode("sandbox")}
+          />
+          <span>
+            <span className="font-medium text-slate-800 dark:text-zinc-100">Docker Sandbox</span>
+            <span className="mt-0.5 block text-xs text-slate-500 dark:text-zinc-400">
+              已含 Python 3.12 / Java 8 / Node 20 / Chromium（browser_navigate）
+            </span>
+          </span>
+        </label>
+      </div>
+      <p className="mb-1 text-xs text-slate-500 dark:text-zinc-400">
+        {sandboxLoading
+          ? "正在检测 Docker…"
+          : sandboxStatus?.message ?? "选择 Sandbox 前请确保 Docker Desktop 已启动。"}
+      </p>
+
       {error ? <p className="mt-3 text-sm text-red-500">{error}</p> : null}
     </Modal>
   );

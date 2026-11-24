@@ -18,6 +18,8 @@ export interface RoomMessage {
   createdAt: string;
 }
 
+export type AgentRuntimeMode = "local" | "sandbox";
+
 export interface RoomMeta {
   id: string;
   title: string;
@@ -25,6 +27,7 @@ export interface RoomMeta {
   workspaceRoot?: string | null;
   workspaceId?: string | null;
   workspaceName?: string | null;
+  agentRuntimeMode?: AgentRuntimeMode | string | null;
 }
 
 export interface PendingFile {
@@ -46,6 +49,15 @@ export interface RoomTab {
   workspaceRoot?: string | null;
   workspaceId?: string | null;
   workspaceName?: string | null;
+  agentRuntimeMode?: AgentRuntimeMode | string | null;
+}
+
+export interface SandboxStatus {
+  available: boolean;
+  imageReady: boolean;
+  dockerVersion?: string | null;
+  message?: string | null;
+  runtimeHints?: string[];
 }
 
 export interface WorkspaceItem {

@@ -276,6 +276,7 @@ export default function App() {
                   workspaceId: meta.workspaceId ?? r.workspaceId,
                   workspaceRoot: meta.workspaceRoot ?? r.workspaceRoot,
                   workspaceName: meta.workspaceName ?? r.workspaceName,
+                  agentRuntimeMode: meta.agentRuntimeMode ?? r.agentRuntimeMode,
                 }
               : r,
           ),
@@ -304,7 +305,7 @@ export default function App() {
       const seeded: RoomTab[] = [];
       const fromUrl = parseRoomFromLocation();
       if (fromUrl) {
-        let title = "聊天房间";
+        let title = "团队房间";
         try {
           const meta = await fetchRoom(fromUrl.baseUrl, fromUrl.roomId, fromUrl.token);
           title = meta.title || title;
@@ -336,6 +337,7 @@ export default function App() {
           workspaceRoot?: string;
           workspaceId?: string;
           workspaceName?: string;
+          agentRuntimeMode?: string;
         }>) {
           localIds.add(r.id);
           const invite = parseInviteInput(r.inviteUrl);
@@ -352,6 +354,7 @@ export default function App() {
             workspaceRoot: r.workspaceRoot,
             workspaceId: r.workspaceId,
             workspaceName: r.workspaceName,
+            agentRuntimeMode: r.agentRuntimeMode === "sandbox" ? "sandbox" : "local",
           };
           if (existingIdx >= 0) {
             seeded[existingIdx] = { ...seeded[existingIdx], ...patch };
@@ -452,6 +455,7 @@ export default function App() {
         workspaceRoot: null,
         workspaceId: null,
         workspaceName: null,
+        agentRuntimeMode: "local",
       };
       upsertTab(tab, true);
       setDraftRoomKey(roomKey(tab));
@@ -479,7 +483,7 @@ export default function App() {
       upsertTab(
         {
           id: parsed.roomId,
-          title: meta.title || "聊天房间",
+          title: meta.title || "团队房间",
           baseUrl: parsed.baseUrl,
           token: parsed.token,
           role,
@@ -555,6 +559,7 @@ export default function App() {
     title: string;
     workspaceId: string | null;
     workspaceRoot: string | null;
+    agentRuntimeMode: "local" | "sandbox";
   }) => {
     if (!settingsTab) return;
     setSettingsSaving(true);
@@ -564,8 +569,11 @@ export default function App() {
       const ws = await setLocalRoomWorkspace(settingsTab.id, {
         workspaceId: input.workspaceId,
         workspaceRoot: input.workspaceRoot,
+        agentRuntimeMode: input.agentRuntimeMode,
       });
       const key = roomKey(settingsTab);
+      const mode =
+        ws.agentRuntimeMode === "sandbox" ? "sandbox" : input.agentRuntimeMode;
       setRooms((prev) =>
         prev.map((r) =>
           roomKey(r) === key
@@ -575,6 +583,7 @@ export default function App() {
                 workspaceId: ws.workspaceId,
                 workspaceRoot: ws.workspaceRoot,
                 workspaceName: ws.workspaceName,
+                agentRuntimeMode: mode,
               }
             : r,
         ),
@@ -592,6 +601,7 @@ export default function App() {
               workspaceId: ws.workspaceId,
               workspaceRoot: ws.workspaceRoot,
               workspaceName: ws.workspaceName,
+              agentRuntimeMode: mode,
             },
           },
         };
@@ -764,7 +774,7 @@ export default function App() {
             </div>
           </div>
           <h1 className="text-center text-lg font-semibold text-slate-900 dark:text-zinc-100">
-            Athlon 聊天房间
+            Athlon 团队房间
           </h1>
           <p className="mt-1 text-center text-sm text-slate-500 dark:text-zinc-400">
             输入昵称后进入多房间会话
@@ -854,7 +864,7 @@ export default function App() {
         />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-          <p className="text-sm text-slate-500 dark:text-zinc-400">选择或创建一个房间开始聊天</p>
+          <p className="text-sm text-slate-500 dark:text-zinc-400">选择或创建一个团队房间开始协作</p>
           {shellError ? <p className="text-sm text-red-500">{shellError}</p> : null}
           <div className="flex gap-2">
             {canCreateLocal ? (

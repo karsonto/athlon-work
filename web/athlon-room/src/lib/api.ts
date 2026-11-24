@@ -113,7 +113,7 @@ export async function createLocalRoom(
   const res = await fetch(apiUrl(baseUrl || localManageBaseUrl(), "/api/rooms"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: title ?? "Athlon 聊天房间" }),
+    body: JSON.stringify({ title: title ?? "Athlon 团队房间" }),
   });
   if (!res.ok) {
     throw new Error(await readError(res));
@@ -152,13 +152,18 @@ export async function renameLocalRoom(
 
 export async function setLocalRoomWorkspace(
   roomId: string,
-  body: { workspaceId?: string | null; workspaceRoot?: string | null },
+  body: {
+    workspaceId?: string | null;
+    workspaceRoot?: string | null;
+    agentRuntimeMode?: "local" | "sandbox" | string | null;
+  },
   baseUrl = "",
 ): Promise<{
   id: string;
   workspaceRoot?: string | null;
   workspaceId?: string | null;
   workspaceName?: string | null;
+  agentRuntimeMode?: string | null;
 }> {
   const res = await fetch(
     apiUrl(baseUrl || localManageBaseUrl(), `/api/rooms/${roomId}/workspace`),
@@ -167,6 +172,16 @@ export async function setLocalRoomWorkspace(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     },
+  );
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+  return res.json();
+}
+
+export async function fetchSandboxStatus(baseUrl = ""): Promise<import("../types").SandboxStatus> {
+  const res = await fetch(
+    apiUrl(baseUrl || localManageBaseUrl(), "/api/rooms/sandbox-status"),
   );
   if (!res.ok) {
     throw new Error(await readError(res));
