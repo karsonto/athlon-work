@@ -238,7 +238,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Room opened hook failed.");
+                _logger.LogWarning(ex, "Room opened hook failed for {RoomId}.", room.Id);
             }
 
             return new RoomCreateResult
@@ -290,6 +290,52 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         finally
         {
             _lifecycle.Release();
+        }
+    }
+
+    /// <summary>
+    /// Reactivate a disk-backed room that still has a valid token (e.g. after host restart)
+    /// so RoomAgentBridge can attach and @agent responds.
+    /// </summary>
+    public async Task EnsureRoomLiveForTrafficAsync(
+        string roomId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(roomId) || _store.GetRoom(roomId) is null)
+        {
+            return;
+        }
+
+        var newlyActivated = _activeRoomIds.TryAdd(roomId, 0);
+        if (!IsRunning)
+        {
+            await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (!IsRunning)
+                {
+                    await StartListenerAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                _lifecycle.Release();
+            }
+        }
+
+        if (newlyActivated)
+        {
+            _logger.LogInformation("Re-activated room {RoomId} for traffic (attach @agent).", roomId);
+        }
+
+        // Idempotent: Bridge AttachRoom no-ops when already subscribed.
+        try
+        {
+            _onRoomOpened?.Invoke(roomId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Room opened/attach hook failed for {RoomId}.", roomId);
         }
     }
 
@@ -1056,6 +1102,9 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             await WriteJsonAsync(context.Response, HttpStatusCode.Unauthorized, new { error = "unauthorized" }).ConfigureAwait(false);
             return;
         }
+
+        // Disk-backed rooms can accept traffic after restart; re-activate + attach @agent bridge.
+        await EnsureRoomLiveForTrafficAsync(roomId).ConfigureAwait(false);
 
         // GET /api/rooms/{id}
         if (segments.Length == 3 && method.Equals("GET", StringComparison.OrdinalIgnoreCase))

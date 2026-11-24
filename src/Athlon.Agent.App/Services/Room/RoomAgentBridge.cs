@@ -69,6 +69,8 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         _logger = logger;
         _server.SetRoomLifecycleHooks(AttachRoom, DetachRoom);
         _server.SetAgentStopHandler(TryStop);
+        // Cover rooms already active before this singleton was constructed (DI order / restart).
+        AttachToActiveRoom();
     }
 
     /// <summary>Cancel the in-flight @agent turn for a room (host-only API). Returns false if idle.</summary>
@@ -121,17 +123,26 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             return;
         }
 
-        var sub = _store.SubscribeEvents(roomId, ev =>
+        try
         {
-            if (ev.Kind != RoomStoreEventKind.Message)
+            var sub = _store.SubscribeEvents(roomId, ev =>
             {
-                return;
-            }
+                if (ev.Kind != RoomStoreEventKind.Message)
+                {
+                    return;
+                }
 
-            _ = Task.Run(() => HandleMessageAsync(roomId, ev.Message));
-        });
-        _subscriptions[roomId] = sub;
-        _logger.LogInformation("RoomAgentBridge attached to room {RoomId}", roomId);
+                _ = Task.Run(() => HandleMessageAsync(roomId, ev.Message));
+            });
+            _subscriptions[roomId] = sub;
+            _logger.LogInformation("RoomAgentBridge attached to room {RoomId}", roomId);
+        }
+        catch (Exception ex)
+        {
+            _attachedRooms.TryRemove(roomId, out _);
+            _logger.LogWarning(ex, "RoomAgentBridge failed to attach to room {RoomId}", roomId);
+            throw;
+        }
     }
 
     public void DetachRoom(string roomId)

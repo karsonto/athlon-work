@@ -380,6 +380,11 @@ export default function App() {
       for (const recent of loadRecentRooms()) {
         if (seeded.some((s) => s.id === recent.id && s.baseUrl === recent.baseUrl)) continue;
         const tab = recentToTab(recent);
+        // Same-origin recent rooms not in host ActiveRoomIds are stale (chat may work via
+        // disk token but @agent won't). Prefer active host rooms / invite links only.
+        if (localOk && sameOriginBase(tab.baseUrl) && !localIds.has(tab.id)) {
+          continue;
+        }
         if (localIds.has(tab.id) && sameOriginBase(tab.baseUrl)) {
           tab.role = "host";
         }
