@@ -423,13 +423,13 @@ Hold to talk</value>
     <value>Add files (drag-and-drop or Ctrl+V to paste)</value>
   </data>
   <data name="Chat_WelcomeDescription" xml:space="preserve">
-    <value>Athlon Agent can help you analyze code, build prototypes, refine designs, or handle development tasks.</value>
+    <value>Code, business, and finance fluency</value>
   </data>
   <data name="Chat_WelcomeTitle" xml:space="preserve">
-    <value>What should Athlon help you build?</value>
+    <value>Working with Athlon</value>
   </data>
   <data name="Chat_WelcomeTitleWithName" xml:space="preserve">
-    <value>Hi {0}, what should Athlon help you build?</value>
+    <value>Hi {0}, working with Athlon</value>
   </data>
   <data name="Common_About" xml:space="preserve">
     <value>About</value>
