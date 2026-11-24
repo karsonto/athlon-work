@@ -6,7 +6,7 @@ using Athlon.Agent.Skills;
 
 namespace Athlon.Agent.App.Services.Room;
 
-internal sealed class RoomDockerApplyPatchTool(IRoomDockerSandbox sandbox, WorkspaceGuard guard)
+internal sealed class RoomDockerApplyPatchTool(IRoomSandboxBackend sandbox, WorkspaceGuard guard)
     : IAgentTool, ILocalWorkspaceTool
 {
     public ToolDefinition Definition { get; } = new(
@@ -82,7 +82,7 @@ internal sealed class RoomDockerApplyPatchTool(IRoomDockerSandbox sandbox, Works
     }
 }
 
-internal sealed class RoomDockerGrepFilesTool(IRoomDockerSandbox sandbox, WorkspaceGuard guard)
+internal sealed class RoomDockerGrepFilesTool(IRoomSandboxBackend sandbox, WorkspaceGuard guard)
     : IAgentTool, IParallelizableAgentTool, ILocalWorkspaceTool
 {
     private const int MaxMatches = 200;
@@ -160,7 +160,7 @@ internal sealed class RoomDockerGrepFilesTool(IRoomDockerSandbox sandbox, Worksp
         "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
 }
 
-internal sealed class RoomDockerGlobFilesTool(IRoomDockerSandbox sandbox, WorkspaceGuard guard)
+internal sealed class RoomDockerGlobFilesTool(IRoomSandboxBackend sandbox, WorkspaceGuard guard)
     : IAgentTool, IParallelizableAgentTool, ILocalWorkspaceTool
 {
     public ToolDefinition Definition { get; } = new(
@@ -233,7 +233,7 @@ internal sealed class RoomDockerGlobFilesTool(IRoomDockerSandbox sandbox, Worksp
 }
 
 internal sealed class RoomDockerExecuteCommandTool(
-    IRoomDockerSandbox sandbox,
+    IRoomSandboxBackend sandbox,
     WorkspaceGuard guard,
     AppSettings settings) : IAgentTool, ILocalWorkspaceTool
 {
@@ -334,7 +334,7 @@ internal sealed class RoomDockerExecuteCommandTool(
 }
 
 internal sealed class RoomDockerLoadSkillTool(
-    IRoomDockerSandbox sandbox,
+    IRoomSandboxBackend sandbox,
     ISkillRuntime skillRuntime,
     IAgentSkillCatalog skillCatalog,
     IAppPathProvider paths) : IAgentTool

@@ -33,7 +33,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
     private readonly IAgentRuntime _runtime;
     private readonly IServiceProvider _services;
     private readonly IActiveWorkspaceContext _workspaceContext;
-    private readonly IRoomDockerSandbox _dockerSandbox;
+    private readonly IRoomSandboxBackendResolver _sandboxResolver;
     private readonly IAppPathProvider _paths;
     private readonly AppSettings _settings;
     private readonly ILogger<RoomAgentBridge> _logger;
@@ -51,7 +51,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         IAgentRuntime runtime,
         IServiceProvider services,
         IActiveWorkspaceContext workspaceContext,
-        IRoomDockerSandbox dockerSandbox,
+        IRoomSandboxBackendResolver sandboxResolver,
         IAppPathProvider paths,
         AppSettings settings,
         ILogger<RoomAgentBridge> logger)
@@ -63,7 +63,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         _runtime = runtime;
         _services = services;
         _workspaceContext = workspaceContext;
-        _dockerSandbox = dockerSandbox;
+        _sandboxResolver = sandboxResolver;
         _paths = paths;
         _settings = settings;
         _logger = logger;
@@ -144,13 +144,16 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         _attachedRooms.TryRemove(roomId, out _);
         _ = Task.Run(async () =>
         {
-            try
+            foreach (var backend in new[] { _sandboxResolver.LocalDocker, _sandboxResolver.Cloud })
             {
-                await _dockerSandbox.DisposeRoomAsync(roomId).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Failed to dispose sandbox for room {RoomId}", roomId);
+                try
+                {
+                    await backend.DisposeRoomAsync(roomId).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Failed to dispose sandbox for room {RoomId}", roomId);
+                }
             }
         });
         _logger.LogInformation("RoomAgentBridge detached from room {RoomId}", roomId);
@@ -173,9 +176,14 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         }
 
         _roomGates.Clear();
-        if (_dockerSandbox is IAsyncDisposable disposable)
+        if (_sandboxResolver.LocalDocker is IAsyncDisposable localDisposable)
         {
-            await disposable.DisposeAsync().ConfigureAwait(false);
+            await localDisposable.DisposeAsync().ConfigureAwait(false);
+        }
+
+        if (_sandboxResolver.Cloud is IAsyncDisposable cloudDisposable)
+        {
+            await cloudDisposable.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -285,26 +293,43 @@ public sealed class RoomAgentBridge : IAsyncDisposable
 
         var runtimeMode = RoomAgentRuntimeModes.Normalize(room?.AgentRuntimeMode);
         RoomSandboxPathMap? pathMap = null;
+        IRoomSandboxBackend? sandboxBackend = null;
         if (RoomAgentRuntimeModes.IsSandbox(runtimeMode))
         {
             if (string.IsNullOrWhiteSpace(workspaceRoot))
             {
-                throw new InvalidOperationException("Sandbox 模式需要先在房间设置中配置本机工作区。");
+                throw new InvalidOperationException(
+                    RoomAgentRuntimeModes.IsCloudSandbox(runtimeMode)
+                        ? "云沙箱模式需要先在房间设置中配置本机工作区（将同步至云端）。"
+                        : "Sandbox 模式需要先在房间设置中配置本机工作区。");
             }
 
-            await _dockerSandbox
-                .EnsureRoomContainerAsync(roomId, workspaceRoot, _paths.SkillsPath, cancellationToken)
+            sandboxBackend = _sandboxResolver.Resolve(runtimeMode)
+                ?? throw new InvalidOperationException("沙箱后端不可用。");
+
+            if (RoomAgentRuntimeModes.IsCloudSandbox(runtimeMode))
+            {
+                _store.UpdateMessageText(roomId, placeholder.Id, "正在准备云沙箱…");
+            }
+
+            await sandboxBackend
+                .EnsureRoomSessionAsync(
+                    roomId,
+                    workspaceRoot,
+                    _paths.SkillsPath,
+                    profile.SkillNames,
+                    cancellationToken)
                 .ConfigureAwait(false);
             pathMap = new RoomSandboxPathMap(workspaceRoot, _paths.SkillsPath);
         }
 
         var hostTools = _services.GetServices<IAgentTool>();
         IEnumerable<IAgentTool> localTools = hostTools;
-        if (pathMap is not null)
+        if (pathMap is not null && sandboxBackend is not null)
         {
             var workspaceGuardForTools = _services.GetRequiredService<WorkspaceGuard>();
             var dockerTools = RoomDockerToolFactory.Create(
-                _dockerSandbox,
+                sandboxBackend,
                 workspaceGuardForTools,
                 _settings,
                 _services.GetRequiredService<ISkillRuntime>(),
@@ -422,7 +447,9 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             _store.UpdateMessageText(roomId, messageId, streamed.ToString());
         }
 
-        PublishTrace("run_started", summary: "开始处理");
+        PublishTrace(
+            "run_started",
+            summary: RoomAgentRuntimeModes.IsCloudSandbox(runtimeMode) ? "云沙箱已就绪" : "开始处理");
 
         using var roomScope = RoomAgentTurnScope.Enter(
             new RoomAgentTurnOptions(roomId, runtimeMode, pathMap));
@@ -589,6 +616,24 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             FlushText(force: true);
             PublishTrace("error", summary: ex.Message);
             throw;
+        }
+        finally
+        {
+            if (sandboxBackend is not null
+                && RoomAgentRuntimeModes.IsCloudSandbox(runtimeMode)
+                && !string.IsNullOrWhiteSpace(workspaceRoot))
+            {
+                try
+                {
+                    await sandboxBackend
+                        .PullWorkspaceAsync(roomId, workspaceRoot!, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception pullEx)
+                {
+                    _logger.LogWarning(pullEx, "Cloud sandbox workspace pull failed for {RoomId}", roomId);
+                }
+            }
         }
     }
 

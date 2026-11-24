@@ -155,7 +155,7 @@ export async function setLocalRoomWorkspace(
   body: {
     workspaceId?: string | null;
     workspaceRoot?: string | null;
-    agentRuntimeMode?: "local" | "sandbox" | string | null;
+    agentRuntimeMode?: "local" | "sandbox" | "cloud_sandbox" | string | null;
   },
   baseUrl = "",
 ): Promise<{

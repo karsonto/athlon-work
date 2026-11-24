@@ -13,12 +13,44 @@ public static class RoomAgentRuntimeModes
 {
     public const string Local = "local";
     public const string Sandbox = "sandbox";
+    public const string CloudSandbox = "cloud_sandbox";
 
-    public static bool IsSandbox(string? mode) =>
+    public static bool IsSandbox(string? mode)
+    {
+        var n = Normalize(mode);
+        return n is Sandbox or CloudSandbox;
+    }
+
+    public static bool IsLocalDockerSandbox(string? mode) =>
         string.Equals(Normalize(mode), Sandbox, StringComparison.OrdinalIgnoreCase);
 
-    public static string Normalize(string? mode) =>
-        string.Equals(mode?.Trim(), Sandbox, StringComparison.OrdinalIgnoreCase) ? Sandbox : Local;
+    public static bool IsCloudSandbox(string? mode) =>
+        string.Equals(Normalize(mode), CloudSandbox, StringComparison.OrdinalIgnoreCase);
+
+    public static string Normalize(string? mode)
+    {
+        var trimmed = mode?.Trim();
+        if (string.Equals(trimmed, Sandbox, StringComparison.OrdinalIgnoreCase))
+        {
+            return Sandbox;
+        }
+
+        if (string.Equals(trimmed, CloudSandbox, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trimmed, "cloud", StringComparison.OrdinalIgnoreCase))
+        {
+            return CloudSandbox;
+        }
+
+        return Local;
+    }
+
+    public static string DisplayLabel(string? mode) =>
+        Normalize(mode) switch
+        {
+            Sandbox => "Sandbox",
+            CloudSandbox => "云沙箱",
+            _ => "本地"
+        };
 }
 
 public sealed class RoomInfo
@@ -35,7 +67,7 @@ public sealed class RoomInfo
     /// <summary>Optional configured workspace id (local or SSH).</summary>
     public string? WorkspaceId { get; set; }
 
-    /// <summary>local | sandbox — where @agent file/shell tools execute.</summary>
+    /// <summary>local | sandbox | cloud_sandbox — where @agent file/shell tools execute.</summary>
     public string AgentRuntimeMode { get; set; } = RoomAgentRuntimeModes.Local;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

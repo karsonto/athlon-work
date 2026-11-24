@@ -89,6 +89,7 @@ public sealed class AppSettings
     public UpdateSettings Update { get; set; } = new();
     public TrainingDataSettings TrainingData { get; set; } = new();
     public SsoSettings Sso { get; set; } = new();
+    public CloudSandboxSettings CloudSandbox { get; set; } = new();
     public BehaviorReportSettings BehaviorReport { get; set; } = new();
     public ComputerUseSettings ComputerUse { get; set; } = new();
     public TtsSettings Tts { get; set; } = new();

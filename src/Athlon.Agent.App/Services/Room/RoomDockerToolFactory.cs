@@ -26,7 +26,7 @@ public static class RoomDockerToolFactory
     };
 
     public static IReadOnlyList<IAgentTool> Create(
-        IRoomDockerSandbox sandbox,
+        IRoomSandboxBackend sandbox,
         WorkspaceGuard guard,
         AppSettings settings,
         ISkillRuntime skillRuntime,
@@ -158,7 +158,7 @@ public static class RoomDockerToolFactory
     internal static string HostDisplay(string hostPath) => ToolPathNormalizer.ForModel(hostPath);
 }
 
-internal sealed class RoomDockerFileListTool(IRoomDockerSandbox sandbox, WorkspaceGuard guard)
+internal sealed class RoomDockerFileListTool(IRoomSandboxBackend sandbox, WorkspaceGuard guard)
     : IAgentTool, IParallelizableAgentTool, ILocalWorkspaceTool
 {
     public ToolDefinition Definition { get; } = new(
@@ -197,7 +197,7 @@ internal sealed class RoomDockerFileListTool(IRoomDockerSandbox sandbox, Workspa
 }
 
 internal sealed class RoomDockerFileReadTool(
-    IRoomDockerSandbox sandbox,
+    IRoomSandboxBackend sandbox,
     WorkspaceGuard guard,
     AppSettings settings) : IAgentTool, IParallelizableAgentTool, ILocalWorkspaceTool
 {
@@ -245,7 +245,7 @@ internal sealed class RoomDockerFileReadTool(
     }
 }
 
-internal sealed class RoomDockerFileWriteTool(IRoomDockerSandbox sandbox, WorkspaceGuard guard)
+internal sealed class RoomDockerFileWriteTool(IRoomSandboxBackend sandbox, WorkspaceGuard guard)
     : IAgentTool, ILocalWorkspaceTool
 {
     public ToolDefinition Definition { get; } = new(
@@ -288,7 +288,7 @@ internal sealed class RoomDockerFileWriteTool(IRoomDockerSandbox sandbox, Worksp
     }
 }
 
-internal sealed class RoomDockerFileEditTool(IRoomDockerSandbox sandbox, WorkspaceGuard guard)
+internal sealed class RoomDockerFileEditTool(IRoomSandboxBackend sandbox, WorkspaceGuard guard)
     : IAgentTool, ILocalWorkspaceTool
 {
     public ToolDefinition Definition { get; } = new(

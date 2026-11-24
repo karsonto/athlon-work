@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AgentRuntimeMode, RoomTab, SandboxStatus, WorkspaceItem } from "../types";
 import { fetchSandboxStatus } from "../lib/api";
+import { normalizeAgentRuntimeMode } from "../lib/runtimeMode";
 import { Modal } from "./Modal";
 
 interface RoomSettingsDialogProps {
@@ -40,7 +41,7 @@ export function RoomSettingsDialog({
     if (!open || !tab) return;
     setTitle(tab.title);
     setCustomPath(tab.workspaceRoot?.trim() ?? "");
-    setRuntimeMode(tab.agentRuntimeMode === "sandbox" ? "sandbox" : "local");
+    setRuntimeMode(normalizeAgentRuntimeMode(tab.agentRuntimeMode));
     if (tab.workspaceId) {
       setPresetKey(`id:${tab.workspaceId}`);
     } else if (tab.workspaceRoot) {
@@ -69,7 +70,9 @@ export function RoomSettingsDialog({
           setSandboxStatus({
             available: false,
             imageReady: false,
-            message: "无法探测 Docker 状态",
+            message: "无法探测沙箱状态",
+            localDocker: { available: false, message: "无法探测 Docker 状态" },
+            cloud: { available: false, message: "无法探测云沙箱状态" },
           });
         }
       })
@@ -83,7 +86,12 @@ export function RoomSettingsDialog({
 
   if (!tab) return null;
 
-  const sandboxDisabled = sandboxLoading || !sandboxStatus?.available;
+  const localDocker = sandboxStatus?.localDocker ?? sandboxStatus;
+  const cloud = sandboxStatus?.cloud;
+  const sandboxDisabled = sandboxLoading || !localDocker?.available;
+  const cloudDisabled = sandboxLoading || !cloud?.available;
+  const preferCloud =
+    !!cloud?.available && !localDocker?.available;
 
   return (
     <Modal
@@ -117,7 +125,8 @@ export function RoomSettingsDialog({
               saving ||
               !title.trim() ||
               !customPath.trim() ||
-              (runtimeMode === "sandbox" && sandboxDisabled)
+              (runtimeMode === "sandbox" && sandboxDisabled) ||
+              (runtimeMode === "cloud_sandbox" && cloudDisabled)
             }
             onClick={() => {
               const trimmedPath = customPath.trim();
@@ -210,8 +219,7 @@ export function RoomSettingsDialog({
         Agent 执行环境
       </label>
       <p className="mb-2 text-xs text-slate-500 dark:text-zinc-400">
-        本地运行与现网一致；Docker Sandbox 将文件与命令工具放入硬化 Linux 容器（自动挂载工作区与
-        Skills）。
+        三选一：本地、本机 Docker Sandbox，或 Athlon 云沙箱（无 Docker 时可用；工作区会同步至云端）。
       </p>
       <div className="mb-2 flex flex-col gap-2">
         <label className="flex cursor-pointer items-start gap-2 rounded-2xl border border-slate-200 px-3 py-2.5 text-sm dark:border-zinc-700">
@@ -245,16 +253,48 @@ export function RoomSettingsDialog({
           <span>
             <span className="font-medium text-slate-800 dark:text-zinc-100">Docker Sandbox</span>
             <span className="mt-0.5 block text-xs text-slate-500 dark:text-zinc-400">
-              已含 Python 3.12 / Java 8 / Node 20 / Chromium（browser_navigate）
+              本机容器：Python 3.12 / Java 8 / Node 20 / Chromium
+            </span>
+          </span>
+        </label>
+        <label
+          className={`flex items-start gap-2 rounded-2xl border px-3 py-2.5 text-sm ${
+            preferCloud
+              ? "border-sky-300 bg-sky-50/60 dark:border-sky-700 dark:bg-sky-950/40"
+              : "border-slate-200 dark:border-zinc-700"
+          } ${cloudDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+        >
+          <input
+            type="radio"
+            className="mt-1"
+            name="agentRuntimeMode"
+            checked={runtimeMode === "cloud_sandbox"}
+            disabled={cloudDisabled}
+            onChange={() => setRuntimeMode("cloud_sandbox")}
+          />
+          <span>
+            <span className="font-medium text-slate-800 dark:text-zinc-100">云沙箱</span>
+            <span className="mt-0.5 block text-xs text-slate-500 dark:text-zinc-400">
+              远程隔离环境；工作区与勾选 Skills 将上传同步至 Athlon 云端
             </span>
           </span>
         </label>
       </div>
       <p className="mb-1 text-xs text-slate-500 dark:text-zinc-400">
         {sandboxLoading
-          ? "正在检测 Docker…"
-          : sandboxStatus?.message ?? "选择 Sandbox 前请确保 Docker Desktop 已启动。"}
+          ? "正在检测 Docker / 云沙箱…"
+          : runtimeMode === "cloud_sandbox"
+            ? (cloud?.message ?? "云沙箱需 Imp SSO 登录，且已配置 CloudSandbox:BaseUrl。")
+            : runtimeMode === "sandbox"
+              ? (localDocker?.message ?? "选择 Docker Sandbox 前请确保 Docker Desktop 已启动。")
+              : "本地模式不依赖 Docker 或云沙箱。"}
       </p>
+      {runtimeMode === "cloud_sandbox" ? (
+        <p className="mb-1 text-xs text-amber-700 dark:text-amber-300">
+          启用云沙箱即表示同意将本房间工作区内容同步到 Athlon 云沙箱。
+          {cloud?.quotaHint ? ` ${cloud.quotaHint}` : ""}
+        </p>
+      ) : null}
 
       {error ? <p className="mt-3 text-sm text-red-500">{error}</p> : null}
     </Modal>

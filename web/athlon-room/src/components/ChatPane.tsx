@@ -8,6 +8,7 @@ import type {
   RoomPresenceMember,
   RoomTab,
 } from "../types";
+import { agentRuntimeModeLabel } from "../lib/runtimeMode";
 import { isAgentTraceRunning } from "./AgentTracePanel";
 import { ComposerBar } from "./ComposerBar";
 import { HtmlPreviewModal } from "./HtmlPreviewModal";
@@ -74,7 +75,7 @@ export function ChatPane({
   const workspaceLabel =
     meta?.workspaceName ?? tab.workspaceName ?? meta?.workspaceRoot ?? tab.workspaceRoot;
   const runtimeLabel =
-    (meta?.agentRuntimeMode ?? tab.agentRuntimeMode) === "sandbox" ? "Sandbox" : "本地";
+    agentRuntimeModeLabel(meta?.agentRuntimeMode ?? tab.agentRuntimeMode);
   const traceCount = agentTraces ? Object.values(agentTraces).reduce((n, s) => n + s.length, 0) : 0;
   const memberCount = members.length;
   const agentRunning =

@@ -49,7 +49,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     private readonly IActiveWorkspaceContext _workspaceContext;
     private readonly RoomAgentProfileStore _profileStore;
     private readonly IAgentSkillCatalog _skillCatalog;
-    private readonly IRoomDockerSandbox _dockerSandbox;
+    private readonly IRoomSandboxBackendResolver _sandboxResolver;
     private readonly ILogger<AthlonRoomServer> _logger;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private readonly ConcurrentDictionary<string, byte> _sseConnections = new();
@@ -85,7 +85,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         IActiveWorkspaceContext workspaceContext,
         RoomAgentProfileStore profileStore,
         IAgentSkillCatalog skillCatalog,
-        IRoomDockerSandbox dockerSandbox,
+        IRoomSandboxBackendResolver sandboxResolver,
         ILogger<AthlonRoomServer> logger)
     {
         _store = store;
@@ -93,7 +93,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         _workspaceContext = workspaceContext;
         _profileStore = profileStore;
         _skillCatalog = skillCatalog;
-        _dockerSandbox = dockerSandbox;
+        _sandboxResolver = sandboxResolver;
         _logger = logger;
     }
 
@@ -715,14 +715,36 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 return;
             }
 
-            var probe = await _dockerSandbox.ProbeAsync().ConfigureAwait(false);
+            var localProbe = await _sandboxResolver.LocalDocker.ProbeAsync().ConfigureAwait(false);
+            var cloudProbe = await _sandboxResolver.Cloud.ProbeAsync().ConfigureAwait(false);
+            var recommended = cloudProbe.Available && !localProbe.Available
+                ? RoomAgentRuntimeModes.CloudSandbox
+                : localProbe.Available
+                    ? RoomAgentRuntimeModes.Sandbox
+                    : RoomAgentRuntimeModes.Local;
             await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
             {
-                available = probe.Available,
-                imageReady = probe.ImageReady,
-                dockerVersion = probe.DockerVersion,
-                message = probe.Message,
-                runtimeHints = probe.RuntimeHints
+                available = localProbe.Available,
+                imageReady = localProbe.ImageReady,
+                dockerVersion = localProbe.DockerVersion,
+                message = localProbe.Message,
+                runtimeHints = localProbe.RuntimeHints,
+                localDocker = new
+                {
+                    available = localProbe.Available,
+                    imageReady = localProbe.ImageReady,
+                    dockerVersion = localProbe.DockerVersion,
+                    message = localProbe.Message,
+                    runtimeHints = localProbe.RuntimeHints
+                },
+                cloud = new
+                {
+                    available = cloudProbe.Available,
+                    message = cloudProbe.Message,
+                    quotaHint = cloudProbe.QuotaHint,
+                    runtimeHints = cloudProbe.RuntimeHints
+                },
+                recommended
             }).ConfigureAwait(false);
             return;
         }
@@ -825,9 +847,9 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 ? RoomAgentRuntimeModes.Normalize(agentRuntimeMode)
                 : RoomAgentRuntimeModes.Normalize(previous?.AgentRuntimeMode);
 
-            if (RoomAgentRuntimeModes.IsSandbox(effectiveMode))
+            if (RoomAgentRuntimeModes.IsLocalDockerSandbox(effectiveMode))
             {
-                var probe = await _dockerSandbox.ProbeAsync().ConfigureAwait(false);
+                var probe = await _sandboxResolver.LocalDocker.ProbeAsync().ConfigureAwait(false);
                 if (!probe.Available)
                 {
                     await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new
@@ -840,13 +862,41 @@ public sealed class AthlonRoomServer : IAsyncDisposable
 
                 try
                 {
-                    await _dockerSandbox.EnsureReadyAsync().ConfigureAwait(false);
+                    await _sandboxResolver.LocalDocker.EnsureReadyAsync().ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
                     await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new
                     {
                         error = "docker_image_failed",
+                        message = ex.Message
+                    }).ConfigureAwait(false);
+                    return;
+                }
+            }
+            else if (RoomAgentRuntimeModes.IsCloudSandbox(effectiveMode))
+            {
+                var probe = await _sandboxResolver.Cloud.ProbeAsync().ConfigureAwait(false);
+                if (!probe.Available)
+                {
+                    await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new
+                    {
+                        error = "cloud_sandbox_unavailable",
+                        message = probe.Message,
+                        quotaHint = probe.QuotaHint
+                    }).ConfigureAwait(false);
+                    return;
+                }
+
+                try
+                {
+                    await _sandboxResolver.Cloud.EnsureReadyAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new
+                    {
+                        error = "cloud_sandbox_unavailable",
                         message = ex.Message
                     }).ConfigureAwait(false);
                     return;
@@ -867,18 +917,23 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             // Recreate/drop container when leaving sandbox or remounting a different workspace.
             if (previous is not null)
             {
-                var leftSandbox = RoomAgentRuntimeModes.IsSandbox(previous.AgentRuntimeMode)
+                var prevMode = RoomAgentRuntimeModes.Normalize(previous.AgentRuntimeMode);
+                var leftSandbox = RoomAgentRuntimeModes.IsSandbox(prevMode)
                     && !RoomAgentRuntimeModes.IsSandbox(effectiveMode);
+                var modeChanged = RoomAgentRuntimeModes.IsSandbox(prevMode)
+                    && RoomAgentRuntimeModes.IsSandbox(effectiveMode)
+                    && !string.Equals(prevMode, effectiveMode, StringComparison.Ordinal);
                 var remount = RoomAgentRuntimeModes.IsSandbox(effectiveMode)
                     && !string.Equals(
                         previous.WorkspaceRoot?.Trim(),
                         updated.WorkspaceRoot?.Trim(),
                         StringComparison.OrdinalIgnoreCase);
-                if (leftSandbox || remount)
+                if (leftSandbox || remount || modeChanged)
                 {
                     try
                     {
-                        await _dockerSandbox.DisposeRoomAsync(roomId).ConfigureAwait(false);
+                        await _sandboxResolver.LocalDocker.DisposeRoomAsync(roomId).ConfigureAwait(false);
+                        await _sandboxResolver.Cloud.DisposeRoomAsync(roomId).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {

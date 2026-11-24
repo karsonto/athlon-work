@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import type { RoomTab } from "../types";
+import { agentRuntimeModeLabel } from "../lib/runtimeMode";
 
 interface RoomSidebarProps {
   rooms: RoomTab[];
@@ -191,7 +192,7 @@ export function RoomSidebar({
                       <div className="truncate text-sm font-medium">{tab.title}</div>
                       <div className="truncate text-[11px] opacity-70">
                         {tab.role === "host" ? "我创建的" : "已加入"}
-                        {` · ${tab.agentRuntimeMode === "sandbox" ? "Sandbox" : "本地"}`}
+                        {` · ${agentRuntimeModeLabel(tab.agentRuntimeMode)}`}
                         {tab.workspaceName || tab.workspaceRoot
                           ? ` · ${tab.workspaceName || tab.workspaceRoot}`
                           : ""}

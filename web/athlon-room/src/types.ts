@@ -18,7 +18,7 @@ export interface RoomMessage {
   createdAt: string;
 }
 
-export type AgentRuntimeMode = "local" | "sandbox";
+export type AgentRuntimeMode = "local" | "sandbox" | "cloud_sandbox";
 
 export interface RoomMeta {
   id: string;
@@ -52,12 +52,22 @@ export interface RoomTab {
   agentRuntimeMode?: AgentRuntimeMode | string | null;
 }
 
-export interface SandboxStatus {
+export interface SandboxProbeSlice {
   available: boolean;
-  imageReady: boolean;
+  imageReady?: boolean;
   dockerVersion?: string | null;
   message?: string | null;
+  quotaHint?: string | null;
   runtimeHints?: string[];
+}
+
+export interface SandboxStatus extends SandboxProbeSlice {
+  /** @deprecated prefer localDocker */
+  available: boolean;
+  imageReady: boolean;
+  localDocker?: SandboxProbeSlice;
+  cloud?: SandboxProbeSlice;
+  recommended?: AgentRuntimeMode | string | null;
 }
 
 export interface WorkspaceItem {

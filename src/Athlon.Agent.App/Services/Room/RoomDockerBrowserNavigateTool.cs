@@ -6,7 +6,7 @@ using Athlon.Agent.Core;
 namespace Athlon.Agent.App.Services.Room;
 
 /// <summary>Sandbox <c>browser_navigate</c> via headless Chromium CDP inside the room container.</summary>
-internal sealed class RoomDockerBrowserNavigateTool(IRoomDockerSandbox sandbox) : IAgentTool
+internal sealed class RoomDockerBrowserNavigateTool(IRoomSandboxBackend sandbox) : IAgentTool
 {
     private const string BrowserCtl = "/opt/athlon/browser_ctl.py";
 
@@ -58,7 +58,7 @@ internal sealed class RoomDockerBrowserNavigateTool(IRoomDockerSandbox sandbox) 
             actionLabel = "navigate";
         }
 
-        RoomDockerExecResult result;
+        RoomSandboxExecResult result;
         try
         {
             result = await sandbox

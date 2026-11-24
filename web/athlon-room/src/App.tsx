@@ -19,6 +19,7 @@ import {
   stopRoomAgent,
   uploadAttachment,
 } from "./lib/api";
+import { normalizeAgentRuntimeMode } from "./lib/runtimeMode";
 import {
   loadRecentRooms,
   recentToTab,
@@ -354,7 +355,7 @@ export default function App() {
             workspaceRoot: r.workspaceRoot,
             workspaceId: r.workspaceId,
             workspaceName: r.workspaceName,
-            agentRuntimeMode: r.agentRuntimeMode === "sandbox" ? "sandbox" : "local",
+            agentRuntimeMode: normalizeAgentRuntimeMode(r.agentRuntimeMode),
           };
           if (existingIdx >= 0) {
             seeded[existingIdx] = { ...seeded[existingIdx], ...patch };
@@ -559,7 +560,7 @@ export default function App() {
     title: string;
     workspaceId: string | null;
     workspaceRoot: string | null;
-    agentRuntimeMode: "local" | "sandbox";
+    agentRuntimeMode: "local" | "sandbox" | "cloud_sandbox";
   }) => {
     if (!settingsTab) return;
     setSettingsSaving(true);
@@ -572,8 +573,7 @@ export default function App() {
         agentRuntimeMode: input.agentRuntimeMode,
       });
       const key = roomKey(settingsTab);
-      const mode =
-        ws.agentRuntimeMode === "sandbox" ? "sandbox" : input.agentRuntimeMode;
+      const mode = normalizeAgentRuntimeMode(ws.agentRuntimeMode ?? input.agentRuntimeMode);
       setRooms((prev) =>
         prev.map((r) =>
           roomKey(r) === key

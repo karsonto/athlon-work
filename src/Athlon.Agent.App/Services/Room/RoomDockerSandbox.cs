@@ -24,14 +24,14 @@ public sealed class RoomDockerSandbox : IRoomDockerSandbox, IAsyncDisposable
         _logger = logger;
     }
 
-    public async Task<RoomDockerProbeResult> ProbeAsync(CancellationToken cancellationToken = default)
+    public async Task<RoomSandboxProbeResult> ProbeAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             var client = GetClient();
             if (!await client.PingAsync(cancellationToken).ConfigureAwait(false))
             {
-                return new RoomDockerProbeResult
+                return new RoomSandboxProbeResult
                 {
                     Available = false,
                     ImageReady = false,
@@ -42,7 +42,7 @@ public sealed class RoomDockerSandbox : IRoomDockerSandbox, IAsyncDisposable
             var version = await client.GetVersionAsync(cancellationToken).ConfigureAwait(false);
             var imageReady = await client.ImageExistsAsync(ImageName, cancellationToken).ConfigureAwait(false);
             _imageReady = imageReady;
-            return new RoomDockerProbeResult
+            return new RoomSandboxProbeResult
             {
                 Available = true,
                 ImageReady = imageReady,
@@ -55,7 +55,7 @@ public sealed class RoomDockerSandbox : IRoomDockerSandbox, IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Docker probe failed.");
-            return new RoomDockerProbeResult
+            return new RoomSandboxProbeResult
             {
                 Available = false,
                 ImageReady = false,
@@ -102,6 +102,20 @@ public sealed class RoomDockerSandbox : IRoomDockerSandbox, IAsyncDisposable
             _readyGate.Release();
         }
     }
+
+    public Task EnsureRoomSessionAsync(
+        string roomId,
+        string hostWorkspaceRoot,
+        string hostSkillsRoot,
+        IReadOnlyList<string>? skillNames = null,
+        CancellationToken cancellationToken = default) =>
+        EnsureRoomContainerAsync(roomId, hostWorkspaceRoot, hostSkillsRoot, cancellationToken);
+
+    public Task PullWorkspaceAsync(
+        string roomId,
+        string hostWorkspaceRoot,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 
     public async Task EnsureRoomContainerAsync(
         string roomId,
@@ -238,7 +252,7 @@ public sealed class RoomDockerSandbox : IRoomDockerSandbox, IAsyncDisposable
         await RemoveContainerQuietAsync(state.ContainerId, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<RoomDockerExecResult> ExecAsync(
+    public async Task<RoomSandboxExecResult> ExecAsync(
         string roomId,
         string command,
         string workingDirectory,
@@ -253,7 +267,7 @@ public sealed class RoomDockerSandbox : IRoomDockerSandbox, IAsyncDisposable
         var (exit, stdout, stderr) = await client
             .ExecAsync(id, ["bash", "-lc", command], cwd, timeoutSeconds, cancellationToken)
             .ConfigureAwait(false);
-        return new RoomDockerExecResult
+        return new RoomSandboxExecResult
         {
             ExitCode = exit,
             Stdout = stdout,
