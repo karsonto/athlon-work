@@ -538,10 +538,16 @@ public sealed class BehaviorReportTests : IDisposable
             }
 
             Assert.Equal(1, await em.RunUploadCycleAsync());
-            // The key must be absent end-to-end, not "version":null.
-            Assert.DoesNotContain("version", capturing.LastRequestBody, StringComparison.Ordinal);
-            Assert.Contains("\"has_update\":false", capturing.LastRequestBody, StringComparison.Ordinal);
-            Assert.Contains("\"event_kind\":\"event\"", capturing.LastRequestBody, StringComparison.Ordinal);
+            // Device envelope legitimately contains os_version / app_version; only the event
+            // parameter key that was null must be absent (not serialized as "version":null).
+            using (var doc = JsonDocument.Parse(capturing.LastRequestBody))
+            {
+                var eventParams = doc.RootElement.GetProperty("events")[0].GetProperty("event_params");
+                Assert.False(eventParams.TryGetProperty("version", out _));
+                Assert.True(eventParams.TryGetProperty("has_update", out var hasUpdate));
+                Assert.False(hasUpdate.GetBoolean());
+                Assert.Equal("event", eventParams.GetProperty("event_kind").GetString());
+            }
         }
         finally
         {
