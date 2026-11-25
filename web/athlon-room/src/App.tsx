@@ -4,6 +4,7 @@ import {
   connectEvents,
   createLocalRoom,
   fetchLocalRooms,
+  fetchLocalSession,
   fetchMessages,
   fetchRoom,
   fetchRoomAgentProfile,
@@ -192,6 +193,29 @@ export default function App() {
     });
   }, []);
 
+  const applyRoomTitle = useCallback((key: string, title: string) => {
+    const next = title.trim();
+    if (!next) return;
+    const current = roomsRef.current.find((r) => roomKey(r) === key);
+    const metaTitle = sessionsRef.current[key]?.meta?.title;
+    if (current?.title === next && metaTitle === next) return;
+
+    setRooms((prev) =>
+      prev.map((r) => (roomKey(r) === key ? { ...r, title: next } : r)),
+    );
+    setSessions((prev) => {
+      const cur = prev[key];
+      if (!cur?.meta || cur.meta.title === next) return prev;
+      return {
+        ...prev,
+        [key]: { ...cur, meta: { ...cur.meta, title: next } },
+      };
+    });
+    if (current && current.title !== next) {
+      saveRecentRoom({ ...current, title: next });
+    }
+  }, []);
+
   const notifyMention = useCallback((key: string, msg: RoomMessage) => {
     const me = senderIdRef.current;
     if (!me || msg.senderId === me) return;
@@ -311,11 +335,12 @@ export default function App() {
         (step) => appendAgentTrace(key, step),
         (snapshot) => {
           patchSession(key, { members: snapshot.members ?? [] });
+          if (snapshot.title) applyRoomTitle(key, snapshot.title);
         },
       );
       esMap.current.set(key, es);
     },
-    [appendAgentTrace, patchSession, senderId, upsertMessage],
+    [appendAgentTrace, applyRoomTitle, patchSession, senderId, upsertMessage],
   );
 
   const loadSession = useCallback(
@@ -468,6 +493,21 @@ export default function App() {
         setActiveKey(roomKey(first));
         setSessions(Object.fromEntries(seeded.map((t) => [roomKey(t), emptySession()])));
         for (const t of seeded) saveRecentRoom(t);
+      }
+
+      let ssoName = "";
+      try {
+        const me = await fetchLocalSession();
+        ssoName = me.displayName?.trim() ?? "";
+      } catch {
+        ssoName = "";
+      }
+      if (cancelled) return;
+      if (ssoName) {
+        const name = ssoName.slice(0, 32);
+        localStorage.setItem(NICK_KEY, name);
+        setNickname(name);
+        setJoined(true);
       }
       setBootDone(true);
     })();

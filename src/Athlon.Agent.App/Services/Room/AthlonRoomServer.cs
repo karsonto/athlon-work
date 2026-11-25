@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Skills;
 using Microsoft.Extensions.Logging;
 
@@ -50,6 +51,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     private readonly RoomAgentProfileStore _profileStore;
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly IRoomSandboxBackendResolver _sandboxResolver;
+    private readonly ICurrentSsoUserContext _ssoUser;
     private readonly ILogger<AthlonRoomServer> _logger;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private readonly ConcurrentDictionary<string, byte> _sseConnections = new();
@@ -86,6 +88,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         RoomAgentProfileStore profileStore,
         IAgentSkillCatalog skillCatalog,
         IRoomSandboxBackendResolver sandboxResolver,
+        ICurrentSsoUserContext ssoUser,
         ILogger<AthlonRoomServer> logger)
     {
         _store = store;
@@ -94,6 +97,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         _profileStore = profileStore;
         _skillCatalog = skillCatalog;
         _sandboxResolver = sandboxResolver;
+        _ssoUser = ssoUser;
         _logger = logger;
     }
 
@@ -644,6 +648,32 @@ public sealed class AthlonRoomServer : IAsyncDisposable
             return;
         }
 
+        // GET /api/me — localhost only. Signed-in SSO name for the desktop user.
+        if (segments.Length == 2
+            && segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
+            && segments[1].Equals("me", StringComparison.OrdinalIgnoreCase)
+            && method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsLocalRequest(context.Request))
+            {
+                await WriteJsonAsync(context.Response, HttpStatusCode.Forbidden, new { error = "local_only" }).ConfigureAwait(false);
+                return;
+            }
+
+            var displayName = _ssoUser.DisplayName?.Trim();
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                displayName = null;
+            }
+            else if (displayName.Length > 32)
+            {
+                displayName = displayName[..32];
+            }
+
+            await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { displayName }).ConfigureAwait(false);
+            return;
+        }
+
         // GET /api/workspaces — localhost only
         if (segments.Length == 2
             && segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
@@ -1087,6 +1117,9 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 await WriteJsonAsync(context.Response, HttpStatusCode.NotFound, new { error = "room_not_found" }).ConfigureAwait(false);
                 return;
             }
+
+            // Members already in the room learn the new name on the presence stream.
+            BroadcastPresence(roomId);
 
             await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
             {
@@ -1629,6 +1662,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         return new RoomPresenceSnapshot
         {
             RoomId = roomId,
+            Title = _store.GetRoom(roomId)?.Title ?? "",
             Members = members.Values.OrderBy(m => m.JoinedAt).ToList()
         };
     }

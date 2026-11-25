@@ -69,6 +69,22 @@ public sealed class RoomStoreTests
     }
 
     [Fact]
+    public void UpdateTitle_PersistsTrimmedName()
+    {
+        using var temp = new TempDirectoryScope("athlon-room-title");
+        var store = new RoomStore(new TempPathProvider(temp.Root));
+        var room = store.CreateRoom();
+
+        var renamed = store.UpdateTitle(room.Id, "  需求评审  ");
+        Assert.NotNull(renamed);
+        Assert.Equal("需求评审", renamed!.Title);
+        Assert.Equal("需求评审", store.GetRoom(room.Id)!.Title);
+
+        var reloaded = new RoomStore(new TempPathProvider(temp.Root));
+        Assert.Equal("需求评审", reloaded.GetRoom(room.Id)!.Title);
+    }
+
+    [Fact]
     public void UpdateMessageText_RaisesMessageUpdated()
     {
         using var temp = new TempDirectoryScope("athlon-room-upd");

@@ -15,7 +15,7 @@ interface MentionToastProps {
   onOpen: () => void;
 }
 
-/** Browser-notification-style toast for @mentions. */
+/** @mention toast anchored to the bottom-right of the screen. */
 export function MentionToast({ item, onClose, onOpen }: MentionToastProps) {
   useEffect(() => {
     if (!item) return;
@@ -26,7 +26,7 @@ export function MentionToast({ item, onClose, onOpen }: MentionToastProps) {
   if (!item) return null;
 
   return (
-    <div className="pointer-events-none fixed top-4 right-4 z-[80] w-[min(22rem,calc(100vw-2rem))]">
+    <div className="pointer-events-none fixed right-4 bottom-4 z-[80] w-[min(22rem,calc(100vw-2rem))] pb-[env(safe-area-inset-bottom)]">
       <button
         type="button"
         className="pointer-events-auto flex w-full gap-3 rounded-2xl border border-slate-200/90 bg-white/95 p-3.5 text-left shadow-xl shadow-slate-900/10 ring-1 ring-black/5 backdrop-blur-md transition hover:bg-white dark:border-zinc-700 dark:bg-[#1f1f22]/95 dark:shadow-black/40 dark:ring-white/5 dark:hover:bg-[#27272a]"

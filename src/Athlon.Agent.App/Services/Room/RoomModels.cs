@@ -181,6 +181,9 @@ public sealed class RoomPresenceSnapshot
 {
     public string RoomId { get; set; } = "";
 
+    /// <summary>Current room title, so rename reaches members already connected.</summary>
+    public string Title { get; set; } = "";
+
     public List<RoomPresenceMember> Members { get; set; } = new();
 
     public int Count => Members.Count;

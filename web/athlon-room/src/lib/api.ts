@@ -86,6 +86,15 @@ export function localManageBaseUrl(): string {
   }
 }
 
+/** Signed-in desktop SSO name. Null when logged out, or when this browser is not the host machine. */
+export async function fetchLocalSession(baseUrl = ""): Promise<{ displayName: string | null }> {
+  const res = await fetch(apiUrl(baseUrl || localManageBaseUrl(), "/api/me"));
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+  return res.json();
+}
+
 export async function fetchLocalRooms(baseUrl = ""): Promise<{
   lanIp?: string;
   port?: number;

@@ -123,6 +123,7 @@ export interface RoomPresenceMember {
 
 export interface RoomPresenceSnapshot {
   roomId: string;
+  title?: string;
   members: RoomPresenceMember[];
   count: number;
 }
