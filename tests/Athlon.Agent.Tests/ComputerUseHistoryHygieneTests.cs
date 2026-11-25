@@ -88,8 +88,9 @@ public sealed class ComputerUseHistoryHygieneTests
     public void ApplyToModelMessages_LeavesIdenticalPayloadUnderGlobalLimitUntouched()
     {
         var global = new ContextCompactionSettings().RequestHistoryHygiene;
-        var body = string.Join('\n', Enumerable.Range(1, 400).Select(index => $"line {index} ok"));
-        // Same size as the Computer Use payload above, but a non-Computer-Use tool keeps the
+        // Under global MaxToolResultLines (320) / MaxToolResultTokens (8000), but still a large body.
+        var body = string.Join('\n', Enumerable.Range(1, 280).Select(index => $"line {index} ok"));
+        // Same shape as the Computer Use payload above, but a non-Computer-Use tool keeps the
         // global budget and therefore stays intact.
         var messages = BuildToolExchange("execute_command", body);
 
@@ -279,8 +280,8 @@ public sealed class ComputerUseHistoryHygieneTests
                 "tool" => MessageRole.Tool,
                 _ => MessageRole.User
             };
-            messages.Add(ChatMessage.CreateWithId(
-                Guid.NewGuid().ToString("N"),
+            // Pass toolCalls so ToolCallsJson is populated — estimator resolves per-tool budgets from it.
+            messages.Add(ChatMessage.Create(
                 role,
                 message.Content as string ?? string.Empty,
                 toolCalls: message.ToolCalls));

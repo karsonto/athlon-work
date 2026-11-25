@@ -61,6 +61,15 @@ public sealed class ContextCompactionSettings
     /// <summary>When true, Overflow summary LLM failure falls back to a deterministic template summary.</summary>
     public bool EnableTemplateSummaryOnOverflowFailure { get; set; } = true;
 
+    /// <summary>After an overflow force-compact fails to shrink the outbound payload, run one middle-cut retry.</summary>
+    public bool MiddleCutOnRetrySkipped { get; set; } = true;
+
+    public int MiddleCutKeepHeadMessages { get; set; } = 2;
+
+    public int MiddleCutKeepTailMessages { get; set; } = 12;
+
+    public int MiddleCutMaxPerRun { get; set; } = 1;
+
     /// <summary>
     /// When FixedOverhead / UsablePromptWindow is at or above this ratio, history compaction cannot
     /// free the window; callers should skip empty LLM summary attempts.
@@ -74,6 +83,8 @@ public sealed class ContextCompactionSettings
     public bool PreferMeasuredPromptTokens { get; set; } = true;
 
     public RequestHistoryHygieneSettings RequestHistoryHygiene { get; set; } = CreateDefaultHistoryHygiene();
+
+    public TruncateArgsSettings TruncateArgs { get; set; } = new();
 
     public ToolStormSettings ToolStorm { get; set; } = new();
 

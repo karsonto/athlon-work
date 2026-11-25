@@ -151,6 +151,32 @@ public static partial class PlanDocumentParser
         return ToTodoItems(looseSteps);
     }
 
+    /// <summary>Checkbox items under <c>## Acceptance</c>, included after plan approval for tracking.</summary>
+    public static IReadOnlyList<PlanTodoItem> ParseAcceptanceChecklist(string? markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown))
+        {
+            return [];
+        }
+
+        var sections = SplitSections(markdown);
+        foreach (var section in sections)
+        {
+            if (!HeadingMatches(AcceptanceHeadingRegex(), section.Heading))
+            {
+                continue;
+            }
+
+            var items = Extract(TodoCheckboxRegex(), section.Body);
+            if (items.Count > 0)
+            {
+                return ToTodoItems(items);
+            }
+        }
+
+        return [];
+    }
+
     public static string? GetLastAssistantText(AgentSession session)
     {
         for (var i = session.Messages.Count - 1; i >= 0; i--)

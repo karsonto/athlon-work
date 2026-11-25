@@ -1,7 +1,6 @@
 using System.Reflection;
-using System.IO;
-using Athlon.Agent.Core;
 using System.Runtime.Loader;
+using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Tests;
 
@@ -10,8 +9,9 @@ public sealed class RuntimeDiagnosticsTypeLoadTests
     [Fact]
     public void RuntimeDiagnosticEvent_type_can_be_loaded()
     {
-        // 优先用手动构建产物验证，避免 dotnet test shadow copy 影响结论。
-        var forcedPath = @"F:/athlon-work/artifacts/test-out/core-build-check/Athlon.Agent.Core.dll";
+        var forcedPath = typeof(AgentSession).Assembly.Location;
+        Assert.False(string.IsNullOrWhiteSpace(forcedPath));
+        Assert.True(File.Exists(forcedPath), $"Core assembly not found at {forcedPath}");
 
         var alc = new AssemblyLoadContext("diagnostics-rt", isCollectible: true);
         var asm = alc.LoadFromAssemblyPath(forcedPath);
@@ -30,4 +30,3 @@ public sealed class RuntimeDiagnosticsTypeLoadTests
         }
     }
 }
-

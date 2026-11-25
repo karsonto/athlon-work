@@ -59,7 +59,7 @@ public sealed class RoomInfo
 
     public string Token { get; set; } = "";
 
-    public string Title { get; set; } = "Athlon 团队房间";
+    public string Title { get; set; } = "Athlon Teams";
 
     /// <summary>Host workspace root where @agent runs tools for this room.</summary>
     public string? WorkspaceRoot { get; set; }

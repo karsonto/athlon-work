@@ -39,7 +39,9 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
     public async Task<RoomSandboxProbeResult> ProbeAsync(CancellationToken cancellationToken = default)
     {
         var cloud = _settings.CloudSandbox;
-        if (!cloud.IsConfigured)
+        if (string.IsNullOrWhiteSpace(cloud.BaseUrl)
+            || !Uri.TryCreate(cloud.BaseUrl.Trim(), UriKind.Absolute, out var baseUri)
+            || (baseUri.Scheme != Uri.UriSchemeHttps && baseUri.Scheme != Uri.UriSchemeHttp))
         {
             return new RoomSandboxProbeResult
             {

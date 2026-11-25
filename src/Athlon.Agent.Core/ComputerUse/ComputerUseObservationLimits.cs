@@ -64,38 +64,19 @@ public static class ComputerUseUiTreeMetrics
             return 0;
         }
 
-        if (uiTreeJson.Length <= 2)
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(uiTreeJson);
+            return document.RootElement.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.Array => document.RootElement.GetArrayLength(),
+                System.Text.Json.JsonValueKind.Object => 1,
+                _ => 0
+            };
+        }
+        catch (System.Text.Json.JsonException)
         {
             return 0;
         }
-
-        var nodes = 0;
-        var inString = false;
-        var escaped = false;
-        foreach (var ch in uiTreeJson)
-        {
-            if (escaped)
-            {
-                escaped = false;
-                continue;
-            }
-
-            switch (ch)
-            {
-                case '\\' when inString:
-                    escaped = true;
-                    continue;
-                case '"':
-                    inString = !inString;
-                    continue;
-            }
-
-            if (!inString && ch == '{')
-            {
-                nodes++;
-            }
-        }
-
-        return nodes;
     }
 }

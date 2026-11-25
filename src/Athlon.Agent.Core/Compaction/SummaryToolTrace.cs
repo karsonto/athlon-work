@@ -94,6 +94,19 @@ public static class SummaryToolTrace
             {
                 return line.Length <= 240 ? line : line[..240];
             }
+
+            if (!line.StartsWith("Arguments:", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var part in line["Arguments:".Length..].Split(',', StringSplitOptions.TrimEntries))
+            {
+                if (part.StartsWith("path=", StringComparison.OrdinalIgnoreCase))
+                {
+                    return part.Length <= 240 ? part : part[..240];
+                }
+            }
         }
 
         return null;

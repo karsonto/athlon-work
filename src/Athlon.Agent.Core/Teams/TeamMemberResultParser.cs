@@ -22,7 +22,7 @@ public static class TeamMemberResultParser
 {
     // Allow markdown bold, fullwidth colon, and a trailing period — models often wrap fields.
     private static readonly Regex StatusLine = new(
-        @"^\s*(?:\*\*)?status(?:\*\*)?\s*[:：]\s*(?:\*\*)?(completed|failed|blocked|needs_leader)(?:\*\*)?\s*\.?\s*$",
+        @"^\s*(?:\*\*status:\*\*|\*{0,2}status\*{0,2}\s*[:：])\s*(?:\*\*)?(completed|failed|blocked|needs_leader)(?:\*\*)?\s*\.?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
     private static readonly Regex VerdictLine = new(

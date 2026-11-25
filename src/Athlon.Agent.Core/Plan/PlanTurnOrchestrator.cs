@@ -99,6 +99,12 @@ public sealed class PlanTurnOrchestrator(
                     {
                         run.Todos = parsedTodos;
                     }
+
+                    var acceptanceTodos = PlanDocumentParser.ParseAcceptanceChecklist(published).ToList();
+                    if (acceptanceTodos.Count > 0)
+                    {
+                        run.Todos = [..run.Todos, ..acceptanceTodos];
+                    }
                 }
 
                 if (run.Todos.Count == 0 && !string.IsNullOrWhiteSpace(run.PlanMarkdown))

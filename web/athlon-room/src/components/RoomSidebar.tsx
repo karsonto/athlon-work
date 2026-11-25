@@ -123,7 +123,7 @@ export function RoomSidebar({
             <div className="flex items-center gap-3">
               <AthlonIcon className="h-9 w-9 shrink-0 rounded-2xl shadow-sm" />
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100">Athlon 团队房间</div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100">Athlon Teams</div>
                 <div className="text-xs text-slate-500 dark:text-zinc-400">局域网多人协作</div>
               </div>
             </div>

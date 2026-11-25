@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http;
 using System.Diagnostics;
@@ -27,6 +28,7 @@ public sealed class AgentTurnCoordinator(
     private readonly IAppLogger _logger = logger.ForContext("AgentTurnCoordinator");
     private readonly IEventManager _eventManager = eventManager ?? NullEventManager.Instance;
     private readonly IRuntimeDiagnosticEventSink _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
+    private static readonly ConcurrentDictionary<string, int> MiddleCutAttemptsByRun = new(StringComparer.Ordinal);
 
     public async Task<(AgentSession Session, AgentModelResponse Response)> CompleteWithOverflowRetryAsync(
         AgentSession session,
@@ -85,7 +87,69 @@ public sealed class AgentTurnCoordinator(
             if (retryTokens >= failedTokens)
             {
                 await HandleOverflowRetrySkippedAsync(callbacks, session, initialAttemptId, tools, environmentPrompt, runtimeContext, failedTokens, retryTokens).ConfigureAwait(false);
-                throw;
+                if (!settings.ContextCompaction.MiddleCutOnRetrySkipped)
+                {
+                    throw;
+                }
+
+                var runId = runContextAccessor.Current?.RunId;
+                if (!string.IsNullOrWhiteSpace(runId))
+                {
+                    var attempts = MiddleCutAttemptsByRun.GetOrAdd(runId, 0);
+                    if (attempts >= Math.Max(1, settings.ContextCompaction.MiddleCutMaxPerRun))
+                    {
+                        throw;
+                    }
+
+                    MiddleCutAttemptsByRun[runId] = attempts + 1;
+                }
+
+                var middleCut = await forceCompact.RunAsync(
+                    session,
+                    callbacks,
+                    new PreCompletionOptions
+                    {
+                        AllowTruncateArgs = true,
+                        AllowConversationCompact = true,
+                        ForceConversationCompact = true,
+                        EmitCompactionAudit = true,
+                        Strategy = CompactionStrategy.MiddleCutOnRetrySkipped
+                    },
+                    environmentPrompt,
+                    runtimeContext,
+                    tools,
+                    ContextPressureLevel.Overflow,
+                    cancellationToken).ConfigureAwait(false);
+                session = middleCut.Session;
+
+                modelMessageCache?.Invalidate();
+                var middleCutResult = ModelMessagesForApiBuilder.Build(
+                    modelMessageCache,
+                    frozenPrompt.Text,
+                    session.Messages,
+                    settings.ContextCompaction,
+                    runtimeContext,
+                    tokenBudgetNotice: middleCut.TokenBudgetNotice);
+                var middleRetryTokens = RequestHistoryHygiene.EstimatePayloadTokens(middleCutResult.Messages);
+                if (middleRetryTokens >= failedTokens)
+                {
+                    throw;
+                }
+
+                var middleCutRequest = new AgentModelRequest(middleCutResult.Messages, tools, AllowToolCalls: allowToolCalls);
+                var middleCutResponse = await CompleteRecordedAsync(
+                    session,
+                    callbacks,
+                    streamAdapter,
+                    assistantMessageId,
+                    middleCutRequest,
+                    environmentPrompt,
+                    runtimeContext,
+                    middleCutResult.EstimatedSavingsTokens,
+                    IdGen.NewId(),
+                    ParentAttemptId: initialAttemptId,
+                    cancellationToken).ConfigureAwait(false);
+                return (session, middleCutResponse);
             }
 
             var request = new AgentModelRequest(retryResult.Messages, tools, AllowToolCalls: allowToolCalls);

@@ -13,6 +13,7 @@ jobs:
   build:
     name: Build
     runs-on: windows-latest
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -46,7 +47,7 @@ jobs:
         run: dotnet build Athlon.Agent.slnx --configuration Release --no-restore
 
       - name: Test Release
-        run: dotnet test Athlon.Agent.slnx --configuration Release --no-build --logger "console;verbosity=normal"
+        run: dotnet test Athlon.Agent.slnx --configuration Release --no-build --logger "console;verbosity=normal" --blame-hang-timeout 20m --blame-hang-dump-type mini
 
       - name: Upload Release binaries
         uses: actions/upload-artifact@v4

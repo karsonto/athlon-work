@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text;
 
 
@@ -42,7 +43,26 @@ public sealed class FileToolsPolicySection : IEnvironmentPromptSection
 
         builder.AppendLine("File tools:");
 
-        builder.AppendLine("- Search before large reads: when grep_files or glob_files are advertised, locate with them, then file_read in chunks.");
+        if (PromptModeHelper.HasAny(context, "grep_files", "glob_files"))
+        {
+            var parts = new List<string>();
+            if (PromptModeHelper.HasTool(context, "grep_files"))
+            {
+                parts.Add("grep_files");
+            }
+
+            if (PromptModeHelper.HasTool(context, "glob_files"))
+            {
+                parts.Add("glob_files");
+            }
+
+            builder.AppendLine(
+                $"- Search before large reads: when {string.Join(" or ", parts)} are advertised, locate with them, then file_read in chunks.");
+        }
+        else
+        {
+            builder.AppendLine("- Search before large reads: use file_list when advertised, then file_read in chunks.");
+        }
 
         if (!readOnlyMode)
 

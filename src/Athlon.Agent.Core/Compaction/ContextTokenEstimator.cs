@@ -422,13 +422,33 @@ public static class ContextTokenEstimator
         ToolResultLimit? limit = null)
     {
         var tokens = EstimateRawTextTokens(content);
-        if (hygiene is not { Enabled: true })
+        if (hygiene is not { Enabled: true } || string.IsNullOrEmpty(content))
         {
             return tokens;
         }
 
-        var maxTokens = limit?.MaxTokens ?? hygiene.MaxToolResultTokens;
-        return Math.Min(tokens, Math.Max(0, maxTokens));
+        var effective = limit ?? new ToolResultLimit(
+            hygiene.MaxToolResultLines,
+            hygiene.MaxToolResultBytes,
+            hygiene.MaxToolResultTokens);
+        var maxTokens = Math.Max(0, effective.MaxTokens);
+        var enforceLineLimit = RequestHistoryHygiene.EnforcesPerToolLineLimit(hygiene, limit);
+        var lineCount = content.Count(static c => c == '\n') + 1;
+        var overTokens = tokens > maxTokens;
+        var overLines = enforceLineLimit && lineCount > effective.MaxLines;
+        if (!overTokens && !overLines)
+        {
+            return tokens;
+        }
+
+        var capped = Math.Min(tokens, maxTokens);
+        if (overLines && lineCount > effective.MaxLines)
+        {
+            var ratio = (double)effective.MaxLines / lineCount;
+            capped = Math.Min(capped, Math.Max(64, (int)Math.Ceiling(tokens * ratio)));
+        }
+
+        return capped;
     }
 
     private static int EstimateToolCallsTokens(

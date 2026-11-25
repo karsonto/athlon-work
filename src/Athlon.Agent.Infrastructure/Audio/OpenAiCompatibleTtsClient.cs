@@ -1,6 +1,6 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Audio;
@@ -51,9 +51,10 @@ public sealed class OpenAiCompatibleTtsClient(
             payload["instructions"] = instructions.Trim();
         }
 
+        var requestJson = JsonSerializer.Serialize(payload);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
-            Content = JsonContent.Create(payload)
+            Content = new StringContent(requestJson, Encoding.UTF8, "application/json")
         };
         if (!string.IsNullOrWhiteSpace(apiKey))
         {

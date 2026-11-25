@@ -25,6 +25,11 @@ public sealed partial class ConversationCompactor(
         CompactionExecutionRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (request.Strategy == CompactionStrategy.MiddleCutOnRetrySkipped)
+        {
+            return await ApplyMiddleCutCompactAsync(session, request, cancellationToken).ConfigureAwait(false);
+        }
+
         var cfg = settings.ContextCompaction;
         var conversation = ConversationMessageFilters.WithoutHandoffNotes(
             ConversationMessageFilters.WithoutCompactionAudits(session.Messages));
@@ -72,7 +77,8 @@ public sealed partial class ConversationCompactor(
 
         var retainBudget = request.Plan?.RetainUserTokenBudget
             ?? CheckpointHistoryBuilder.ResolveRetainUserTokenBudget(cfg, pressure, request.Force);
-        var split = CheckpointHistoryBuilder.TrySplit(conversation, retainBudget);
+        var maxRetainedUsers = cfg.KeepMessages > 0 ? cfg.KeepMessages : int.MaxValue;
+        var split = CheckpointHistoryBuilder.TrySplit(conversation, retainBudget, maxRetainedUsers);
         if (split is null || split.PrefixToSummarize.Count == 0)
         {
             CompactionDecisionLog.Write(
@@ -241,7 +247,7 @@ public sealed partial class ConversationCompactor(
         CancellationToken cancellationToken)
     {
         var allowTemplate = cfg.EnableTemplateSummaryOnOverflowFailure
-            && (force || pressure == ContextPressureLevel.Overflow);
+            && pressure == ContextPressureLevel.Overflow;
         var maxAttempts = allowTemplate ? 2 : 1;
 
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
@@ -285,7 +291,7 @@ public sealed partial class ConversationCompactor(
             catch (Exception ex)
             {
                 summaryStopwatch.Stop();
-                var context = _runContextAccessor.Current;
+                var context = _runContextAccessor?.Current;
                 var promptTokens = ContextTokenEstimator.EstimateModelRequest(summaryRequest);
                 sessionUsageAccumulator.RecordCall(
                     session.Id,
@@ -337,5 +343,112 @@ public sealed partial class ConversationCompactor(
         }
 
         return (string.Empty, false);
+    }
+
+    private async Task<ConversationCompactResult> ApplyMiddleCutCompactAsync(
+        AgentSession session,
+        CompactionExecutionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var cfg = settings.ContextCompaction;
+        var conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
+        if (conversation.Count == 0)
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
+        var keepHead = Math.Max(1, cfg.MiddleCutKeepHeadMessages);
+        var keepTail = Math.Max(1, cfg.MiddleCutKeepTailMessages);
+        if (conversation.Count <= keepHead + keepTail + 1)
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
+        keepHead = ConversationCutoffPlanner.FindNextBalancedPrefixEnd(conversation, keepHead);
+        if (keepHead >= conversation.Count)
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
+        var tailStart = conversation.Count - keepTail;
+        while (tailStart < conversation.Count && conversation[tailStart].Role == MessageRole.Tool)
+        {
+            tailStart++;
+        }
+
+        if (tailStart >= conversation.Count || tailStart <= keepHead)
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
+        var middleCount = tailStart - keepHead;
+        if (middleCount <= 0)
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
+        var head = conversation.Take(keepHead).ToList();
+        var middle = conversation.Skip(keepHead).Take(middleCount).ToList();
+        var tail = conversation.Skip(tailStart).ToList();
+        var summary = TemplateSummaryBuilder.Build(middle, cfg, mustPreserveAppendix: null);
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
+        var hiddenSummary = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath: null, hiddenFromTimeline: true);
+        var compactMessages = new List<ChatMessage>(head.Count + tail.Count + 2);
+        compactMessages.AddRange(head);
+        compactMessages.Add(hiddenSummary);
+        compactMessages.AddRange(tail);
+        var tokensBefore = ContextTokenEstimator.Estimate(
+            conversation,
+            cfg.IncludeReasoningInModelContext,
+            hygiene: cfg.RequestHistoryHygiene);
+
+        if (request.EmitAudit)
+        {
+            var auditContent = CompactionMessageContent.CreateConversationCompact(
+                tokensBefore: tokensBefore,
+                tokensAfter: ContextTokenEstimator.Estimate(
+                    compactMessages,
+                    cfg.IncludeReasoningInModelContext,
+                    hygiene: cfg.RequestHistoryHygiene),
+                originalMessageCount: conversation.Count,
+                transcriptPath: null,
+                summaryPreview: "Middle-cut compaction applied due to overflow retry skip.",
+                strategy: CompactionStrategy.MiddleCutOnRetrySkipped,
+                layers: [CompactionLayer.ConversationCompact],
+                pressureLevel: request.Plan?.Pressure,
+                utilization: request.RuntimeContext?.Budget.TotalUtilization);
+            compactMessages.Insert(0, CompactionMessageContent.CreateCompactionMessage(auditContent));
+        }
+
+        session = session.WithMessages(compactMessages);
+        var runContext = _runContextAccessor?.Current;
+        if (_runtimeDiagnosticEventSink is { } runtimeSink)
+        {
+            var evt = new RuntimeDiagnosticEvent(
+                eventId: "",
+                ts: default,
+                sequence: 0,
+                sessionId: session.Id,
+                runId: runContext?.RunId ?? session.Id,
+                turnId: null,
+                attemptId: IdGen.NewId(),
+                parentAttemptId: null,
+                toolCallId: null,
+                messageId: null,
+                component: RuntimeDiagnosticComponent.Compaction,
+                phase: RuntimeDiagnosticPhase.Compact,
+                eventType: "compaction.middle_cut_applied",
+                severity: RuntimeDiagnosticSeverity.Warning,
+                errorCode: RuntimeDiagnosticErrorCodes.CompactionMiddleCutApplied,
+                message: $"keptHead={keepHead}, keptTail={keepTail}, droppedMiddle={middleCount}, summaryChars={summary.Length}");
+            await runtimeSink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        await Task.CompletedTask.ConfigureAwait(false);
+        return new ConversationCompactResult(session, true);
     }
 }

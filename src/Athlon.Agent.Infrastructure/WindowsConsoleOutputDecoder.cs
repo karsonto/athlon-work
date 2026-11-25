@@ -10,11 +10,13 @@ internal static class WindowsConsoleOutputDecoder
 {
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private static readonly Encoding? SystemAnsiEncoding;
+    private static readonly Encoding? GbkEncoding;
 
     static WindowsConsoleOutputDecoder()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         SystemAnsiEncoding = CreateSystemAnsiEncoding();
+        GbkEncoding = TryCreateStrictEncoding(936);
     }
 
     internal static string DecodeLine(ReadOnlySpan<byte> lineBytes) =>
@@ -31,18 +33,20 @@ internal static class WindowsConsoleOutputDecoder
 
         var utf8Ok = TryDecodeStrictUtf8(lineBytes, out var utf8Text);
         var ansiOk = TryDecodeStrict(ansiEncoding, lineBytes, out var ansiText);
-        if (utf8Ok && ansiOk)
+        var gbkOk = TryDecodeStrict(GbkEncoding, lineBytes, out var gbkText);
+        if (utf8Ok && (ansiOk || gbkOk))
         {
             // UTF-8 Han is 3 bytes per character and GBK is 2, so a GBK read of UTF-8
             // Chinese yields more characters and a higher per-character score ("完成" → "瀹屾垚").
             // A longer ANSI decoding is that split. Equal length still uses the score, so a
             // GBK character whose bytes happen to be valid UTF-8 ("山" → "ɽ") stays GBK.
-            if (ansiText.Length > utf8Text.Length)
+            var bestAnsi = PickBestDecodedText(ansiOk ? ansiText : null, gbkOk ? gbkText : null);
+            if (bestAnsi.Length > utf8Text.Length)
             {
                 return utf8Text;
             }
 
-            return ScoreDecodedText(ansiText) > ScoreDecodedText(utf8Text) ? ansiText : utf8Text;
+            return ScoreDecodedText(bestAnsi) > ScoreDecodedText(utf8Text) ? bestAnsi : utf8Text;
         }
 
         if (utf8Ok)
@@ -50,9 +54,11 @@ internal static class WindowsConsoleOutputDecoder
             return utf8Text;
         }
 
-        if (ansiOk)
+        // On en-US runners ACP is often 1252: GBK cmd.exe bytes "decode" without throwing but
+        // yield mojibake. Prefer the higher-scoring GBK reading when both succeed.
+        if (ansiOk || gbkOk)
         {
-            return ansiText;
+            return PickBestDecodedText(ansiOk ? ansiText : null, gbkOk ? gbkText : null);
         }
 
         return Encoding.UTF8.GetString(lineBytes);
@@ -136,6 +142,36 @@ internal static class WindowsConsoleOutputDecoder
         }
 
         return score;
+    }
+
+    private static string PickBestDecodedText(string? ansiText, string? gbkText)
+    {
+        if (string.IsNullOrEmpty(ansiText))
+        {
+            return gbkText ?? string.Empty;
+        }
+
+        if (string.IsNullOrEmpty(gbkText))
+        {
+            return ansiText;
+        }
+
+        return ScoreDecodedText(gbkText) > ScoreDecodedText(ansiText) ? gbkText : ansiText;
+    }
+
+    private static Encoding? TryCreateStrictEncoding(int codePage)
+    {
+        try
+        {
+            return Encoding.GetEncoding(
+                codePage,
+                EncoderFallback.ExceptionFallback,
+                DecoderFallback.ExceptionFallback);
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
     }
 
     private static Encoding? CreateSystemAnsiEncoding()

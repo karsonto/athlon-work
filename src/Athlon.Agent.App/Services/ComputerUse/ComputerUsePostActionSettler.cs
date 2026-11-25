@@ -5,7 +5,7 @@ internal static class ComputerUsePostActionSettler
     internal static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(75);
     internal const int MaxSamples = 8;
     internal const int MinimumSamples = 4;
-    private const int RequiredConsecutiveMatches = 2;
+    private const int RequiredConsecutiveMatches = 1;
 
     /// <summary>
     /// Waits until the desktop signature stops changing. The budget is caller-supplied so that

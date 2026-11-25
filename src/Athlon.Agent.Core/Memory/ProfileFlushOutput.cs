@@ -65,7 +65,10 @@ public static class ProfileFlushOutputParser
 
             if (current is not null
                 && current.TryGetValue(kind, out var existing)
-                && string.Equals(content.Trim(), existing.Trim(), StringComparison.Ordinal))
+                && string.Equals(
+                    NormalizeNewlines(content.Trim()),
+                    NormalizeNewlines(existing.Trim()),
+                    StringComparison.Ordinal))
             {
                 continue;
             }
@@ -79,7 +82,10 @@ public static class ProfileFlushOutputParser
     private static bool IsUnchanged(string content) =>
         string.Equals(content.Trim(), UnchangedToken, StringComparison.OrdinalIgnoreCase);
 
-    private static string Clean(string body) => body.Trim();
+    private static string Clean(string body) => NormalizeNewlines(body.Trim());
+
+    private static string NormalizeNewlines(string text) =>
+        text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 
     /// <summary>
     /// Collects blocks introduced by a recognized heading. A <c>## </c> line that is not a known
@@ -109,7 +115,8 @@ public static class ProfileFlushOutputParser
 
             if (heading is not null)
             {
-                body.AppendLine(line);
+                body.Append(line);
+                body.Append('\n');
             }
         }
 

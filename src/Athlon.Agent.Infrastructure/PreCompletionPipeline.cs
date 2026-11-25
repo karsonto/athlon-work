@@ -4,7 +4,7 @@ using Athlon.Agent.Core.Compaction;
 namespace Athlon.Agent.Infrastructure;
 
 /// <summary>
-/// Turn-prep: single CONTEXT CHECKPOINT when utilization / force requires it.
+/// Turn-prep: truncate oversized tool args, then a single CONTEXT CHECKPOINT when utilization / force requires it.
 /// </summary>
 public sealed class PreCompletionPipeline(
     IConversationCompactor conversationCompactor,
@@ -33,13 +33,20 @@ public sealed class PreCompletionPipeline(
             return session;
         }
 
+        session = ApplyTruncateArgsIfNeeded(session, options, cfg, ref runtimeContext);
+
         var conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
         if (conversation.Count == 0)
         {
             return session;
         }
 
-        var force = options.ForceConversationCompact || runtimeContext?.ForceOverflow == true;
+        // ForceConversationCompact (overflow / manual) must still invoke the compactor even when
+        // utilization is below the automatic threshold.
+        var requireCompact = isManualCompact
+            || options.ApplyEvenWhenBelowThreshold
+            || options.ForceConversationCompact;
+        var executionForce = options.ForceConversationCompact || runtimeContext?.ForceOverflow == true;
         ContextPressureLevel pressure;
         ContextBudgetSnapshot? budget = runtimeContext?.Budget;
 
@@ -50,20 +57,20 @@ public sealed class PreCompletionPipeline(
                 cfg.DynamicCompaction,
                 runtimeContext!.ForceOverflow);
 
-            if (!isManualCompact
-                && !force
+            if (!requireCompact
+                && !executionForce
                 && !ContextPressureEvaluator.ShouldCompact(
                     dynamicBudget,
                     conversation,
                     cfg,
                     pressure,
-                    force: false))
+                    executionForce))
             {
                 return session;
             }
 
             if (ContextPressureEvaluator.IsFixedOverheadDominating(dynamicBudget, cfg)
-                && (force || pressure is ContextPressureLevel.Critical or ContextPressureLevel.Overflow))
+                && (executionForce || pressure is ContextPressureLevel.Critical or ContextPressureLevel.Overflow))
             {
                 CompactionDecisionLog.Write(
                     _logger,
@@ -80,7 +87,7 @@ public sealed class PreCompletionPipeline(
                 dynamicBudget,
                 conversation,
                 cfg,
-                force);
+                requireCompact || executionForce);
             if (isManualCompact)
             {
                 plan = plan with { ApplyConversationCompact = true };
@@ -95,7 +102,7 @@ public sealed class PreCompletionPipeline(
                 session,
                 new CompactionExecutionRequest(
                     options.CompactionKind,
-                    force,
+                    executionForce,
                     options.EmitCompactionAudit,
                     options.Strategy,
                     runtimeContext,
@@ -119,29 +126,61 @@ public sealed class PreCompletionPipeline(
             cfg.IncludeReasoningInModelContext,
             maxToolScreenshots: cfg.MaxToolScreenshotsInModelContext,
             hygiene: cfg.RequestHistoryHygiene);
-        if (!isManualCompact
-            && !force
-            && !ConversationCutoffPlanner.ShouldCompact(conversation, estimated, cfg, force: false))
+        if (!requireCompact
+            && !executionForce
+            && !ConversationCutoffPlanner.ShouldCompact(conversation, estimated, cfg, executionForce))
         {
             return session;
         }
 
-        pressure = force ? ContextPressureLevel.Overflow : ContextPressureLevel.Critical;
+        pressure = executionForce ? ContextPressureLevel.Overflow : ContextPressureLevel.Critical;
         var staticPlan = new DynamicCompactionPlan(
             pressure,
             ApplyConversationCompact: true,
-            CheckpointHistoryBuilder.ResolveRetainUserTokenBudget(cfg, pressure, force));
+            CheckpointHistoryBuilder.ResolveRetainUserTokenBudget(cfg, pressure, executionForce));
 
         var result = await conversationCompactor.CompactIfNeededAsync(
             session,
             new CompactionExecutionRequest(
                 options.CompactionKind,
-                force,
+                executionForce,
                 options.EmitCompactionAudit,
                 options.Strategy,
                 runtimeContext,
                 staticPlan),
             cancellationToken).ConfigureAwait(false);
         return result.Session;
+    }
+
+    private static AgentSession ApplyTruncateArgsIfNeeded(
+        AgentSession session,
+        PreCompletionOptions options,
+        ContextCompactionSettings cfg,
+        ref CompactionRuntimeContext? runtimeContext)
+    {
+        if (!options.AllowTruncateArgs || !cfg.TruncateArgs.Enabled)
+        {
+            return session;
+        }
+
+        var truncate = TruncateArgsService.Apply(session.Messages, cfg);
+        if (!truncate.Changed)
+        {
+            return session;
+        }
+
+        session = session.WithMessages(truncate.Messages);
+        if (runtimeContext is not { } ctx)
+        {
+            return session;
+        }
+
+        var budget = ContextBudgetCalculator.RecomputeHistory(
+            ctx.Budget,
+            session.Messages,
+            cfg,
+            ctx.CalibrationMultiplier);
+        runtimeContext = ctx with { Budget = budget };
+        return session;
     }
 }

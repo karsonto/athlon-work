@@ -69,7 +69,7 @@ public sealed class EditorDocumentViewModelTests
             @"C:\workspace\docs\README.md",
             "#",
             "docs/README.md");
-        Assert.Equal("docs/README.md", withRelative.PathLabel);
+        Assert.Equal("docs › README.md", withRelative.PathLabel);
 
         var withoutRelative = new EditorDocumentViewModel(
             @"C:\workspace\docs\README.md",

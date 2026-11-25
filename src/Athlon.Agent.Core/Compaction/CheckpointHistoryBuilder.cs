@@ -33,7 +33,8 @@ public static class CheckpointHistoryBuilder
     /// </summary>
     public static CheckpointSplit? TrySplit(
         IReadOnlyList<ChatMessage> conversation,
-        int retainUserTokenBudget)
+        int retainUserTokenBudget,
+        int maxRetainedUserMessages = int.MaxValue)
     {
         if (conversation.Count == 0)
         {
@@ -41,7 +42,8 @@ public static class CheckpointHistoryBuilder
         }
 
         retainUserTokenBudget = Math.Max(0, retainUserTokenBudget);
-        var selectedUserIndices = SelectRecentUserIndices(conversation, retainUserTokenBudget);
+        maxRetainedUserMessages = Math.Max(1, maxRetainedUserMessages);
+        var selectedUserIndices = SelectRecentUserIndices(conversation, retainUserTokenBudget, maxRetainedUserMessages);
         if (selectedUserIndices.Count == 0)
         {
             // No real user messages: summarize all but keep a pairing-safe last slice if possible.
@@ -96,6 +98,28 @@ public static class CheckpointHistoryBuilder
             afterUsers.Add(conversation[i]);
         }
 
+        if (afterUsers.Count > 0 && selectedUserIndices.Count == 1)
+        {
+            var soleUserIndex = selectedUserIndices[0];
+            var advancedCutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(conversation, soleUserIndex + 1);
+            if (advancedCutoff <= 0)
+            {
+                advancedCutoff = ForcePairingSafeCutoff(conversation, soleUserIndex + 1);
+            }
+
+            if (advancedCutoff > cutoff)
+            {
+                cutoff = advancedCutoff;
+                retainedUsers = [];
+                lastRetainedUserIndex = -1;
+                afterUsers.Clear();
+                for (var i = Math.Max(cutoff, soleUserIndex + 1); i < conversation.Count; i++)
+                {
+                    afterUsers.Add(conversation[i]);
+                }
+            }
+        }
+
         // If the conversation ends with an open tool group, keep that whole group even when it is
         // not a "user" message — otherwise the next API call 400s.
         var pairingTail = BuildPairingTail(conversation, cutoff, retainedUsers, afterUsers);
@@ -111,7 +135,8 @@ public static class CheckpointHistoryBuilder
 
     private static List<int> SelectRecentUserIndices(
         IReadOnlyList<ChatMessage> conversation,
-        int retainUserTokenBudget)
+        int retainUserTokenBudget,
+        int maxRetainedUserMessages)
     {
         var indices = new List<int>();
         if (retainUserTokenBudget <= 0)
@@ -122,6 +147,10 @@ public static class CheckpointHistoryBuilder
         var remaining = retainUserTokenBudget;
         for (var i = conversation.Count - 1; i >= 0; i--)
         {
+            if (indices.Count >= maxRetainedUserMessages)
+            {
+                break;
+            }
             var message = conversation[i];
             if (!IsRetainableUserMessage(message))
             {
@@ -172,9 +201,14 @@ public static class CheckpointHistoryBuilder
         // Walk from end: if pairing is unbalanced in [cutoff, end), keep from the last safe start.
         if (ConversationCutoffPlanner.IsPairingBalancedInRange(conversation, cutoff, conversation.Count))
         {
-            // Balanced: only keep afterUsers if they are not already represented as retained users.
-            // Typically afterUsers are assistant/tool noise after the last user — drop them so the
-            // checkpoint stays user-centric (Codex). Exception: empty retained users handled above.
+            // Balanced: keep assistant/tool follow-ups after the last retained user so the active
+            // turn is not amputated (tool loop can continue on the next model call).
+            if (afterUsers.Count > 0)
+            {
+                var retainedIds = new HashSet<string>(retainedUsers.Select(m => m.Id), StringComparer.Ordinal);
+                return afterUsers.Where(m => !retainedIds.Contains(m.Id)).ToList();
+            }
+
             return [];
         }
 
@@ -201,6 +235,12 @@ public static class CheckpointHistoryBuilder
     /// </summary>
     private static int ForcePairingSafeCutoff(IReadOnlyList<ChatMessage> conversation, int desiredCutoff)
     {
+        // Math.Clamp(min=1, max=Count-1) throws when Count <= 1 (max < min).
+        if (conversation.Count <= 1)
+        {
+            return conversation.Count;
+        }
+
         desiredCutoff = Math.Clamp(desiredCutoff, 1, conversation.Count - 1);
         var cutoff = desiredCutoff;
         while (cutoff < conversation.Count && conversation[cutoff].Role == MessageRole.Tool)

@@ -59,7 +59,7 @@ internal static partial class BrowserScreenshotMarkdown
                 return match.Value;
             }
 
-            var url = ImageAttachmentDataUrlResolver.ResolveDataUrl(image);
+            var url = image.DataUrl?.Trim();
             return string.IsNullOrWhiteSpace(url) ? match.Value : "(" + url + ")";
         });
     }

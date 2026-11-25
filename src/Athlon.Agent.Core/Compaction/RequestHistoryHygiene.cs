@@ -413,6 +413,20 @@ public static partial class RequestHistoryHygiene
         return changed ? new ToolCallArguments(output) : arguments;
     }
 
+    /// <summary>
+    /// True when the effective limit comes from a per-tool override with a stricter line cap than global.
+    /// Global budgets are token/byte-first so large but under-cap bodies stay verbatim.
+    /// </summary>
+    internal static bool EnforcesPerToolLineLimit(RequestHistoryHygieneSettings settings, ToolResultLimit? limit)
+    {
+        if (limit is null || settings.ToolResultOverrides.Count == 0)
+        {
+            return false;
+        }
+
+        return limit.MaxLines > 0 && limit.MaxLines < settings.MaxToolResultLines;
+    }
+
     private static string CompactToolPayload(
         string text,
         RequestHistoryHygieneSettings settings,
@@ -436,9 +450,10 @@ public static partial class RequestHistoryHygiene
         var originalBytes = Encoding.UTF8.GetByteCount(text);
         var originalLines = CountLines(text);
         var originalTokens = ContextTokenEstimator.EstimateTextTokens(text);
+        var enforceLineLimit = EnforcesPerToolLineLimit(settings, limit);
         if (originalBytes <= effective.MaxBytes
-            && originalLines <= effective.MaxLines
-            && originalTokens <= effective.MaxTokens)
+            && originalTokens <= effective.MaxTokens
+            && (!enforceLineLimit || originalLines <= effective.MaxLines))
         {
             return CompactEmbeddedBase64(text);
         }

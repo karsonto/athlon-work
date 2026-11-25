@@ -49,7 +49,7 @@ public sealed class PlanRuntimeContextContributor(
                 + "If answers are still insufficient, call ask_user again; otherwise explore the workspace or call publish_plan.");
         }
 
-        if (run.Phase == PlanPhase.Draft)
+        if (run.Phase == PlanPhase.Draft && !string.IsNullOrWhiteSpace(run.PlanMarkdown))
         {
             builder.AppendLine();
             builder.AppendLine("## Current Plan (revision base)");

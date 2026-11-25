@@ -13,6 +13,11 @@ public sealed class HostEnvironmentSection : IEnvironmentPromptSection
         var host = context.Host;
         builder.AppendLine(
             $"Host: Win {host.OsVersion} | tz={AppTimeZone.PromptLabel} | model={{{{model}}}} | skills=available");
+        if (context.HasWorkspace)
+        {
+            builder.AppendLine("Active workspace cwd: {{cwd}}");
+        }
+
         builder.AppendLine();
     }
 }

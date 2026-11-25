@@ -265,6 +265,11 @@ public static class SkillFileSystemHelper
 
     private static IReadOnlyList<string> ListResourcePaths(string skillDir, string skillFile)
     {
+        if (!Directory.Exists(skillDir))
+        {
+            return Array.Empty<string>();
+        }
+
         var paths = new List<string>();
         CollectResourcePaths(skillDir, skillDir, skillFile, paths);
         return paths;

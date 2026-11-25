@@ -270,6 +270,7 @@ public sealed partial class AgentRuntime(
                             session.Id);
                         emptyResponseRetried = true;
                         completionNudge = EmptyResponseNudge;
+                        modelMessageCache.Invalidate();
                         continue;
                     }
 

@@ -82,6 +82,7 @@ public sealed class AgentRuntimeOverflowTests
                 }
             }));
 
+        // ForceCompact then MiddleCutOnRetrySkipped — both Force=true; neither shrinks payload.
         Assert.Equal(2, compactor.ForceCallCount);
         Assert.Equal(1, modelClient.CallCount);
         Assert.Contains("context_length", error.Message, StringComparison.OrdinalIgnoreCase);
@@ -102,8 +103,9 @@ public sealed class AgentRuntimeOverflowTests
         session = session.WithMessage(ChatMessage.Create(MessageRole.User, new string('x', 50_000)));
         var result = await runtime.SendAsync(session, "continue");
 
+        // Initial failed completion + one ForceCompact retry after middle-cut.
         Assert.Equal(2, modelClient.CallCount);
-        Assert.Equal(2, compactor.CallCount);
+        Assert.Equal(1, compactor.CallCount);
         Assert.NotNull(modelClient.RetryRequest);
         Assert.Contains(
             modelClient.RetryRequest!.Messages,
@@ -267,7 +269,8 @@ public sealed class AgentRuntimeOverflowTests
             CancellationToken cancellationToken = default)
         {
             CallCount++;
-            if (request.Strategy != CompactionStrategy.ForceCompact)
+            if (request.Strategy is not CompactionStrategy.ForceCompact
+                and not CompactionStrategy.MiddleCutOnRetrySkipped)
             {
                 return Task.FromResult(new ConversationCompactResult(session, false));
             }

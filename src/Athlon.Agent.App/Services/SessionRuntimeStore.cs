@@ -21,6 +21,12 @@ public sealed class RuntimeSessionEntry
     internal List<ChatMessage> PendingAppends { get; } = [];
 
     internal HashSet<string> PendingAppendIds { get; } = new(StringComparer.Ordinal);
+
+    internal HashSet<string> SuppressedAppendIds { get; } = new(StringComparer.Ordinal);
+
+    internal string? InFlightAppendMessageId { get; set; }
+
+    internal bool SessionDirty { get; set; }
 }
 
 /// <summary>
@@ -171,6 +177,16 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
 
         lock (_gate)
         {
+            foreach (var pendingId in entry.PendingAppendIds)
+            {
+                entry.SuppressedAppendIds.Add(pendingId);
+            }
+
+            if (entry.InFlightAppendMessageId is not null)
+            {
+                entry.SuppressedAppendIds.Add(entry.InFlightAppendMessageId);
+            }
+
             entry.PendingAppends.Clear();
             entry.PendingAppendIds.Clear();
         }
@@ -207,7 +223,7 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             }
         }
 
-        await FlushSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        await FlushPendingAppendsAsync(sessionId, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task MarkSessionDirtyAsync(AgentSession session, CancellationToken cancellationToken = default)
@@ -262,6 +278,19 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             return;
         }
 
+        lock (_gate)
+        {
+            if (_sessions.TryGetValue(sessionId, out var entry))
+            {
+                entry.SessionDirty = true;
+            }
+        }
+
+        await FlushPendingAppendsAsync(sessionId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task FlushPendingAppendsAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
         var sessionFlushLock = _sessionFlushLocks.GetOrAdd(sessionId, static _ => new SemaphoreSlim(1, 1));
         await sessionFlushLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -276,67 +305,92 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
 
     private async Task FlushSessionCoreAsync(string sessionId, CancellationToken cancellationToken)
     {
-        ChatMessage[] pending;
         AgentSession? toSave;
         bool complete;
-        lock (_gate)
+        var sessionDirty = false;
+
+        while (true)
         {
-            if (!_sessions.TryGetValue(sessionId, out var entry))
+            ChatMessage? message;
+            lock (_gate)
             {
-                return;
+                if (!_sessions.TryGetValue(sessionId, out var entry))
+                {
+                    return;
+                }
+
+                if (entry.PendingAppends.Count == 0)
+                {
+                    toSave = entry.Session;
+                    complete = entry.SessionComplete;
+                    if (entry.SessionDirty)
+                    {
+                        entry.SessionDirty = false;
+                        sessionDirty = true;
+                    }
+
+                    break;
+                }
+
+                message = entry.PendingAppends[0];
+                entry.PendingAppends.RemoveAt(0);
+                entry.PendingAppendIds.Remove(message.Id);
+                entry.InFlightAppendMessageId = message.Id;
             }
 
-            pending = entry.PendingAppends.ToArray();
-            entry.PendingAppends.Clear();
-            entry.PendingAppendIds.Clear();
-            toSave = entry.Session;
-            complete = entry.SessionComplete;
+            try
+            {
+                var suppress = false;
+                lock (_gate)
+                {
+                    if (_sessions.TryGetValue(sessionId, out var entry)
+                        && entry.SuppressedAppendIds.Remove(message.Id))
+                    {
+                        suppress = true;
+                    }
+                }
+
+                if (!suppress)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await _storage.AppendConversationMessageAsync(sessionId, message, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                lock (_gate)
+                {
+                    if (_sessions.TryGetValue(sessionId, out var entry)
+                        && entry.PendingAppendIds.Add(message.Id))
+                    {
+                        entry.PendingAppends.Insert(0, message);
+                    }
+                }
+
+                throw;
+            }
+            finally
+            {
+                lock (_gate)
+                {
+                    if (_sessions.TryGetValue(sessionId, out var entry))
+                    {
+                        entry.InFlightAppendMessageId = null;
+                    }
+                }
+            }
         }
 
         // A partial session carries metadata only; writing it would wipe the on-disk history.
         // Conversation rows still flush (they are append-only), and a later full attach (or
         // MarkHydrated) restores the session write.
-        var sessionToWrite = complete ? toSave : null;
-        if (pending.Length == 0 && sessionToWrite is null)
+        if (!sessionDirty || !complete || toSave is null)
         {
             return;
         }
 
-        var appendedCount = 0;
-        try
-        {
-            foreach (var message in pending)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await _storage.AppendConversationMessageAsync(sessionId, message, cancellationToken)
-                    .ConfigureAwait(false);
-                appendedCount++;
-            }
-
-            if (sessionToWrite is not null)
-            {
-                await _storage.SaveSessionAsync(sessionToWrite, cancellationToken).ConfigureAwait(false);
-            }
-        }
-        catch
-        {
-            lock (_gate)
-            {
-                if (_sessions.TryGetValue(sessionId, out var entry))
-                {
-                    for (var index = pending.Length - 1; index >= appendedCount; index--)
-                    {
-                        var message = pending[index];
-                        if (entry.PendingAppendIds.Add(message.Id))
-                        {
-                            entry.PendingAppends.Insert(0, message);
-                        }
-                    }
-                }
-            }
-
-            throw;
-        }
+        await _storage.SaveSessionAsync(toSave, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task FlushAllAsync(CancellationToken cancellationToken = default)

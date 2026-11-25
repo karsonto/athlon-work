@@ -21,8 +21,8 @@ public sealed class AgentRuntimeEmptyResponseTests
         Assert.Equal(2, modelClient.Requests.Count);
 
         // The retry must carry the nudge exactly once, as a transient trailing user message.
-        Assert.DoesNotContain(FirstRequestText(modelClient, 0), "previous reply was empty", StringComparison.Ordinal);
-        Assert.Contains(FirstRequestText(modelClient, 1), "previous reply was empty", StringComparison.Ordinal);
+        Assert.DoesNotContain("previous reply was empty", FirstRequestText(modelClient, 0), StringComparison.Ordinal);
+        Assert.Contains("previous reply was empty", FirstRequestText(modelClient, 1), StringComparison.Ordinal);
 
         var assistant = LastAssistant(result);
         Assert.Equal("这里是真正的回答。", assistant.Content);

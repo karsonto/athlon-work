@@ -33,15 +33,55 @@ public sealed class WorkspacePolicySection : IEnvironmentPromptSection
 
         builder.AppendLine("In file tool arguments (path), prefer forward slashes (/), e.g. src/foo.cs, even on Windows.");
         builder.AppendLine("Relative paths resolve from the active workspace root.");
-        builder.AppendLine(
-            "Read-only explore tools (file_read, file_list, glob_files, grep_files) may use absolute paths outside the workspace "
-            + "to inspect reference projects; write/edit/apply_patch must stay inside the workspace root.");
-        builder.AppendLine(
-            "execute_command cwd must be inside the workspace root, or a skill <files-root> under the skills install directory.");
+
+        var exploreTools = new List<string>();
+        if (PromptModeHelper.HasTool(context, "file_read"))
+        {
+            exploreTools.Add("file_read");
+        }
+
+        if (PromptModeHelper.HasTool(context, "file_list"))
+        {
+            exploreTools.Add("file_list");
+        }
+
+        if (PromptModeHelper.HasTool(context, "glob_files"))
+        {
+            exploreTools.Add("glob_files");
+        }
+
+        if (PromptModeHelper.HasTool(context, "grep_files"))
+        {
+            exploreTools.Add("grep_files");
+        }
+
+        if (exploreTools.Count > 0)
+        {
+            builder.Append("Read-only explore tools (")
+                .Append(string.Join(", ", exploreTools))
+                .AppendLine(
+                    ") may use absolute paths outside the workspace "
+                    + "to inspect reference projects; write/edit/apply_patch must stay inside the workspace root.");
+        }
+        else
+        {
+            builder.AppendLine(
+                "Write/edit/apply_patch must stay inside the workspace root.");
+        }
+
+        if (PromptModeHelper.HasTool(context, "execute_command"))
+        {
+            builder.AppendLine(
+                "execute_command cwd must be inside the workspace root, or a skill <files-root> under the skills install directory.");
+        }
+
         builder.AppendLine("When using relative paths, use src/foo.cs. Avoid prefixing with the workspace label/.");
         builder.AppendLine("The workspace label is informational, not a path prefix. Exact root/name are in runtime context.");
         builder.AppendLine("Workspace contents are intentionally not embedded in this prompt because they change often.");
-        builder.AppendLine("Use file_list when it is advertised to fetch a live directory listing.");
+        if (PromptModeHelper.HasTool(context, "file_list"))
+        {
+            builder.AppendLine("Use file_list when it is advertised to fetch a live directory listing.");
+        }
 
         builder.AppendLine();
     }

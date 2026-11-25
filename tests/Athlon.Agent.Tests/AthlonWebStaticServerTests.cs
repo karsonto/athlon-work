@@ -38,9 +38,11 @@ public sealed class AthlonWebStaticServerTests
     [InlineData("/./../index.html")]
     public void ResolveRelativePath_RejectsTraversal(string requestPath)
     {
+        // AbsolutePath collapses ".." — ResolveRelativePath reads OriginalString / ResolveRawPath.
         var uri = new Uri($"http://127.0.0.1:1{requestPath}");
 
         Assert.Null(AthlonWebStaticServer.ResolveRelativePath(uri));
+        Assert.Null(AthlonWebStaticServer.ResolveRawPath(requestPath));
     }
 
     [Fact]
@@ -113,6 +115,11 @@ public sealed class AthlonWebStaticServerTests
         await server.StopAsync();
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-        await Assert.ThrowsAnyAsync<HttpRequestException>(() => http.GetAsync(baseUrl));
+        // After Abort/Stop, runners may surface connection refused (HttpRequestException)
+        // or a client-side timeout (TaskCanceledException).
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => http.GetAsync(baseUrl));
+        Assert.True(
+            ex is HttpRequestException or TaskCanceledException or TimeoutException,
+            $"Unexpected exception type: {ex.GetType().FullName}");
     }
 }

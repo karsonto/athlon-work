@@ -79,6 +79,10 @@ internal static class ModelMessageBuilder
                 if (toolCallId is not null)
                 {
                     messages.Add(new AgentModelMessage("tool", HistoryToolBody(message.Content, stripUiTrees), toolCallId));
+                    if (message.ImageAttachments is { Count: > 0 } toolImages)
+                    {
+                        AppendToolImageMessage(messages, toolImages);
+                    }
                 }
                 else
                 {

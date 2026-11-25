@@ -2023,13 +2023,13 @@
     <value>无法启动 Athlon Web 本地服务：{0}</value>
   </data>
   <data name="Shell_ChatRoom" xml:space="preserve">
-    <value>团队房间</value>
+    <value>Athlon Teams</value>
   </data>
   <data name="Shell_ChatRoomTooltip" xml:space="preserve">
     <value>启动团队房间服务并在浏览器中打开管理页</value>
   </data>
   <data name="Shell_ChatRoomTitle" xml:space="preserve">
-    <value>Athlon 团队房间</value>
+    <value>Athlon Teams</value>
   </data>
   <data name="Shell_ChatRoomInviteHint" xml:space="preserve">
     <value>同一局域网内的设备可用下方链接进入房间（含邀请令牌）。关闭房间后链接将失效。</value>

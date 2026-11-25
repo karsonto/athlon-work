@@ -418,6 +418,8 @@ public sealed class CliIpcServer(
                     callbacks,
                     turnCts.Token)
                 .ConfigureAwait(false);
+            await storage.SaveSessionAsync(session, turnCts.Token).ConfigureAwait(false);
+            sessionMap.Set(request.Cwd, session.Id);
             await WriteFrameAsync(CliSseEventNames.Done, new CliDonePayload(session.Id)).ConfigureAwait(false);
         }
         catch (OperationCanceledException)

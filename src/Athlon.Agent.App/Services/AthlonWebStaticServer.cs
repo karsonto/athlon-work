@@ -111,15 +111,29 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
                 await _cts.CancelAsync().ConfigureAwait(false);
             }
 
-            if (_listener is { IsListening: true })
+            var listener = _listener;
+            _listener = null;
+            BaseUrl = null;
+
+            if (listener is not null)
             {
                 try
                 {
-                    _listener.Stop();
+                    if (listener.IsListening)
+                    {
+                        listener.Stop();
+                    }
+
+                    listener.Close();
+                    listener.Abort();
                 }
                 catch (HttpListenerException)
                 {
                     // Listener already closed.
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Listener already torn down.
                 }
             }
 
@@ -134,13 +148,9 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
                     // Expected on shutdown.
                 }
             }
-
-            _listener?.Close();
-            _listener = null;
             _cts?.Dispose();
             _cts = null;
             _listenTask = null;
-            BaseUrl = null;
             Interlocked.Exchange(ref _started, 0);
         }
         finally
@@ -231,7 +241,7 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
                 return;
             }
 
-            var relativePath = ResolveRelativePath(context.Request.Url);
+            var relativePath = ResolveRelativePath(context.Request);
             if (relativePath is null)
             {
                 await WriteResponseAsync(context.Response, HttpStatusCode.Forbidden, "text/plain; charset=utf-8", "Forbidden")
@@ -289,6 +299,24 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
         }
     }
 
+    internal static string? ResolveRelativePath(HttpListenerRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!string.IsNullOrEmpty(request.RawUrl))
+        {
+            var path = request.RawUrl;
+            var queryIndex = path.IndexOf('?', StringComparison.Ordinal);
+            if (queryIndex >= 0)
+            {
+                path = path[..queryIndex];
+            }
+
+            return ResolveRawPath(path);
+        }
+
+        return ResolveRelativePath(request.Url);
+    }
+
     internal static string? ResolveRelativePath(Uri? requestUri)
     {
         if (requestUri is null)
@@ -296,25 +324,80 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
             return AthlonWebAssets.EntryFileName;
         }
 
-        var rawPath = Uri.UnescapeDataString(requestUri.AbsolutePath);
+        return ResolveRawPath(GetRawRequestPath(requestUri));
+    }
+
+    internal static string? ResolveRawPath(string rawPath)
+    {
         if (string.IsNullOrWhiteSpace(rawPath) || rawPath == "/")
         {
             return AthlonWebAssets.EntryFileName;
         }
 
         var trimmed = rawPath.TrimStart('/');
-        if (trimmed.Contains("..", StringComparison.Ordinal))
+        var segments = new List<string>();
+        foreach (var segment in trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
-            return null;
+            if (string.Equals(segment, ".", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (string.Equals(segment, "..", StringComparison.Ordinal))
+            {
+                if (segments.Count == 0)
+                {
+                    return null;
+                }
+
+                segments.RemoveAt(segments.Count - 1);
+                continue;
+            }
+
+            if (segment.Contains("..", StringComparison.Ordinal)
+                || segment.Contains(Path.DirectorySeparatorChar)
+                || segment.Contains(Path.AltDirectorySeparatorChar))
+            {
+                return null;
+            }
+
+            segments.Add(segment);
         }
 
-        var segments = trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Any(segment => segment is "." or ".."))
+        return segments.Count == 0
+            ? AthlonWebAssets.EntryFileName
+            : Path.Combine(segments.ToArray());
+    }
+
+    /// <summary>
+    /// Reads the path component before <see cref="Uri"/> collapses <c>..</c> segments.
+    /// </summary>
+    internal static string GetRawRequestPath(Uri requestUri)
+    {
+        var original = requestUri.OriginalString;
+        var schemeIndex = original.IndexOf("://", StringComparison.Ordinal);
+        if (schemeIndex < 0)
         {
-            return null;
+            return Uri.UnescapeDataString(requestUri.AbsolutePath);
         }
 
-        return Path.Combine(segments);
+        var pathStart = original.IndexOf('/', schemeIndex + 3);
+        if (pathStart < 0)
+        {
+            return "/";
+        }
+
+        var pathEnd = original.Length;
+        for (var index = pathStart; index < original.Length; index++)
+        {
+            if (original[index] is '?' or '#')
+            {
+                pathEnd = index;
+                break;
+            }
+        }
+
+        return Uri.UnescapeDataString(original[pathStart..pathEnd]);
     }
 
     internal static bool IsPathWithinRoot(string rootDirectory, string candidatePath)

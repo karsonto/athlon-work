@@ -130,6 +130,7 @@ public static class CompactionAuditDisplay
         {
             CompactionStrategy.ForceCompact => "force_compact",
             CompactionStrategy.ManualCompact => "manual_compact",
+            CompactionStrategy.MiddleCutOnRetrySkipped => "middle_cut_on_retry_skipped",
             _ => "conversation_compact",
         };
 
@@ -141,6 +142,7 @@ public static class CompactionAuditDisplay
                 .OrderBy(layer => layer)
                 .Select(layer => layer switch
                 {
+                    CompactionLayer.TruncateArgs => "truncate_args",
                     CompactionLayer.ToolResultEviction => "tool_result_eviction",
                     _ => "conversation_compact",
                 }));
@@ -161,7 +163,7 @@ public static class CompactionAuditDisplay
             {
                 "force_compact" => CompactionStrategy.ForceCompact,
                 "manual_compact" => CompactionStrategy.ManualCompact,
-                "middle_cut_on_retry_skipped" => CompactionStrategy.ConversationCompact,
+                "middle_cut_on_retry_skipped" => CompactionStrategy.MiddleCutOnRetrySkipped,
                 _ => CompactionStrategy.ConversationCompact,
             };
         }
@@ -182,8 +184,9 @@ public static class CompactionAuditDisplay
         {
             return strategy switch
             {
+                CompactionStrategy.ForceCompact =>
+                    [CompactionLayer.TruncateArgs, CompactionLayer.ConversationCompact],
                 CompactionStrategy.ManualCompact => [CompactionLayer.ConversationCompact],
-                CompactionStrategy.ForceCompact => [CompactionLayer.ConversationCompact],
                 _ => [CompactionLayer.ConversationCompact],
             };
         }
@@ -194,8 +197,7 @@ public static class CompactionAuditDisplay
             switch (part.ToLowerInvariant())
             {
                 case "truncate_args":
-                    // Legacy audits; treat as conversation compact.
-                    layers.Add(CompactionLayer.ConversationCompact);
+                    layers.Add(CompactionLayer.TruncateArgs);
                     break;
                 case "tool_result_eviction":
                     layers.Add(CompactionLayer.ToolResultEviction);
@@ -243,8 +245,9 @@ public static class CompactionAuditDisplay
     private static string GetLayerLabel(CompactionLayer layer) =>
         layer switch
         {
+            CompactionLayer.TruncateArgs => "② 工具参数截断",
             CompactionLayer.ToolResultEviction => "① 工具结果归档",
-            _ => "③ CONTEXT CHECKPOINT",
+            _ => "③ LLM 对话摘要",
         };
 
     private static int? TryParseInt(string text) =>

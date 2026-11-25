@@ -224,7 +224,7 @@ export default function App() {
     notifiedMentionIds.current.add(msg.id);
 
     const tab = roomsRef.current.find((r) => roomKey(r) === key);
-    const roomTitle = tab?.title || "Athlon 团队房间";
+    const roomTitle = tab?.title || "Athlon Teams";
     const fromName = msg.displayName?.trim() || "队友";
     const body = previewMentionBody(msg.text);
     const toastId = msg.id;
@@ -401,7 +401,7 @@ export default function App() {
       const seeded: RoomTab[] = [];
       const fromUrl = parseRoomFromLocation();
       if (fromUrl) {
-        let title = "团队房间";
+        let title = "Athlon Teams";
         try {
           const meta = await fetchRoom(fromUrl.baseUrl, fromUrl.roomId, fromUrl.token);
           title = meta.title || title;
@@ -599,7 +599,7 @@ export default function App() {
       upsertTab(
         {
           id: parsed.roomId,
-          title: meta.title || "团队房间",
+          title: meta.title || "Athlon Teams",
           baseUrl: parsed.baseUrl,
           token: parsed.token,
           role,
@@ -887,7 +887,7 @@ export default function App() {
             <AthlonIcon className="h-12 w-12 rounded-2xl shadow-sm shadow-sky-100" />
           </div>
           <h1 className="text-center text-lg font-semibold text-slate-900 dark:text-zinc-100">
-            Athlon 团队房间
+            Athlon Teams
           </h1>
           <p className="mt-1 text-center text-sm text-slate-500 dark:text-zinc-400">
             输入昵称后进入多房间会话

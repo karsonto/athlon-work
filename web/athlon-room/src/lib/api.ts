@@ -133,7 +133,7 @@ export async function createLocalRoom(
   const res = await fetch(apiUrl(baseUrl || localManageBaseUrl(), "/api/rooms"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: title ?? "Athlon 团队房间" }),
+    body: JSON.stringify({ title: title ?? "Athlon Teams" }),
   });
   if (!res.ok) {
     throw new Error(await readError(res));

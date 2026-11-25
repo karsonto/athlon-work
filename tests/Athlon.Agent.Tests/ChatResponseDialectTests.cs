@@ -9,7 +9,7 @@ public sealed class ChatResponseDialectTests
     public void ParseNonStreaming_PeelsEmbeddedThinkingTags()
     {
         var content = "<redacted_thinking>step one</redacted_thinking>\nfinal answer";
-        var response = $"{{\"choices\":[{{\"message\":{{\"content\":{JsonSerializer.Serialize(content)}}}]}}]}}";
+        var response = $"{{\"choices\":[{{\"message\":{{\"content\":{JsonSerializer.Serialize(content)}}}}}]}}";
 
         var parsed = OpenAiChatResponseParser.ParseNonStreamingResponse(response);
 

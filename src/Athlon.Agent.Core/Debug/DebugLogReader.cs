@@ -56,7 +56,10 @@ public static class DebugLogReader
         if (!string.IsNullOrWhiteSpace(hypothesisId))
         {
             filtered = filtered.Where(e =>
-                string.Equals(e.HypothesisId, hypothesisId, StringComparison.OrdinalIgnoreCase));
+                string.Equals(e.HypothesisId, hypothesisId, StringComparison.OrdinalIgnoreCase)
+                || e.HypothesisId is null
+                    && e.Timestamp is null
+                    && string.Equals(e.Message, e.RawLine, StringComparison.Ordinal));
         }
 
         if (since is not null)

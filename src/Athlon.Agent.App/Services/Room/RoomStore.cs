@@ -43,7 +43,7 @@ public sealed class RoomStore
         {
             Id = id,
             Token = token,
-            Title = string.IsNullOrWhiteSpace(title) ? "Athlon 团队房间" : title.Trim(),
+            Title = string.IsNullOrWhiteSpace(title) ? "Athlon Teams" : title.Trim(),
             WorkspaceRoot = NormalizeOptionalPath(workspaceRoot),
             WorkspaceId = string.IsNullOrWhiteSpace(workspaceId) ? null : workspaceId.Trim(),
             CreatedAt = DateTimeOffset.UtcNow
@@ -95,7 +95,7 @@ public sealed class RoomStore
             return null;
         }
 
-        var trimmed = string.IsNullOrWhiteSpace(title) ? "Athlon 团队房间" : title.Trim();
+        var trimmed = string.IsNullOrWhiteSpace(title) ? "Athlon Teams" : title.Trim();
         if (trimmed.Length > 80)
         {
             trimmed = trimmed[..80];
