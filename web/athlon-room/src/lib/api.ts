@@ -281,14 +281,20 @@ export async function uploadAttachment(
   token: string,
   file: File,
 ): Promise<RoomAttachment> {
-  const form = new FormData();
-  form.append("file", file, file.name);
+  // Raw body upload avoids multipart buffering so large files can stream to disk.
+  const qs = new URLSearchParams({
+    t: token,
+    fileName: file.name,
+    mime: file.type || "application/octet-stream",
+  });
   const res = await fetch(
-    apiUrl(baseUrl, `/api/rooms/${roomId}/attachments?t=${encodeURIComponent(token)}`),
+    apiUrl(baseUrl, `/api/rooms/${roomId}/attachments?${qs.toString()}`),
     {
       method: "POST",
-      headers: authHeaders(token),
-      body: form,
+      headers: authHeaders(token, {
+        "Content-Type": file.type || "application/octet-stream",
+      }),
+      body: file,
     },
   );
   if (!res.ok) {
@@ -306,6 +312,7 @@ export async function postMessage(
     displayName: string;
     text?: string;
     attachmentIds?: string[];
+    mentionedSenderIds?: string[];
   },
 ): Promise<RoomMessage> {
   const res = await fetch(

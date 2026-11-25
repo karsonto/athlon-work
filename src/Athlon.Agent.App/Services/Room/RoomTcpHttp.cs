@@ -199,7 +199,6 @@ internal sealed class RoomHttpContext
 internal static class RoomTcpHttp
 {
     public const int MaxHeaderBytes = 64 * 1024;
-    public const long MaxBodyBytes = RoomStore.MaxAttachmentBytes + (64 * 1024);
 
     public static async Task<RoomHttpContext?> AcceptRequestAsync(
         TcpClient client,
@@ -210,13 +209,13 @@ internal static class RoomTcpHttp
         stream.WriteTimeout = 30_000;
 
         var headerBuffer = new MemoryStream();
-        var scratch = new byte[4096];
+        var scratch = new byte[81920];
         var headerEnd = -1;
 
         while (headerBuffer.Length < MaxHeaderBytes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var read = await stream.ReadAsync(scratch.AsMemory(0, scratch.Length), cancellationToken)
+            var read = await stream.ReadAsync(scratch.AsMemory(0, Math.Min(4096, scratch.Length)), cancellationToken)
                 .ConfigureAwait(false);
             if (read <= 0)
             {
@@ -287,33 +286,49 @@ internal static class RoomTcpHttp
             contentLength = parsedLen;
         }
 
-        if (contentLength > MaxBodyBytes)
+        // Large uploads (attachments) can take minutes on LAN; keep JSON APIs snappy.
+        if (contentLength > RoomStore.MemoryBodyThresholdBytes)
         {
-            throw new InvalidOperationException($"Request body exceeds {MaxBodyBytes} bytes.");
+            stream.ReadTimeout = 30 * 60 * 1000;
+            stream.WriteTimeout = 30 * 60 * 1000;
         }
 
-        var body = new MemoryStream();
-        if (preamble.Length > 0)
-        {
-            body.Write(preamble);
-        }
+        // No artificial size cap: small bodies stay in memory; larger ones stream via DeleteOnClose temp file.
+        Stream body = contentLength > RoomStore.MemoryBodyThresholdBytes
+            ? CreateTempBodyStream()
+            : new MemoryStream(contentLength > 0
+                ? (int)Math.Min(contentLength, RoomStore.MemoryBodyThresholdBytes)
+                : 0);
 
-        var remaining = contentLength - body.Length;
-        while (remaining > 0)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var toRead = (int)Math.Min(scratch.Length, remaining);
-            var read = await stream.ReadAsync(scratch.AsMemory(0, toRead), cancellationToken).ConfigureAwait(false);
-            if (read <= 0)
+            if (preamble.Length > 0)
             {
-                break;
+                body.Write(preamble);
             }
 
-            body.Write(scratch, 0, read);
-            remaining -= read;
-        }
+            var remaining = contentLength - body.Length;
+            while (remaining > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var toRead = (int)Math.Min(scratch.Length, remaining);
+                var read = await stream.ReadAsync(scratch.AsMemory(0, toRead), cancellationToken).ConfigureAwait(false);
+                if (read <= 0)
+                {
+                    break;
+                }
 
-        body.Position = 0;
+                body.Write(scratch, 0, read);
+                remaining -= read;
+            }
+
+            body.Position = 0;
+        }
+        catch
+        {
+            await body.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
 
         var remote = client.Client.RemoteEndPoint as IPEndPoint;
         var hostHeader = headers["Host"] ?? "127.0.0.1";
@@ -341,6 +356,18 @@ internal static class RoomTcpHttp
             Response = response,
             Client = client
         };
+    }
+
+    private static FileStream CreateTempBodyStream()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "athlon-room-body-" + Guid.NewGuid().ToString("N") + ".bin");
+        return new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.ReadWrite,
+            FileShare.None,
+            81920,
+            FileOptions.Asynchronous | FileOptions.DeleteOnClose | FileOptions.SequentialScan);
     }
 
     private static void ParseTarget(string rawTarget, out string path, out NameValueCollection query)

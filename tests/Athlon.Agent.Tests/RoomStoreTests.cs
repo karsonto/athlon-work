@@ -94,7 +94,7 @@ public sealed class RoomStoreTests
     }
 
     [Fact]
-    public void SaveAttachment_RejectsOversizeAndPathEscape()
+    public void SaveAttachment_SanitizesPathEscape()
     {
         using var temp = new TempDirectoryScope("athlon-room-att");
         var store = new RoomStore(new TempPathProvider(temp.Root));

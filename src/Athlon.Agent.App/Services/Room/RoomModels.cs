@@ -106,6 +106,9 @@ public sealed class RoomMessage
 
     public List<RoomAttachmentInfo> Attachments { get; set; } = new();
 
+    /// <summary>Stable senderIds of teammates @-mentioned in this message (excludes @agent).</summary>
+    public List<string> MentionedSenderIds { get; set; } = new();
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
@@ -152,6 +155,9 @@ public sealed class PostMessageRequest
 
     [JsonPropertyName("attachmentIds")]
     public List<string>? AttachmentIds { get; set; }
+
+    [JsonPropertyName("mentionedSenderIds")]
+    public List<string>? MentionedSenderIds { get; set; }
 }
 
 public enum RoomStoreEventKind

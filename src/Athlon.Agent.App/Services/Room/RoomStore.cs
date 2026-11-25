@@ -9,7 +9,8 @@ namespace Athlon.Agent.App.Services.Room;
 
 public sealed class RoomStore
 {
-    public const long MaxAttachmentBytes = 25L * 1024 * 1024;
+    /// <summary>Request bodies at or below this size may stay in memory; larger ones stream via temp files.</summary>
+    public const long MemoryBodyThresholdBytes = 1L * 1024 * 1024;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -283,11 +284,6 @@ public sealed class RoomStore
                 while ((read = content.Read(buffer, 0, buffer.Length)) > 0)
                 {
                     size += read;
-                    if (size > MaxAttachmentBytes)
-                    {
-                        throw new InvalidOperationException($"Attachment exceeds {MaxAttachmentBytes} bytes.");
-                    }
-
                     fs.Write(buffer, 0, read);
                 }
             }
@@ -393,11 +389,6 @@ public sealed class RoomStore
         }
 
         var fileInfo = new FileInfo(absolutePath);
-        if (fileInfo.Length > MaxAttachmentBytes)
-        {
-            throw new InvalidOperationException($"Attachment exceeds {MaxAttachmentBytes} bytes.");
-        }
-
         var fullPath = Path.GetFullPath(absolutePath);
         var workspaceFull = NormalizeOptionalPath(workspaceRoot) is { } wr
             ? Path.GetFullPath(wr)
@@ -727,6 +718,9 @@ public sealed class RoomStore
             IsImage = a.IsImage,
             StoredName = a.StoredName
         }).ToList(),
+        MentionedSenderIds = message.MentionedSenderIds is { Count: > 0 }
+            ? message.MentionedSenderIds.ToList()
+            : new List<string>(),
         CreatedAt = message.CreatedAt
     };
 

@@ -1236,20 +1236,103 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                     : "text";
 
         var senderId = BuildClientSenderId(NormalizeClientIp(context.Request.RemoteEndPoint?.Address));
+        var text = hasText ? req.Text!.Trim() : null;
         var message = new RoomMessage
         {
             Id = Guid.NewGuid().ToString("N"),
             SenderId = senderId,
             DisplayName = req.DisplayName.Trim(),
             Kind = kind,
-            Text = hasText ? req.Text!.Trim() : null,
+            Text = text,
             Attachments = attachments,
+            MentionedSenderIds = ResolveMentionedSenderIds(roomId, text, req.MentionedSenderIds),
             CreatedAt = DateTimeOffset.UtcNow
         };
 
         message = _store.AppendMessage(roomId, message);
         await WriteJsonAsync(context.Response, HttpStatusCode.OK, message).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Prefer client-provided IDs that match current presence; also parse @DisplayName from text.
+    /// Never includes the agent id — @agent is handled by RoomAgentBridge.
+    /// </summary>
+    private List<string> ResolveMentionedSenderIds(
+        string roomId,
+        string? text,
+        IReadOnlyList<string>? clientIds)
+    {
+        var presence = BuildPresenceSnapshot(roomId);
+        var byId = presence.Members
+            .Where(m => !string.IsNullOrWhiteSpace(m.SenderId)
+                        && !string.Equals(m.SenderId, RoomAgentIds.SenderId, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(m => m.SenderId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (clientIds is { Count: > 0 })
+        {
+            foreach (var id in clientIds)
+            {
+                if (!string.IsNullOrWhiteSpace(id) && byId.ContainsKey(id.Trim()))
+                {
+                    result.Add(byId[id.Trim()].SenderId);
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(text) && byId.Count > 0)
+        {
+            foreach (var member in byId.Values
+                         .Where(m => !string.IsNullOrWhiteSpace(m.DisplayName))
+                         .OrderByDescending(m => m.DisplayName.Length))
+            {
+                var token = "@" + member.DisplayName.Trim();
+                if (ContainsMentionToken(text, token))
+                {
+                    result.Add(member.SenderId);
+                }
+            }
+        }
+
+        return result.Count == 0 ? new List<string>() : result.ToList();
+    }
+
+    private static bool ContainsMentionToken(string text, string token)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(token))
+        {
+            return false;
+        }
+
+        var start = 0;
+        while (start <= text.Length - token.Length)
+        {
+            var index = text.IndexOf(token, start, StringComparison.Ordinal);
+            if (index < 0)
+            {
+                return false;
+            }
+
+            var beforeOk = index == 0 || char.IsWhiteSpace(text[index - 1]);
+            var afterIndex = index + token.Length;
+            var afterOk = afterIndex >= text.Length
+                          || char.IsWhiteSpace(text[afterIndex])
+                          || IsMentionTrailingPunctuation(text[afterIndex]);
+            if (beforeOk && afterOk)
+            {
+                return true;
+            }
+
+            start = index + 1;
+        }
+
+        return false;
+    }
+
+    private static bool IsMentionTrailingPunctuation(char c) =>
+        c is ',' or '.' or '!' or '?' or ';' or ':' or '，' or '。' or '！' or '？' or '；' or '：';
 
     private async Task HandleUploadAsync(RoomHttpContext context, string roomId)
     {
@@ -1286,13 +1369,6 @@ public sealed class AthlonRoomServer : IAsyncDisposable
 
             await using (contentStream)
             {
-                if (context.Request.ContentLength64 > RoomStore.MaxAttachmentBytes)
-                {
-                    await WriteJsonAsync(context.Response, HttpStatusCode.RequestEntityTooLarge, new { error = "too_large" })
-                        .ConfigureAwait(false);
-                    return;
-                }
-
                 var workspaceRoot = ResolveRoomWorkspaceRoot(roomId);
                 // Single copy: workspace .athlon-room when configured (local + Docker share the same mount).
                 var info = _store.SaveAttachment(
@@ -1316,9 +1392,10 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 }).ConfigureAwait(false);
             }
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("exceeds", StringComparison.OrdinalIgnoreCase))
+        catch (IOException ex)
         {
-            await WriteJsonAsync(context.Response, HttpStatusCode.RequestEntityTooLarge, new { error = "too_large" }).ConfigureAwait(false);
+            await WriteJsonAsync(context.Response, HttpStatusCode.InternalServerError, new { error = "upload_failed", message = ex.Message })
+                .ConfigureAwait(false);
         }
     }
 
@@ -1611,13 +1688,16 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         }
 
         var boundary = match.Groups[1].Value;
+        // Multipart is only a compatibility path (SPA now uploads raw body). Keep a soft memory guard.
+        if (request.ContentLength64 > RoomStore.MemoryBodyThresholdBytes * 32)
+        {
+            throw new InvalidOperationException(
+                "Multipart upload is too large; send the file as a raw request body instead.");
+        }
+
         using var ms = new MemoryStream();
         await request.InputStream.CopyToAsync(ms).ConfigureAwait(false);
         var bytes = ms.ToArray();
-        if (bytes.Length > RoomStore.MaxAttachmentBytes + 4096)
-        {
-            throw new InvalidOperationException($"Attachment exceeds {RoomStore.MaxAttachmentBytes} bytes.");
-        }
 
         var text = Encoding.UTF8.GetString(bytes);
         var delimiter = "--" + boundary;

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Download, Eye, FileIcon } from "lucide-react";
-import type { AgentTraceStep, RoomMessage } from "../types";
+import type { AgentTraceStep, RoomMessage, RoomPresenceMember } from "../types";
 import { attachmentUrl, formatBytes } from "../lib/api";
 import { isHtmlAttachment } from "../lib/htmlPreview";
+import { splitMentionSegments } from "../lib/mentions";
 import { AgentTracePanel } from "./AgentTracePanel";
 import { AthlonIcon } from "./AthlonIcon";
 import { MarkdownContent } from "./MarkdownContent";
@@ -13,6 +14,7 @@ interface MessageBubbleProps {
   baseUrl: string;
   roomId: string;
   token: string;
+  members?: RoomPresenceMember[];
   onPreviewImage: (url: string, alt: string) => void;
   onPreviewHtml?: (html: string, title?: string) => void;
   /** Host-only live @agent tool/model trace for this bubble. */
@@ -27,6 +29,7 @@ export function MessageBubble({
   baseUrl,
   roomId,
   token,
+  members = [],
   onPreviewImage,
   onPreviewHtml,
   agentTrace,
@@ -73,7 +76,24 @@ export function MessageBubble({
           isAgent ? (
             <MarkdownContent content={message.text} onPreviewHtml={onPreviewHtml} />
           ) : (
-            <p className="whitespace-pre-wrap break-words">{message.text}</p>
+            <p className="whitespace-pre-wrap break-words">
+              {splitMentionSegments(message.text, members).map((seg, i) =>
+                seg.type === "mention" ? (
+                  <span
+                    key={`${seg.value}-${i}`}
+                    className={
+                      isMine
+                        ? "rounded-md bg-white/20 px-1 font-medium text-white"
+                        : "rounded-md bg-sky-50 px-1 font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-300"
+                    }
+                  >
+                    {seg.value}
+                  </span>
+                ) : (
+                  <span key={`t-${i}`}>{seg.value}</span>
+                ),
+              )}
+            </p>
           )
         ) : null}
         {message.attachments?.map((att) => {

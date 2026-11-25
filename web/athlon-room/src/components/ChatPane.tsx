@@ -207,6 +207,7 @@ export function ChatPane({
               baseUrl={tab.baseUrl}
               roomId={tab.id}
               token={tab.token}
+              members={members}
               onPreviewImage={onPreviewImage}
               onPreviewHtml={(html, title) => setPreviewHtml({ html, title })}
               agentTrace={agentTraces?.[m.id]}
@@ -237,6 +238,8 @@ export function ChatPane({
         draft={draft}
         pending={pending}
         sending={sending}
+        members={members}
+        selfSenderId={senderId}
         onDraftChange={onDraftChange}
         onSend={onSend}
         onPickFiles={onPickFiles}

@@ -15,6 +15,8 @@ export interface RoomMessage {
   kind: "text" | "image" | "file" | "agent" | string;
   text?: string | null;
   attachments: RoomAttachment[];
+  /** Stable senderIds of teammates @-mentioned in this message. */
+  mentionedSenderIds?: string[];
   createdAt: string;
 }
 

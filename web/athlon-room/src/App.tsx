@@ -41,9 +41,15 @@ import { AthlonIcon } from "./components/AthlonIcon";
 import { ChatPane } from "./components/ChatPane";
 import { JoinRoomDialog } from "./components/JoinRoomDialog";
 import { Lightbox } from "./components/Lightbox";
+import { MentionToast, type MentionToastItem } from "./components/MentionToast";
 import { RoomAgentSettingsDialog } from "./components/RoomAgentSettingsDialog";
 import { RoomSettingsDialog } from "./components/RoomSettingsDialog";
 import { RoomSidebar, roomKey } from "./components/RoomSidebar";
+import {
+  messageMentionsSender,
+  previewMentionBody,
+  resolveMentionedSenderIds,
+} from "./lib/mentions";
 
 const NICK_KEY = "athlon-room-nickname";
 const MAX_SSE = 8;
@@ -101,6 +107,7 @@ export default function App() {
   const [bootDone, setBootDone] = useState(false);
   /** Room created via「新建」and not yet confirmed in settings — cancel discards it. */
   const [draftRoomKey, setDraftRoomKey] = useState<string | null>(null);
+  const [mentionToast, setMentionToast] = useState<MentionToastItem | null>(null);
 
   const [settingsTab, setSettingsTab] = useState<RoomTab | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -118,8 +125,10 @@ export default function App() {
   const roomsRef = useRef(rooms);
   const activeKeyRef = useRef(activeKey);
   const nicknameRef = useRef(nickname);
+  const senderIdRef = useRef(senderId);
   const esMap = useRef(new Map<string, EventSource>());
   const sessionsRef = useRef(sessions);
+  const notifiedMentionIds = useRef(new Set<string>());
 
   useEffect(() => {
     roomsRef.current = rooms;
@@ -131,8 +140,18 @@ export default function App() {
     nicknameRef.current = nickname;
   }, [nickname]);
   useEffect(() => {
+    senderIdRef.current = senderId;
+  }, [senderId]);
+  useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
+
+  useEffect(() => {
+    if (!joined) return;
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission !== "default") return;
+    void Notification.requestPermission().catch(() => undefined);
+  }, [joined]);
 
   const upsertTab = useCallback((tab: RoomTab, select = true) => {
     setRooms((prev) => {
@@ -173,8 +192,54 @@ export default function App() {
     });
   }, []);
 
+  const notifyMention = useCallback((key: string, msg: RoomMessage) => {
+    const me = senderIdRef.current;
+    if (!me || msg.senderId === me) return;
+    if (!messageMentionsSender(msg, me, nicknameRef.current)) return;
+    if (notifiedMentionIds.current.has(msg.id)) return;
+    notifiedMentionIds.current.add(msg.id);
+
+    const tab = roomsRef.current.find((r) => roomKey(r) === key);
+    const roomTitle = tab?.title || "Athlon 团队房间";
+    const fromName = msg.displayName?.trim() || "队友";
+    const body = previewMentionBody(msg.text);
+    const toastId = msg.id;
+
+    setMentionToast({
+      id: toastId,
+      roomKey: key,
+      roomTitle,
+      fromName,
+      body,
+    });
+
+    if (
+      typeof Notification !== "undefined" &&
+      Notification.permission === "granted" &&
+      (document.hidden || activeKeyRef.current !== key)
+    ) {
+      try {
+        const note = new Notification(`${fromName} @了你 · ${roomTitle}`, {
+          body,
+          tag: `room-mention-${msg.id}`,
+        });
+        note.onclick = () => {
+          window.focus();
+          setActiveKey(key);
+          setRooms((prev) =>
+            prev.map((r) => (roomKey(r) === key ? { ...r, unread: 0 } : r)),
+          );
+          note.close();
+        };
+      } catch {
+        // Ignore browsers that reject Notification construction.
+      }
+    }
+  }, []);
+
   const upsertMessage = useCallback(
     (key: string, msg: RoomMessage) => {
+      let isNew = false;
       setSessions((prev) => {
         const cur = prev[key] ?? emptySession();
         if (cur.seenIds.has(msg.id)) {
@@ -184,6 +249,7 @@ export default function App() {
           messages[index] = { ...messages[index], ...msg };
           return { ...prev, [key]: { ...cur, messages } };
         }
+        isNew = true;
         const seenIds = new Set(cur.seenIds);
         seenIds.add(msg.id);
         const messages = [...cur.messages, msg].sort((a, b) =>
@@ -191,9 +257,12 @@ export default function App() {
         );
         return { ...prev, [key]: { ...cur, messages, seenIds } };
       });
-      bumpUnread(key);
+      if (isNew) {
+        bumpUnread(key);
+        notifyMention(key, msg);
+      }
     },
-    [bumpUnread],
+    [bumpUnread, notifyMention],
   );
 
   const appendAgentTrace = useCallback((key: string, step: AgentTraceStep) => {
@@ -680,10 +749,6 @@ export default function App() {
     if (!files?.length || !activeKey) return;
     const next: PendingFile[] = [];
     for (const file of Array.from(files)) {
-      if (file.size > 25 * 1024 * 1024) {
-        patchSession(activeKey, { error: `文件过大（上限 25MB）：${file.name}` });
-        continue;
-      }
       const id = newId();
       const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
       next.push({ id, file, previewUrl });
@@ -744,11 +809,15 @@ export default function App() {
         attachmentIds.push(uploaded.id);
         if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
       }
+      const mentionedSenderIds = text
+        ? resolveMentionedSenderIds(text, session.members)
+        : [];
       const msg = await postMessage(activeTab.baseUrl, activeTab.id, activeTab.token, {
         senderId,
         displayName: nickname.trim(),
         text: text || undefined,
         attachmentIds: attachmentIds.length ? attachmentIds : undefined,
+        mentionedSenderIds: mentionedSenderIds.length ? mentionedSenderIds : undefined,
       });
       upsertMessage(activeKey, msg);
       patchSession(activeKey, { draft: "", pending: [] });
@@ -943,6 +1012,20 @@ export default function App() {
       {lightbox ? (
         <Lightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
       ) : null}
+
+      <MentionToast
+        item={mentionToast}
+        onClose={() => setMentionToast(null)}
+        onOpen={() => {
+          if (!mentionToast) return;
+          const key = mentionToast.roomKey;
+          setActiveKey(key);
+          setRooms((prev) =>
+            prev.map((r) => (roomKey(r) === key ? { ...r, unread: 0 } : r)),
+          );
+          setMentionToast(null);
+        }}
+      />
     </div>
   );
 }

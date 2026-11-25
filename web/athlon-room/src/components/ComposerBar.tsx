@@ -1,13 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ImagePlus, Paperclip, Send, Smile, X } from "lucide-react";
-import type { PendingFile } from "../types";
+import type { PendingFile, RoomPresenceMember } from "../types";
 import { formatBytes } from "../lib/api";
+import {
+  agentMentionMatches,
+  filterMentionCandidates,
+  findMentionAtCaret,
+  insertMentionToken,
+  mentionableMembers,
+} from "../lib/mentions";
 import { AthlonIcon } from "./AthlonIcon";
 
 interface ComposerBarProps {
   draft: string;
   pending: PendingFile[];
   sending: boolean;
+  members?: RoomPresenceMember[];
+  selfSenderId?: string;
   onDraftChange: (v: string) => void;
   onSend: () => void;
   onPickFiles: (files: FileList | null) => void;
@@ -39,24 +48,21 @@ const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
   },
 ];
 
-/** Match incomplete @agent mention at caret (word-boundary @ + optional agent prefix). */
-function findAgentMention(
-  text: string,
-  caret: number,
-): { start: number; end: number; query: string } | null {
-  const before = text.slice(0, caret);
-  const match = before.match(/(^|[\s])(@[Aa]?[Gg]?[Ee]?[Nn]?[Tt]?)$/);
-  if (!match) return null;
-  const token = match[2] ?? "";
-  if (token.toLowerCase() === "@agent") return null;
-  const start = before.length - token.length;
-  return { start, end: caret, query: token.slice(1).toLowerCase() };
+function avatarColor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const colors = ["#0ea5e9", "#0284c7", "#6366f1", "#14b8a6", "#f59e0b", "#8b5cf6", "#64748b", "#f97316"];
+  return colors[Math.abs(hash) % colors.length];
 }
 
 export function ComposerBar({
   draft,
   pending,
   sending,
+  members = [],
+  selfSenderId = "",
   onDraftChange,
   onSend,
   onPickFiles,
@@ -64,16 +70,29 @@ export function ComposerBar({
 }: ComposerBarProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
+  const mentionRef = useRef<HTMLDivElement>(null);
   const [caret, setCaret] = useState(0);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
   const pendingCaretRef = useRef<number | null>(null);
 
-  const mention = findAgentMention(draft, caret);
-  const showMention = mentionOpen && mention !== null;
+  const mention = findMentionAtCaret(draft, caret);
+  const people = useMemo(
+    () => mentionableMembers(members, selfSenderId),
+    [members, selfSenderId],
+  );
+  const filteredPeople = useMemo(
+    () => (mention ? filterMentionCandidates(people, mention.query) : []),
+    [people, mention],
+  );
+  const showAgent = mention ? agentMentionMatches(mention.query) : false;
+  const optionsCount = (showAgent ? 1 : 0) + filteredPeople.length;
+  const showMention = mentionOpen && mention !== null && optionsCount > 0;
 
   useEffect(() => {
     setMentionOpen(mention !== null);
+    setActiveIndex(0);
   }, [draft, caret, mention !== null]);
 
   useEffect(() => {
@@ -100,13 +119,42 @@ export function ComposerBar({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [emojiOpen]);
 
+  useEffect(() => {
+    if (!showMention) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (mentionRef.current && !mentionRef.current.contains(e.target as Node)) {
+        setMentionOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [showMention]);
+
   const applyAgentMention = () => {
     if (!mention) return;
-    const next = `${draft.slice(0, mention.start)}@agent ${draft.slice(mention.end)}`;
-    const nextCaret = mention.start + "@agent ".length;
+    const { next, nextCaret } = insertMentionToken(draft, mention, "agent");
     pendingCaretRef.current = nextCaret;
     setMentionOpen(false);
     onDraftChange(next);
+  };
+
+  const applyMemberMention = (member: RoomPresenceMember) => {
+    if (!mention) return;
+    const { next, nextCaret } = insertMentionToken(draft, mention, member.displayName.trim());
+    pendingCaretRef.current = nextCaret;
+    setMentionOpen(false);
+    onDraftChange(next);
+  };
+
+  const applyActiveMention = () => {
+    if (!showMention || !mention) return;
+    if (showAgent && activeIndex === 0) {
+      applyAgentMention();
+      return;
+    }
+    const peopleIndex = showAgent ? activeIndex - 1 : activeIndex;
+    const member = filteredPeople[peopleIndex];
+    if (member) applyMemberMention(member);
   };
 
   const insertEmoji = (emoji: string) => {
@@ -167,21 +215,66 @@ export function ComposerBar({
 
       <div className="relative mx-auto max-w-4xl">
         {showMention ? (
-          <div className="absolute right-0 bottom-full left-0 z-10 mb-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-[#27272a]">
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-sky-50 dark:hover:bg-sky-500/10"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                applyAgentMention();
-              }}
-            >
-              <AthlonIcon className="h-9 w-9 shrink-0 rounded-2xl shadow-sm" alt="" />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-slate-900 dark:text-zinc-100">@agent</span>
-                <span className="block text-xs text-slate-500 dark:text-zinc-400">Athlon 助手</span>
-              </span>
-            </button>
+          <div
+            ref={mentionRef}
+            className="absolute right-0 bottom-full left-0 z-10 mb-2 max-h-64 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-[#27272a]"
+          >
+            {showAgent ? (
+              <button
+                type="button"
+                className={[
+                  "flex w-full items-center gap-3 px-4 py-3 text-left transition",
+                  activeIndex === 0
+                    ? "bg-sky-50 dark:bg-sky-500/10"
+                    : "hover:bg-sky-50 dark:hover:bg-sky-500/10",
+                ].join(" ")}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  applyAgentMention();
+                }}
+                onMouseEnter={() => setActiveIndex(0)}
+              >
+                <AthlonIcon className="h-9 w-9 shrink-0 rounded-2xl shadow-sm" alt="" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-slate-900 dark:text-zinc-100">@agent</span>
+                  <span className="block text-xs text-slate-500 dark:text-zinc-400">Athlon 助手</span>
+                </span>
+              </button>
+            ) : null}
+            {filteredPeople.map((member, index) => {
+              const optionIndex = (showAgent ? 1 : 0) + index;
+              const initial = (member.displayName.trim()[0] || "?").toUpperCase();
+              return (
+                <button
+                  key={member.senderId}
+                  type="button"
+                  className={[
+                    "flex w-full items-center gap-3 px-4 py-3 text-left transition",
+                    activeIndex === optionIndex
+                      ? "bg-sky-50 dark:bg-sky-500/10"
+                      : "hover:bg-sky-50 dark:hover:bg-sky-500/10",
+                  ].join(" ")}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applyMemberMention(member);
+                  }}
+                  onMouseEnter={() => setActiveIndex(optionIndex)}
+                >
+                  <span
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold text-white shadow-sm"
+                    style={{ background: avatarColor(member.senderId) }}
+                  >
+                    {initial}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-slate-900 dark:text-zinc-100">
+                      @{member.displayName}
+                    </span>
+                    <span className="block text-xs text-slate-500 dark:text-zinc-400">团队成员</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         ) : null}
 
@@ -263,7 +356,7 @@ export function ComposerBar({
             ref={textareaRef}
             className="max-h-28 min-h-[42px] flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] text-slate-900 outline-none placeholder:text-slate-400 dark:text-zinc-100 dark:placeholder:text-zinc-500"
             rows={1}
-            placeholder="输入消息，@agent 可召唤助手"
+            placeholder="输入消息，@ 可提及成员或召唤助手"
             value={draft}
             disabled={sending}
             onChange={(e) => {
@@ -275,9 +368,18 @@ export function ComposerBar({
             onSelect={syncCaret}
             onFocus={() => setEmojiOpen(false)}
             onKeyDown={(e) => {
-              if (showMention && (e.key === "Enter" || e.key === "Tab" || e.key === " ")) {
+              if (showMention && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
                 e.preventDefault();
-                applyAgentMention();
+                setActiveIndex((prev) => {
+                  if (optionsCount <= 0) return 0;
+                  if (e.key === "ArrowDown") return (prev + 1) % optionsCount;
+                  return (prev - 1 + optionsCount) % optionsCount;
+                });
+                return;
+              }
+              if (showMention && (e.key === "Enter" || e.key === "Tab")) {
+                e.preventDefault();
+                applyActiveMention();
                 return;
               }
               if (showMention && e.key === "Escape") {
