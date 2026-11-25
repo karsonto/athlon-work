@@ -32,6 +32,16 @@ public sealed class TerminalWorkspaceTabViewModel : WorkspaceTabViewModel, IDisp
 
     public string? WorkingDirectory { get; set; }
 
+    public bool UseWin32Input { get; set; } = true;
+
+    public bool IsRemote { get; set; }
+
+    public string? Caption { get; set; }
+
+    public string? StartupError { get; set; }
+
+    internal SshPtyHandshakeServer? Handshake { get; set; }
+
     internal TermPTY? Session { get; set; }
 
     internal TerminalOutputBuffer OutputBuffer { get; } = new();
@@ -46,6 +56,16 @@ public sealed class TerminalWorkspaceTabViewModel : WorkspaceTabViewModel, IDisp
         }
 
         IsDisposed = true;
+        try
+        {
+            Handshake?.Dispose();
+        }
+        catch
+        {
+            // Best-effort teardown.
+        }
+
+        Handshake = null;
         WorkspaceTerminalBootstrap.DisposeSession(Session);
         Session = null;
     }

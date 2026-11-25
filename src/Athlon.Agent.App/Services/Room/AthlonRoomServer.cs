@@ -52,6 +52,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly IRoomSandboxBackendResolver _sandboxResolver;
     private readonly ICurrentSsoUserContext _ssoUser;
+    private readonly RoomSshAttachmentService _sshAttachments;
     private readonly ILogger<AthlonRoomServer> _logger;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private readonly ConcurrentDictionary<string, byte> _sseConnections = new();
@@ -89,6 +90,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         IAgentSkillCatalog skillCatalog,
         IRoomSandboxBackendResolver sandboxResolver,
         ICurrentSsoUserContext ssoUser,
+        RoomSshAttachmentService sshAttachments,
         ILogger<AthlonRoomServer> logger)
     {
         _store = store;
@@ -98,6 +100,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         _skillCatalog = skillCatalog;
         _sandboxResolver = sandboxResolver;
         _ssoUser = ssoUser;
+        _sshAttachments = sshAttachments;
         _logger = logger;
     }
 
@@ -354,23 +357,15 @@ public sealed class AthlonRoomServer : IAsyncDisposable
     }
 
     /// <returns>null if ok; otherwise an error code such as workspace_not_found.</returns>
-    public string? ValidateWorkspaceRoot(string? workspaceRoot)
-    {
-        if (string.IsNullOrWhiteSpace(workspaceRoot))
-        {
-            return null;
-        }
+    public string? ValidateWorkspaceRoot(string? workspaceRoot) =>
+        ValidateRoomWorkspace(workspaceId: null, workspaceRoot, agentRuntimeMode: RoomAgentRuntimeModes.Local);
 
-        try
-        {
-            var full = Path.GetFullPath(workspaceRoot.Trim());
-            return Directory.Exists(full) ? null : "workspace_not_found";
-        }
-        catch
-        {
-            return "workspace_not_found";
-        }
-    }
+    /// <returns>null if ok; otherwise an error code (workspace_not_found, ssh_workspace_sandbox_unsupported, …).</returns>
+    public string? ValidateRoomWorkspace(
+        string? workspaceId,
+        string? workspaceRoot,
+        string? agentRuntimeMode) =>
+        RoomWorkspaceBinding.Validate(_settings, workspaceId, workspaceRoot, agentRuntimeMode);
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
@@ -693,7 +688,8 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                     id = w.Id,
                     name = string.IsNullOrWhiteSpace(w.Name) ? w.RootPath : w.Name,
                     rootPath = w.RootPath,
-                    kind = w.Kind
+                    kind = w.Kind,
+                    displayLabel = RoomWorkspaceBinding.FormatDisplayLabel(w)
                 })
                 .ToArray();
             await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { workspaces }).ConfigureAwait(false);
@@ -901,27 +897,18 @@ public sealed class AthlonRoomServer : IAsyncDisposable
                 // ignore
             }
 
-            // Prefer explicit custom root; when only id is set, ResolveWorkspaceInputs fills root.
-            var resolvedRoot = workspaceRoot;
-            if (string.IsNullOrWhiteSpace(resolvedRoot) && !string.IsNullOrWhiteSpace(workspaceId))
-            {
-                var match = _settings.Workspaces.FirstOrDefault(w =>
-                    string.Equals(w.Id, workspaceId.Trim(), StringComparison.OrdinalIgnoreCase));
-                resolvedRoot = match?.RootPath;
-            }
+            var previous = _store.GetRoom(roomId);
+            var effectiveMode = hasAgentRuntimeMode
+                ? RoomAgentRuntimeModes.Normalize(agentRuntimeMode)
+                : RoomAgentRuntimeModes.Normalize(previous?.AgentRuntimeMode);
 
-            var workspaceError = ValidateWorkspaceRoot(resolvedRoot);
+            var workspaceError = ValidateRoomWorkspace(workspaceId, workspaceRoot, effectiveMode);
             if (workspaceError is not null)
             {
                 await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new { error = workspaceError })
                     .ConfigureAwait(false);
                 return;
             }
-
-            var previous = _store.GetRoom(roomId);
-            var effectiveMode = hasAgentRuntimeMode
-                ? RoomAgentRuntimeModes.Normalize(agentRuntimeMode)
-                : RoomAgentRuntimeModes.Normalize(previous?.AgentRuntimeMode);
 
             if (RoomAgentRuntimeModes.IsLocalDockerSandbox(effectiveMode))
             {
@@ -1402,15 +1389,15 @@ public sealed class AthlonRoomServer : IAsyncDisposable
 
             await using (contentStream)
             {
-                var workspaceRoot = ResolveRoomWorkspaceRoot(roomId);
-                // Single copy: workspace .athlon-room when configured (local + Docker share the same mount).
-                var info = _store.SaveAttachment(
-                    roomId,
-                    fileName,
-                    mime,
-                    contentStream,
-                    context.Request.ContentLength64,
-                    workspaceRoot);
+                // Local: mirror under workspace/.athlon-room. SSH: local blob + SFTP mirror.
+                var info = await _sshAttachments
+                    .SaveUploadAsync(
+                        roomId,
+                        fileName,
+                        mime,
+                        contentStream,
+                        context.Request.ContentLength64)
+                    .ConfigureAwait(false);
 
                 var previewUrl = $"/api/rooms/{roomId}/attachments/{info.Id}?t={Uri.EscapeDataString(ExtractToken(context.Request) ?? "")}";
                 await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
@@ -1428,6 +1415,11 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         catch (IOException ex)
         {
             await WriteJsonAsync(context.Response, HttpStatusCode.InternalServerError, new { error = "upload_failed", message = ex.Message })
+                .ConfigureAwait(false);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new { error = "upload_failed", message = ex.Message })
                 .ConfigureAwait(false);
         }
     }

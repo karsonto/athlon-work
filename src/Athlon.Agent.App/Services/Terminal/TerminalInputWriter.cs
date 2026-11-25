@@ -1,18 +1,15 @@
+using Athlon.Agent.Core.Terminal;
 using EasyWindowsTerminalControl;
 
 namespace Athlon.Agent.App.Services.Terminal;
 
 /// <summary>
-/// Sends stdin to ConPTY. With Win32 input mode (always on for workspace terminals),
-/// newline must be encoded as win32-input-mode Enter key events, not raw CR/LF text.
+/// Sends stdin to ConPTY. Local shells use Win32 input mode, so Enter is a key event.
+/// Remote shells use VT input, so Enter is a carriage return.
 /// </summary>
 internal static class TerminalInputWriter
 {
-    // VK_RETURN=13, scan=28, Unicode=13 (CR) — see Microsoft Terminal spec #4999.
-    private const string EnterKeyDown = "\x1b[13;28;13;1;0;1_";
-    private const string EnterKeyUp = "\x1b[13;28;13;0;0;1_";
-
-    public static void Write(TermPTY session, string text, bool appendNewline)
+    public static void Write(TermPTY session, string text, bool appendNewline, bool useWin32Enter = true)
     {
         if (!string.IsNullOrEmpty(text))
         {
@@ -24,7 +21,13 @@ internal static class TerminalInputWriter
             return;
         }
 
-        session.WriteToTerm(EnterKeyDown);
-        session.WriteToTerm(EnterKeyUp);
+        if (useWin32Enter)
+        {
+            session.WriteToTerm(TerminalEnterEncoding.Win32EnterKeyDown);
+            session.WriteToTerm(TerminalEnterEncoding.Win32EnterKeyUp);
+            return;
+        }
+
+        session.WriteToTerm(TerminalEnterEncoding.RemoteCarriageReturn);
     }
 }

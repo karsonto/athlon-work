@@ -139,7 +139,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(sp => new WorkspacePaneViewModel(
             sp.GetRequiredService<ILocalizationService>(),
             sp.GetRequiredService<IActiveWorkspaceContext>(),
-            sp.GetRequiredService<AppSettings>()));
+            sp.GetRequiredService<AppSettings>(),
+            sp.GetRequiredService<Athlon.Agent.Infrastructure.Ssh.SshWorkspaceConnectionService>()));
 
         services.AddSingleton<Athlon.Agent.App.Services.Browser.BrowserWebViewRegistry>();
         services.AddSingleton<Athlon.Agent.App.Services.Browser.BrowserDevToolsRegistry>();
@@ -238,6 +239,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RoomCloudSandbox>();
         services.AddSingleton<IRoomSandboxBackendResolver, RoomSandboxBackendResolver>();
 
+        services.AddSingleton<RoomSshAttachmentService>();
         services.AddSingleton<AthlonRoomServer>();
 
         services.AddSingleton<RoomAgentProfileStore>();

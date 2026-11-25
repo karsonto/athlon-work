@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
+using Athlon.Agent.Infrastructure.Ssh;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -12,17 +13,20 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
     private readonly ILocalizationService _loc;
     private readonly IActiveWorkspaceContext _workspaceContext;
     private readonly AppSettings _appSettings;
+    private readonly SshWorkspaceConnectionService _ssh;
     private int _browserSerial;
     private int _terminalSerial;
 
     public WorkspacePaneViewModel(
         ILocalizationService localization,
         IActiveWorkspaceContext workspaceContext,
-        AppSettings appSettings)
+        AppSettings appSettings,
+        SshWorkspaceConnectionService ssh)
     {
         _loc = localization;
         _workspaceContext = workspaceContext;
         _appSettings = appSettings;
+        _ssh = ssh;
         Tabs = new ObservableCollection<WorkspaceTabViewModel>();
         Tabs.CollectionChanged += (_, _) =>
         {
@@ -125,25 +129,40 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void AddTerminalTab() => AddTerminalTabAndActivate();
+    private Task AddTerminalTab(CancellationToken cancellationToken) =>
+        AddTerminalTabAndActivateAsync(cancellationToken);
 
     /// <summary>Creates a Terminal tab, activates it, and returns the view model (used by automation host).</summary>
-    public TerminalWorkspaceTabViewModel AddTerminalTabAndActivate()
+    public async Task<TerminalWorkspaceTabViewModel> AddTerminalTabAndActivateAsync(
+        CancellationToken cancellationToken = default)
     {
+        var launch = await WorkspaceTerminalBootstrap.PrepareAsync(
+            _appSettings,
+            _workspaceContext,
+            _ssh,
+            cancellationToken).ConfigureAwait(true);
         _terminalSerial++;
-        var title = _terminalSerial <= 1
-            ? _loc["Workspace_Terminal"]
-            : string.Format(_loc["Workspace_TerminalN"], _terminalSerial);
-        var cwd = WorkspaceTerminalBootstrap.ResolveWorkingDirectory(_workspaceContext);
-        var tab = new TerminalWorkspaceTabViewModel(title, cwd)
-        {
-            StartupCommandLine = WorkspaceTerminalBootstrap.ResolveStartupCommandLine(
-                _appSettings.Ui.TerminalShell)
-        };
+        var title = BuildTerminalTitle(launch);
+        var tab = new TerminalWorkspaceTabViewModel(title, launch.WorkingDirectory);
+        WorkspaceTerminalBootstrap.Apply(tab, launch);
         Tabs.Add(tab);
         ActiveTab = tab;
         IsAddMenuOpen = false;
         return tab;
+    }
+
+    private string BuildTerminalTitle(TerminalLaunch launch)
+    {
+        if (launch.IsRemote && !string.IsNullOrWhiteSpace(launch.RemoteHost))
+        {
+            return _terminalSerial <= 1
+                ? launch.RemoteHost
+                : $"{launch.RemoteHost} {_terminalSerial}";
+        }
+
+        return _terminalSerial <= 1
+            ? _loc["Workspace_Terminal"]
+            : string.Format(_loc["Workspace_TerminalN"], _terminalSerial);
     }
 
     /// <summary>Opens or focuses the single Changes tab and loads this turn's files.</summary>

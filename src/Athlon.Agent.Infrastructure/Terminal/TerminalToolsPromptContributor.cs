@@ -1,4 +1,5 @@
 using System.Text;
+using Athlon.Agent.Core;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Terminal;
 
@@ -19,6 +20,20 @@ public sealed class TerminalToolsPromptContributor(ITerminalWorkspaceState termi
         {
             builder.AppendLine("Workspace Terminal tools are available for the open Terminal tab.");
             builder.AppendLine("Rules:");
+            if (context.WorkspaceKind == WorkspaceKind.Ssh)
+            {
+                var root = string.IsNullOrWhiteSpace(context.WorkspaceRoot)
+                    ? "the remote workspace root"
+                    : context.WorkspaceRoot;
+                builder.AppendLine($"1. The Terminal tab is an interactive shell on the SSH server. Its cwd starts at {root}.");
+                builder.AppendLine("2. Use terminal_send_input to write to that remote shell.");
+                builder.AppendLine("3. append_newline defaults to true and sends Enter; use text=\"\" with append_newline=true to press Enter only.");
+                builder.AppendLine("4. Use terminal_read_output to read recent terminal output; poll again if the CLI is still working.");
+                builder.AppendLine("5. Do not use execute_command for interactive CLI agents in the Terminal tab — execute_command is a separate one-shot SSH exec.");
+                builder.AppendLine("6. Prefer send → read → send for multi-step CLI agent conversations.");
+                return;
+            }
+
             builder.AppendLine("1. Use terminal_send_input to write to the same ConPTY session shown in the Terminal tab.");
             builder.AppendLine("2. append_newline defaults to true and sends Enter so prompts/commands submit; use text=\"\" with append_newline=true to press Enter only.");
             builder.AppendLine("3. Use terminal_read_output to read recent terminal output; poll again if the CLI is still working.");

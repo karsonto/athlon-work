@@ -5,7 +5,11 @@ using Athlon.Agent.Infrastructure;
 namespace Athlon.Agent.App.Services.Room;
 
 /// <summary>Share a workspace file into the active LAN chat room as an attachment bubble.</summary>
-public sealed class RoomShareFileTool(RoomStore roomStore, WorkspaceGuard workspaceGuard) : IAgentTool
+public sealed class RoomShareFileTool(
+    RoomStore roomStore,
+    WorkspaceGuard workspaceGuard,
+    AppSettings settings,
+    RoomSshAttachmentService sshAttachments) : IAgentTool
 {
     public ToolDefinition Definition { get; } = new(
         "room_share_file",
@@ -16,19 +20,19 @@ public sealed class RoomShareFileTool(RoomStore roomStore, WorkspaceGuard worksp
             .String("caption", "Optional short note posted with the file.")
             .Build());
 
-    public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
+    public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
         var roomId = RoomAgentTurnScope.Current?.Options.RoomId;
         if (string.IsNullOrWhiteSpace(roomId))
         {
-            return Task.FromResult(ToolResult.Failure(
+            return ToolResult.Failure(
                 "Unavailable",
-                "room_share_file is only available during a room @agent turn."));
+                "room_share_file is only available during a room @agent turn.");
         }
 
         if (!invocation.Arguments.TryGetString("path", out var rawPath) || string.IsNullOrWhiteSpace(rawPath))
         {
-            return Task.FromResult(ToolResult.Failure("Invalid arguments", "path is required."));
+            return ToolResult.Failure("Invalid arguments", "path is required.");
         }
 
         rawPath = rawPath.Trim();
@@ -38,45 +42,56 @@ public sealed class RoomShareFileTool(RoomStore roomStore, WorkspaceGuard worksp
             fullPath = workspaceGuard.Normalize(rawPath);
             if (workspaceGuard.HasConfiguredWorkspace && !workspaceGuard.IsInsideWorkspace(fullPath))
             {
-                return Task.FromResult(ToolResult.Failure(
+                return ToolResult.Failure(
                     "Outside workspace",
-                    "Path must be inside the active workspace."));
+                    "Path must be inside the active workspace.");
             }
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ToolResult.Failure("Path error", ex.Message));
+            return ToolResult.Failure("Path error", ex.Message);
         }
 
-        if (!File.Exists(fullPath))
-        {
-            return Task.FromResult(ToolResult.Failure("Not found", $"File not found: {rawPath}"));
-        }
+        var caption = invocation.Arguments.TryGetString("caption", out var cap) ? cap : null;
+        var binding = RoomWorkspaceBinding.Resolve(settings, roomStore.GetRoom(roomId));
 
         try
         {
+            if (binding.IsSsh)
+            {
+                var attachment = await sshAttachments
+                    .ShareRemoteFileAsync(roomId, fullPath, caption, cancellationToken)
+                    .ConfigureAwait(false);
+                return ToolResult.Success(
+                    $"Shared {attachment.FileName} ({attachment.Size} bytes) to the room.");
+            }
+
+            if (!File.Exists(fullPath))
+            {
+                return ToolResult.Failure("Not found", $"File not found: {rawPath}");
+            }
+
             var workspaceRoot = roomStore.GetRoom(roomId)?.WorkspaceRoot;
             // Reference the workspace file in place — no second copy under rooms/ or .athlon-room.
-            var attachment = roomStore.SaveAttachmentFromPath(roomId, fullPath, workspaceRoot);
-            var caption = invocation.Arguments.TryGetString("caption", out var cap) ? cap : null;
+            var localAttachment = roomStore.SaveAttachmentFromPath(roomId, fullPath, workspaceRoot);
 
-            var kind = attachment.IsImage ? "image" : "file";
+            var kind = localAttachment.IsImage ? "image" : "file";
             roomStore.AppendMessage(roomId, new RoomMessage
             {
                 SenderId = RoomAgentIds.SenderId,
                 DisplayName = RoomAgentIds.DisplayName,
                 Kind = kind,
                 Text = string.IsNullOrWhiteSpace(caption) ? null : caption.Trim(),
-                Attachments = [attachment],
+                Attachments = [localAttachment],
                 CreatedAt = DateTimeOffset.UtcNow
             });
 
-            return Task.FromResult(ToolResult.Success(
-                $"Shared {attachment.FileName} ({attachment.Size} bytes) to the room."));
+            return ToolResult.Success(
+                $"Shared {localAttachment.FileName} ({localAttachment.Size} bytes) to the room.");
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ToolResult.Failure("Share failed", ex.Message));
+            return ToolResult.Failure("Share failed", ex.Message);
         }
     }
 }

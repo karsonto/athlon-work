@@ -10,6 +10,11 @@
       <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
       <GlobalPropertiesToRemove>TargetFramework</GlobalPropertiesToRemove>
     </ProjectReference>
+    <ProjectReference Include="..\Athlon.Agent.SshPtyBridge\Athlon.Agent.SshPtyBridge.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+      <GlobalPropertiesToRemove>TargetFramework</GlobalPropertiesToRemove>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -102,6 +107,29 @@
       <_CliFiles Include="$(_CliOutDir)athlon*" />
     </ItemGroup>
     <Copy SourceFiles="@(_CliFiles)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="'@(_CliFiles)' != ''" />
+  </Target>
+
+  <Target Name="CopySshPtyBridge" AfterTargets="Build">
+    <PropertyGroup>
+      <_BridgeOutDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Athlon.Agent.SshPtyBridge\bin\$(Configuration)\net10.0\'))</_BridgeOutDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_BridgeFiles Include="$(_BridgeOutDir)Athlon.Agent.SshPtyBridge.*" />
+      <_BridgeFiles Include="$(_BridgeOutDir)*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_BridgeFiles)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="'@(_BridgeFiles)' != ''" />
+  </Target>
+
+  <Target Name="PublishSshPtyBridge" AfterTargets="Publish">
+    <PropertyGroup>
+      <_BridgePublishRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_BridgePublishRid>
+      <_BridgePublishRid Condition="'$(RuntimeIdentifier)' == ''">win-x64</_BridgePublishRid>
+      <_BridgePublishDir>$([System.IO.Path]::GetFullPath('$(PublishDir)'))</_BridgePublishDir>
+    </PropertyGroup>
+    <MSBuild
+      Projects="$(MSBuildThisFileDirectory)..\Athlon.Agent.SshPtyBridge\Athlon.Agent.SshPtyBridge.csproj"
+      Targets="Publish"
+      Properties="Configuration=$(Configuration);RuntimeIdentifier=$(_BridgePublishRid);SelfContained=true;PublishDir=$(_BridgePublishDir)" />
   </Target>
 
   <Target Name="PublishAthlonCli" AfterTargets="Publish">

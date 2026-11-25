@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AgentRuntimeMode, RoomTab, SandboxStatus, WorkspaceItem } from "../types";
 import { fetchSandboxStatus } from "../lib/api";
 import { normalizeAgentRuntimeMode } from "../lib/runtimeMode";
@@ -18,6 +18,17 @@ interface RoomSettingsDialogProps {
     agentRuntimeMode: AgentRuntimeMode;
   }) => void;
   onOpenAgentCaps?: () => void;
+}
+
+function isSshWorkspace(w: WorkspaceItem | undefined): boolean {
+  return (w?.kind ?? "").toLowerCase() === "ssh";
+}
+
+function workspaceOptionLabel(w: WorkspaceItem): string {
+  if (w.displayLabel?.trim()) return w.displayLabel.trim();
+  const prefix = isSshWorkspace(w) ? "[SSH] " : "";
+  const name = w.name || w.rootPath || w.id;
+  return `${prefix}${name}${w.rootPath && w.name ? ` — ${w.rootPath}` : ""}`;
 }
 
 export function RoomSettingsDialog({
@@ -84,14 +95,34 @@ export function RoomSettingsDialog({
     };
   }, [open]);
 
+  const selectedWorkspace = useMemo(() => {
+    if (!presetKey.startsWith("id:")) return undefined;
+    return workspaces.find((w) => w.id === presetKey.slice(3));
+  }, [presetKey, workspaces]);
+
+  const sshSelected = isSshWorkspace(selectedWorkspace);
+
+  useEffect(() => {
+    if (sshSelected && runtimeMode !== "local") {
+      setRuntimeMode("local");
+    }
+  }, [sshSelected, runtimeMode]);
+
   if (!tab) return null;
 
   const localDocker = sandboxStatus?.localDocker ?? sandboxStatus;
   const cloud = sandboxStatus?.cloud;
-  const sandboxDisabled = sandboxLoading || !localDocker?.available;
-  const cloudDisabled = sandboxLoading || !cloud?.available;
-  const preferCloud =
-    !!cloud?.available && !localDocker?.available;
+  const sandboxDisabled = sshSelected || sandboxLoading || !localDocker?.available;
+  const cloudDisabled = sshSelected || sandboxLoading || !cloud?.available;
+  const preferCloud = !sshSelected && !!cloud?.available && !localDocker?.available;
+
+  const canSave =
+    !!title.trim() &&
+    (sshSelected
+      ? !!selectedWorkspace?.id
+      : !!customPath.trim()) &&
+    !(runtimeMode === "sandbox" && sandboxDisabled) &&
+    !(runtimeMode === "cloud_sandbox" && cloudDisabled);
 
   return (
     <Modal
@@ -121,22 +152,23 @@ export function RoomSettingsDialog({
           <button
             type="button"
             className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:opacity-50"
-            disabled={
-              saving ||
-              !title.trim() ||
-              !customPath.trim() ||
-              (runtimeMode === "sandbox" && sandboxDisabled) ||
-              (runtimeMode === "cloud_sandbox" && cloudDisabled)
-            }
+            disabled={saving || !canSave}
             onClick={() => {
-              const trimmedPath = customPath.trim();
-              if (!trimmedPath) {
-                return;
-              }
-
               if (presetKey.startsWith("id:")) {
                 const workspaceId = presetKey.slice(3);
                 const match = workspaces.find((w) => w.id === workspaceId);
+                if (isSshWorkspace(match)) {
+                  onSave({
+                    title: title.trim(),
+                    workspaceId,
+                    workspaceRoot: match?.rootPath?.trim() ?? null,
+                    agentRuntimeMode: "local",
+                  });
+                  return;
+                }
+
+                const trimmedPath = customPath.trim();
+                if (!trimmedPath) return;
                 const root = match?.rootPath?.trim() ?? trimmedPath;
                 const sameRoot =
                   root.replace(/[/\\]+$/, "").toLowerCase() ===
@@ -150,6 +182,8 @@ export function RoomSettingsDialog({
                 return;
               }
 
+              const trimmedPath = customPath.trim();
+              if (!trimmedPath) return;
               onSave({
                 title: title.trim(),
                 workspaceId: null,
@@ -173,8 +207,7 @@ export function RoomSettingsDialog({
 
       <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-zinc-200">工作区</label>
       <p className="mb-2 text-xs text-slate-500 dark:text-zinc-400">
-        新建房间不会自动带入工作区，请在此选择或手输本机路径（例如 C:\xxxx）。@agent
-        与聊天上传都会使用该目录。
+        选择本机目录，或主应用中已配置的 SSH 远程工作区。SSH 工作区仅支持「本地运行」的 @agent（不支持 Docker / 云沙箱）。
       </p>
       <select
         className="mb-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
@@ -193,33 +226,42 @@ export function RoomSettingsDialog({
             const id = next.slice(3);
             const match = workspaces.find((w) => w.id === id);
             if (match?.rootPath) setCustomPath(match.rootPath);
+            if (isSshWorkspace(match)) setRuntimeMode("local");
           }
         }}
       >
-        <option value="">请选择或手输路径</option>
+        <option value="">请选择工作区</option>
         {workspaces.map((w) => (
           <option key={w.id || w.rootPath} value={w.id ? `id:${w.id}` : `root:${w.rootPath}`}>
-            {w.name}
-            {w.rootPath ? ` — ${w.rootPath}` : ""}
+            {workspaceOptionLabel(w)}
           </option>
         ))}
-        <option value="custom">自定义路径…</option>
+        <option value="custom">自定义本机路径…</option>
       </select>
-      <input
-        className="mb-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-slate-900 outline-none placeholder:font-sans placeholder:text-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500"
-        placeholder="C:\xxxx 或 D:\projects\foo"
-        value={customPath}
-        onChange={(e) => {
-          setCustomPath(e.target.value);
-          setPresetKey(e.target.value.trim() ? "custom" : "");
-        }}
-      />
+      {sshSelected ? (
+        <p className="mb-4 rounded-2xl border border-sky-200 bg-sky-50/70 px-3 py-2 text-xs text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+          已选择 SSH 远程工作区：{selectedWorkspace?.rootPath}
+          。凭据沿用主应用该工作区配置。
+        </p>
+      ) : (
+        <input
+          className="mb-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-slate-900 outline-none placeholder:font-sans placeholder:text-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+          placeholder="C:\xxxx 或 /Users/me/project"
+          value={customPath}
+          onChange={(e) => {
+            setCustomPath(e.target.value);
+            setPresetKey(e.target.value.trim() ? (presetKey.startsWith("id:") ? presetKey : "custom") : "");
+          }}
+        />
+      )}
 
       <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-zinc-200">
         Agent 执行环境
       </label>
       <p className="mb-2 text-xs text-slate-500 dark:text-zinc-400">
-        三选一：本地、本机 Docker Sandbox，或 Athlon 云沙箱（无 Docker 时可用；工作区会同步至云端）。
+        {sshSelected
+          ? "SSH 远程工作区固定为本地运行（通过 SFTP/SSH 访问远端）。"
+          : "三选一：本地、本机 Docker Sandbox，或 Athlon 云沙箱（无 Docker 时可用；工作区会同步至云端）。"}
       </p>
       <div className="mb-2 flex flex-col gap-2">
         <label className="flex cursor-pointer items-start gap-2 rounded-2xl border border-slate-200 px-3 py-2.5 text-sm dark:border-zinc-700">
@@ -233,7 +275,7 @@ export function RoomSettingsDialog({
           <span>
             <span className="font-medium text-slate-800 dark:text-zinc-100">本地运行</span>
             <span className="mt-0.5 block text-xs text-slate-500 dark:text-zinc-400">
-              文件与命令在宿主机执行
+              {sshSelected ? "文件与命令经 SSH 在远程主机执行" : "文件与命令在宿主机执行"}
             </span>
           </span>
         </label>
@@ -253,7 +295,9 @@ export function RoomSettingsDialog({
           <span>
             <span className="font-medium text-slate-800 dark:text-zinc-100">Docker Sandbox</span>
             <span className="mt-0.5 block text-xs text-slate-500 dark:text-zinc-400">
-              本机容器：Python 3.12 / Java 8 / Node 20 / Chromium
+              {sshSelected
+                ? "SSH 工作区不可用"
+                : "本机容器：Python 3.12 / Java 8 / Node 20 / Chromium"}
             </span>
           </span>
         </label>
@@ -275,19 +319,23 @@ export function RoomSettingsDialog({
           <span>
             <span className="font-medium text-slate-800 dark:text-zinc-100">云沙箱</span>
             <span className="mt-0.5 block text-xs text-slate-500 dark:text-zinc-400">
-              远程隔离环境；工作区与勾选 Skills 将上传同步至 Athlon 云端
+              {sshSelected
+                ? "SSH 工作区不可用"
+                : "远程隔离环境；工作区与勾选 Skills 将上传同步至 Athlon 云端"}
             </span>
           </span>
         </label>
       </div>
       <p className="mb-1 text-xs text-slate-500 dark:text-zinc-400">
-        {sandboxLoading
-          ? "正在检测 Docker / 云沙箱…"
-          : runtimeMode === "cloud_sandbox"
-            ? (cloud?.message ?? "云沙箱需配置 CloudSandbox:BaseUrl 与 ApiKey（经企业网关鉴权/计量）。")
-            : runtimeMode === "sandbox"
-              ? (localDocker?.message ?? "选择 Docker Sandbox 前请确保 Docker Desktop 已启动。")
-              : "本地模式不依赖 Docker 或云沙箱。"}
+        {sshSelected
+          ? "使用主应用中该 SSH 工作区的主机与凭据。"
+          : sandboxLoading
+            ? "正在检测 Docker / 云沙箱…"
+            : runtimeMode === "cloud_sandbox"
+              ? (cloud?.message ?? "云沙箱需配置 CloudSandbox:BaseUrl 与 ApiKey（经企业网关鉴权/计量）。")
+              : runtimeMode === "sandbox"
+                ? (localDocker?.message ?? "选择 Docker Sandbox 前请确保 Docker Desktop 已启动。")
+                : "本地模式不依赖 Docker 或云沙箱。"}
       </p>
       {runtimeMode === "cloud_sandbox" ? (
         <p className="mb-1 text-xs text-amber-700 dark:text-amber-300">

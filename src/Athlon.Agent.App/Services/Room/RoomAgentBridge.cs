@@ -14,6 +14,7 @@ using Athlon.Agent.Core.Streaming;
 using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Core.Terminal;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.Ssh;
 using Athlon.Agent.Infrastructure.Teams;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -36,6 +37,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
     private readonly IRoomSandboxBackendResolver _sandboxResolver;
     private readonly IAppPathProvider _paths;
     private readonly AppSettings _settings;
+    private readonly SshWorkspaceConnectionService _sshConnection;
     private readonly ILogger<RoomAgentBridge> _logger;
     private readonly ConcurrentDictionary<string, byte> _attachedRooms = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _roomGates = new(StringComparer.OrdinalIgnoreCase);
@@ -54,6 +56,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         IRoomSandboxBackendResolver sandboxResolver,
         IAppPathProvider paths,
         AppSettings settings,
+        SshWorkspaceConnectionService sshConnection,
         ILogger<RoomAgentBridge> logger)
     {
         _store = store;
@@ -66,6 +69,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         _sandboxResolver = sandboxResolver;
         _paths = paths;
         _settings = settings;
+        _sshConnection = sshConnection;
         _logger = logger;
         _server.SetRoomLifecycleHooks(AttachRoom, DetachRoom);
         _server.SetAgentStopHandler(TryStop);
@@ -282,12 +286,16 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         var prompt = BuildUserPrompt(trigger, taskText);
 
         var room = _store.GetRoom(roomId);
-        var (workspaceRoot, workspaceId) = ResolveRoomWorkspace(room);
+        var binding = RoomWorkspaceBinding.Resolve(_settings, room);
+        var workspaceRoot = binding.Root ?? string.Empty;
+        var workspaceId = binding.Id;
         // Persist across @agent mentions so CompactionTurnMiddleware can compact like Chat.
         var session = await _sessionStore
             .LoadOrCreateAsync(roomId, $"Room {roomId}", cancellationToken)
             .ConfigureAwait(false);
-        session = session.WithWorkspace(workspaceRoot, workspaceId);
+        session = session.WithWorkspace(
+            string.IsNullOrWhiteSpace(workspaceRoot) ? null : workspaceRoot,
+            workspaceId);
         if (!string.IsNullOrWhiteSpace(profile.ModelNameOverride))
         {
             session = session with { ModelName = profile.ModelNameOverride };
@@ -299,6 +307,24 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         await _sessionStore.SaveAsync(roomId, session, cancellationToken).ConfigureAwait(false);
         await _sessionStore.SaveSyncStateAsync(roomId, syncState, cancellationToken).ConfigureAwait(false);
 
+        var workspaceKind = WorkspaceSessionResolver.ResolveKind(session, _settings);
+        if (workspaceKind == WorkspaceKind.Ssh)
+        {
+            try
+            {
+                await _sshConnection.SyncAsync(session, _settings, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "SSH sync failed for room {RoomId}", roomId);
+                _store.UpdateMessageText(
+                    roomId,
+                    placeholder.Id,
+                    "无法连接远程工作区（SSH）。请检查主应用中该工作区的主机与凭据配置后重试。\n\n" + ex.Message);
+                return;
+            }
+        }
+
         // Selecting Skills in room settings auto-attaches load_skill_through_path.
         var allowList = RoomAgentProfileStore.ResolveToolAllowList(profile);
 
@@ -307,6 +333,12 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         IRoomSandboxBackend? sandboxBackend = null;
         if (RoomAgentRuntimeModes.IsSandbox(runtimeMode))
         {
+            if (binding.IsSsh)
+            {
+                throw new InvalidOperationException(
+                    "SSH 远程工作区不支持 Docker / 云沙箱，请在房间设置中改为「本地运行」。");
+            }
+
             if (string.IsNullOrWhiteSpace(workspaceRoot))
             {
                 throw new InvalidOperationException(
@@ -383,7 +415,6 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             logger: logger);
 
         var ignorePatterns = WorkspaceSessionResolver.ResolveIgnorePatterns(session, _settings);
-        var workspaceKind = WorkspaceSessionResolver.ResolveKind(session, _settings);
         var parent = AgentRunContext.CreateRoot(
             session,
             IdGen.NewId(),
@@ -392,7 +423,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             ignorePatterns,
             workspaceKind);
 
-        var completePrompt = BuildSystemPrompt(profile, workspaceRoot);
+        var completePrompt = BuildSystemPrompt(profile, workspaceRoot, workspaceKind, roomId);
         var member = parent.CreateTeamMember(
             session.Id,
             teamTaskId: "room-" + roomId,
@@ -823,31 +854,11 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         return trimmed[..maxChars] + "…";
     }
 
-    private (string Root, string? Id) ResolveRoomWorkspace(RoomInfo? room)
-    {
-        if (room is not null && !string.IsNullOrWhiteSpace(room.WorkspaceId))
-        {
-            var match = _settings.Workspaces.FirstOrDefault(w =>
-                string.Equals(w.Id, room.WorkspaceId, StringComparison.OrdinalIgnoreCase));
-            if (match is not null && !string.IsNullOrWhiteSpace(match.RootPath))
-            {
-                return (match.RootPath.Trim(), match.Id);
-            }
-        }
-
-        if (room is not null && !string.IsNullOrWhiteSpace(room.WorkspaceRoot))
-        {
-            var byRoot = _settings.Workspaces.FirstOrDefault(w =>
-                !string.IsNullOrWhiteSpace(w.RootPath)
-                && string.Equals(w.RootPath.Trim(), room.WorkspaceRoot.Trim(), StringComparison.OrdinalIgnoreCase));
-            return (room.WorkspaceRoot.Trim(), byRoot?.Id ?? room.WorkspaceId);
-        }
-
-        // No silent fallback — host must set workspace in room settings.
-        return (string.Empty, null);
-    }
-
-    private static string BuildSystemPrompt(AgentProfile profile, string workspaceRoot)
+    private static string BuildSystemPrompt(
+        AgentProfile profile,
+        string workspaceRoot,
+        WorkspaceKind workspaceKind,
+        string roomId)
     {
         var sb = new StringBuilder();
         sb.AppendLine("You are Athlon, a helpful teammate in a LAN team room.");
@@ -855,9 +866,14 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         sb.AppendLine("When the user wants a file shared with the room (especially after editing a Word/docx or other document), call room_share_file with the workspace path.");
         if (!string.IsNullOrWhiteSpace(workspaceRoot))
         {
-            sb.Append("Your assigned workspace root for this room is: ").Append(workspaceRoot).AppendLine();
+            var rootLabel = workspaceKind == WorkspaceKind.Ssh
+                ? RemotePathNormalizer.NormalizeRoot(workspaceRoot)
+                : workspaceRoot;
+            var uploadDir = RoomWorkspaceBinding.AttachmentMirrorDir(workspaceRoot, roomId, workspaceKind);
+            sb.Append("Your assigned workspace root for this room is: ").Append(rootLabel).AppendLine(
+                workspaceKind == WorkspaceKind.Ssh ? " (SSH remote)." : ".");
             sb.Append("Chat uploads from members are mirrored under: ")
-                .Append(Path.Combine(workspaceRoot, ".athlon-room"))
+                .Append(uploadDir)
                 .AppendLine(" (per-room subfolders). Prefer those absolute paths when analyzing user files.");
             sb.AppendLine("Only read/write files inside this workspace unless the user explicitly asks otherwise.");
         }

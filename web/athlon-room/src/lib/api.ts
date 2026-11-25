@@ -64,10 +64,21 @@ function authHeaders(token: string, extra?: HeadersInit): HeadersInit {
   };
 }
 
+const workspaceErrorLabels: Record<string, string> = {
+  workspace_required: "请选择或填写工作区",
+  workspace_not_found: "本机工作区路径不存在",
+  ssh_workspace_invalid: "SSH 工作区无效：请在主应用中完善主机与凭据配置",
+  ssh_workspace_sandbox_unsupported: "SSH 远程工作区不支持 Docker / 云沙箱，请改用「本地运行」",
+};
+
 async function readError(res: Response): Promise<string> {
   try {
     const data = await res.json();
-    return data.error ?? res.statusText;
+    const code = typeof data.error === "string" ? data.error : "";
+    if (code && workspaceErrorLabels[code]) {
+      return workspaceErrorLabels[code];
+    }
+    return code || res.statusText;
   } catch {
     return res.statusText || `HTTP ${res.status}`;
   }

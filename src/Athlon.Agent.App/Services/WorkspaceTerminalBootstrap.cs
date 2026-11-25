@@ -1,7 +1,10 @@
 using System.IO;
 using System.Windows.Media;
+using Athlon.Agent.App.Services.Terminal;
 using Athlon.Agent.App.Themes;
+using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Infrastructure.Ssh;
 using EasyWindowsTerminalControl;
 using Microsoft.Terminal.Wpf;
 
@@ -13,6 +16,7 @@ internal static class WorkspaceTerminalBootstrap
     public const string ShellCmd = "cmd";
     public const string ShellPowerShell = "powershell";
     public const string ShellPwsh = "pwsh";
+    public const string BridgeFileName = "Athlon.Agent.SshPtyBridge.exe";
 
     // Campbell palette (COLORREF / BGR byte order), matching Windows Terminal defaults.
     private static readonly uint[] CampbellColorTable =
@@ -73,6 +77,125 @@ internal static class WorkspaceTerminalBootstrap
         return Directory.Exists(profile) ? profile : null;
     }
 
+    public static string BridgeExecutablePath =>
+        Path.Combine(AppContext.BaseDirectory, BridgeFileName);
+
+    public static async Task<TerminalLaunch> PrepareAsync(
+        AppSettings settings,
+        IActiveWorkspaceContext workspace,
+        SshWorkspaceConnectionService ssh,
+        CancellationToken cancellationToken = default)
+    {
+        if (workspace.Kind != WorkspaceKind.Ssh)
+        {
+            return PrepareLocal(settings, workspace);
+        }
+
+        try
+        {
+            return await PrepareRemoteAsync(settings, workspace, ssh, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return new TerminalLaunch
+            {
+                IsRemote = true,
+                UseWin32Input = false,
+                WorkingDirectory = workspace.RootPath,
+                RemoteHost = string.IsNullOrWhiteSpace(workspace.DisplayName) ? null : workspace.DisplayName,
+                StartupError = ex.Message
+            };
+        }
+    }
+
+    public static void Apply(TerminalWorkspaceTabViewModel tab, TerminalLaunch launch)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(launch);
+        var previous = tab.Handshake;
+        tab.Handshake = launch.Handshake;
+        if (!ReferenceEquals(previous, launch.Handshake))
+        {
+            previous?.Dispose();
+        }
+
+        tab.StartupCommandLine = launch.StartupCommandLine;
+        tab.WorkingDirectory = launch.WorkingDirectory;
+        tab.UseWin32Input = launch.UseWin32Input;
+        tab.Caption = launch.Caption;
+        tab.IsRemote = launch.IsRemote;
+        tab.StartupError = launch.StartupError;
+    }
+
+    private static TerminalLaunch PrepareLocal(AppSettings settings, IActiveWorkspaceContext workspace)
+    {
+        var command = ResolveStartupCommandLine(settings.Ui.TerminalShell);
+        var cwd = ResolveWorkingDirectory(workspace);
+        return new TerminalLaunch
+        {
+            StartupCommandLine = command,
+            WorkingDirectory = cwd,
+            UseWin32Input = true,
+            IsRemote = false
+        };
+    }
+
+    private static async Task<TerminalLaunch> PrepareRemoteAsync(
+        AppSettings settings,
+        IActiveWorkspaceContext workspace,
+        SshWorkspaceConnectionService ssh,
+        CancellationToken cancellationToken)
+    {
+        var configured = FindSshWorkspace(settings, workspace)
+            ?? throw new InvalidOperationException("SSH workspace settings are missing.");
+        var request = await ssh.BuildRequestAsync(configured, cancellationToken).ConfigureAwait(false);
+        var bridge = BridgeExecutablePath;
+        if (!File.Exists(bridge))
+        {
+            throw new InvalidOperationException("SSH terminal bridge was not found.");
+        }
+
+        var handshake = SshPtyHandshakeServer.Start(request);
+        var root = string.IsNullOrWhiteSpace(request.RemoteRoot) ? "/" : request.RemoteRoot;
+        return new TerminalLaunch
+        {
+            StartupCommandLine = SshPtyHandshake.BuildCommandLine(bridge, handshake.PipeName),
+            WorkingDirectory = root,
+            UseWin32Input = false,
+            Caption = $"{request.Username}@{request.Host} · {root}",
+            IsRemote = true,
+            RemoteHost = request.Host,
+            Handshake = handshake
+        };
+    }
+
+    private static WorkspaceSettings? FindSshWorkspace(AppSettings settings, IActiveWorkspaceContext workspace)
+    {
+        if (!string.IsNullOrWhiteSpace(workspace.WorkspaceId))
+        {
+            var byId = settings.Workspaces.FirstOrDefault(item =>
+                string.Equals(item.Id, workspace.WorkspaceId, StringComparison.Ordinal));
+            if (byId?.WorkspaceKind == WorkspaceKind.Ssh)
+            {
+                return byId;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(workspace.RootPath))
+        {
+            return null;
+        }
+
+        var root = RemotePathNormalizer.NormalizeRoot(workspace.RootPath);
+        return settings.Workspaces.FirstOrDefault(item =>
+            item.WorkspaceKind == WorkspaceKind.Ssh
+            && string.Equals(RemotePathNormalizer.NormalizeRoot(item.RootPath), root, StringComparison.Ordinal));
+    }
+
     public static TerminalTheme CreateTheme()
     {
         var chrome = AppThemeManager.Current.Chrome;
@@ -86,7 +209,10 @@ internal static class WorkspaceTerminalBootstrap
         };
     }
 
-    public static EasyTerminalControl CreateControl(string startupCommandLine, string? workingDirectory)
+    public static EasyTerminalControl CreateControl(
+        string startupCommandLine,
+        string? workingDirectory,
+        bool useWin32Input = true)
     {
         var control = new EasyTerminalControl
         {
@@ -94,11 +220,12 @@ internal static class WorkspaceTerminalBootstrap
             // Match Codex / Windows Terminal density (~12pt Consolas), not the larger IDE editor sizes.
             FontSizeWhenSettingTheme = 12,
             FontFamilyWhenSettingTheme = new FontFamily("Consolas, Cascadia Mono, Cascadia Code"),
-            Win32InputMode = true,
+            Win32InputMode = useWin32Input,
             InputCapture = EasyTerminalControl.INPUT_CAPTURE.TabKey
                 | EasyTerminalControl.INPUT_CAPTURE.DirectionKeys
         };
-        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        // Remote cwd is a Unix path. Only hand a directory to ConPTY when it exists on this machine.
+        if (!string.IsNullOrWhiteSpace(workingDirectory) && Directory.Exists(workingDirectory))
         {
             control.WorkingDirectory = workingDirectory;
         }

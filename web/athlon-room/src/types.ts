@@ -77,6 +77,7 @@ export interface WorkspaceItem {
   name: string;
   rootPath: string;
   kind?: string;
+  displayLabel?: string;
 }
 
 export interface RoomAgentProfileData {

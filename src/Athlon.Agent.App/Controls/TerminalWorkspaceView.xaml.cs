@@ -5,6 +5,7 @@ using Athlon.Agent.App.Services.Terminal;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Infrastructure.Ssh;
 using EasyWindowsTerminalControl;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -67,6 +68,12 @@ public partial class TerminalWorkspaceView : UserControl
 
     private async void RestartButton_OnClick(object sender, RoutedEventArgs e)
     {
+        if (_tab?.IsRemote == true)
+        {
+            await RestartRemoteAsync().ConfigureAwait(true);
+            return;
+        }
+
         if (_control is null || _tab is null || _tab.IsDisposed)
         {
             DetachTerminal(preserveSession: false);
@@ -80,6 +87,40 @@ public partial class TerminalWorkspaceView : UserControl
             _tab.Session = null;
             await _control.RestartTerm(disposeOld: true).ConfigureAwait(true);
             _tab.Session = _control.ConPTYTerm;
+            RegisterSession(_tab, _control.ConPTYTerm);
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex.Message);
+            App.StartupTrace($"Terminal restart failed: {ex.Message}");
+        }
+    }
+
+    private async Task RestartRemoteAsync()
+    {
+        if (_tab is null || _tab.IsDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            ShowError(null);
+            var services = (Application.Current as App)?.Services;
+            var settings = services?.GetService<AppSettings>();
+            var workspace = services?.GetService<IActiveWorkspaceContext>();
+            var ssh = services?.GetService<SshWorkspaceConnectionService>();
+            if (settings is null || workspace is null || ssh is null)
+            {
+                ShowError("SSH terminal bridge was not found.");
+                return;
+            }
+
+            var launch = await WorkspaceTerminalBootstrap.PrepareAsync(settings, workspace, ssh)
+                .ConfigureAwait(true);
+            DetachTerminal(preserveSession: false);
+            WorkspaceTerminalBootstrap.Apply(_tab, launch);
+            AttachTerminal();
         }
         catch (Exception ex)
         {
@@ -101,10 +142,16 @@ public partial class TerminalWorkspaceView : UserControl
             EnsureShellConfigured(_tab);
             ShellLabel.Text = BuildShellCaption(_tab);
             SyncTabTitle(_tab);
+            if (!string.IsNullOrWhiteSpace(_tab.StartupError))
+            {
+                ShowError(_tab.StartupError);
+                return;
+            }
 
             var control = WorkspaceTerminalBootstrap.CreateControl(
                 _tab.StartupCommandLine,
-                _tab.WorkingDirectory);
+                _tab.IsRemote ? null : _tab.WorkingDirectory,
+                _tab.UseWin32Input);
 
             if (_tab.Session is { } existing)
             {
@@ -117,6 +164,24 @@ public partial class TerminalWorkspaceView : UserControl
             _tab.Session = control.ConPTYTerm;
             RegisterSession(_tab, control.ConPTYTerm);
             ShowError(null);
+            var handshake = _tab.Handshake;
+            var tab = _tab;
+            if (handshake is null)
+            {
+                return;
+            }
+
+            if (handshake.Completed.IsFaulted)
+            {
+                ShowError(handshake.Completed.Exception?.GetBaseException().Message);
+                return;
+            }
+
+            if (!handshake.Completed.IsCompleted)
+            {
+                handshake.RequireClientWithin(TimeSpan.FromSeconds(5));
+                _ = WatchHandshakeAsync(tab, handshake);
+            }
         }
         catch (Exception ex)
         {
@@ -168,9 +233,27 @@ public partial class TerminalWorkspaceView : UserControl
         _tab.Session = session;
     }
 
+    private async Task WatchHandshakeAsync(TerminalWorkspaceTabViewModel tab, SshPtyHandshakeServer handshake)
+    {
+        try
+        {
+            await handshake.Completed.ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            if (!ReferenceEquals(_tab, tab) || tab.IsDisposed)
+            {
+                return;
+            }
+
+            ShowError(ex.Message);
+            App.StartupTrace($"Terminal handshake failed: {ex.Message}");
+        }
+    }
+
     private static void EnsureShellConfigured(TerminalWorkspaceTabViewModel tab)
     {
-        if (!string.IsNullOrWhiteSpace(tab.StartupCommandLine))
+        if (tab.IsRemote || !string.IsNullOrWhiteSpace(tab.StartupCommandLine))
         {
             return;
         }
@@ -187,6 +270,11 @@ public partial class TerminalWorkspaceView : UserControl
 
     private static string BuildShellCaption(TerminalWorkspaceTabViewModel tab)
     {
+        if (!string.IsNullOrWhiteSpace(tab.Caption))
+        {
+            return tab.Caption;
+        }
+
         var shell = string.IsNullOrWhiteSpace(tab.StartupCommandLine)
             ? "shell"
             : System.IO.Path.GetFileName(tab.StartupCommandLine);
@@ -200,7 +288,7 @@ public partial class TerminalWorkspaceView : UserControl
 
     private static void SyncTabTitle(TerminalWorkspaceTabViewModel tab)
     {
-        if (string.IsNullOrWhiteSpace(tab.StartupCommandLine))
+        if (tab.IsRemote || string.IsNullOrWhiteSpace(tab.StartupCommandLine))
         {
             return;
         }

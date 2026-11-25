@@ -23,16 +23,18 @@ public sealed class TerminalAutomationHost : ITerminalAutomationHost
         UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var tab = EnsureTerminalTabCore();
+            var tab = await EnsureTerminalTabCoreAsync(cancellationToken).ConfigureAwait(true);
+            EnsureReady(tab);
             _ = await WaitForSessionAsync(tab.Id, cancellationToken).ConfigureAwait(true);
         }, cancellationToken);
 
     public Task<TerminalSessionInfo> GetSessionInfoAsync(CancellationToken cancellationToken = default) =>
-        UiDispatcherHelper.RunAsync(() =>
+        UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var tab = ResolveTargetTab() ?? EnsureTerminalTabCore();
-            return Task.FromResult(BuildSessionInfo(tab));
+            var tab = ResolveTargetTab() ?? await EnsureTerminalTabCoreAsync(cancellationToken).ConfigureAwait(true);
+            EnsureReady(tab);
+            return BuildSessionInfo(tab);
         }, cancellationToken);
 
     public Task SendInputAsync(string text, bool appendNewline = true, CancellationToken cancellationToken = default) =>
@@ -44,21 +46,23 @@ public sealed class TerminalAutomationHost : ITerminalAutomationHost
                 throw new ArgumentException("Provide text or set appendNewline to true.", nameof(text));
             }
 
-            var tab = EnsureTerminalTabCore();
+            var tab = await EnsureTerminalTabCoreAsync(cancellationToken).ConfigureAwait(true);
+            EnsureReady(tab);
             var entry = await WaitForSessionAsync(tab.Id, cancellationToken).ConfigureAwait(true);
-            TerminalInputWriter.Write(entry.Session, text, appendNewline);
+            TerminalInputWriter.Write(entry.Session, text, appendNewline, tab.UseWin32Input);
         }, cancellationToken);
 
     public Task<TerminalOutputSnapshot> ReadOutputAsync(int maxChars = 8000, CancellationToken cancellationToken = default) =>
         UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var tab = ResolveTargetTab() ?? EnsureTerminalTabCore();
+            var tab = ResolveTargetTab() ?? await EnsureTerminalTabCoreAsync(cancellationToken).ConfigureAwait(true);
+            EnsureReady(tab);
             _ = await WaitForSessionAsync(tab.Id, cancellationToken).ConfigureAwait(true);
             return tab.OutputBuffer.Snapshot(maxChars);
         }, cancellationToken);
 
-    private TerminalWorkspaceTabViewModel EnsureTerminalTabCore()
+    private async Task<TerminalWorkspaceTabViewModel> EnsureTerminalTabCoreAsync(CancellationToken cancellationToken)
     {
         var existing = ResolveTargetTab();
         if (existing is not null)
@@ -71,7 +75,15 @@ public sealed class TerminalAutomationHost : ITerminalAutomationHost
             return existing;
         }
 
-        return _pane.AddTerminalTabAndActivate();
+        return await _pane.AddTerminalTabAndActivateAsync(cancellationToken).ConfigureAwait(true);
+    }
+
+    private static void EnsureReady(TerminalWorkspaceTabViewModel tab)
+    {
+        if (!string.IsNullOrWhiteSpace(tab.StartupError))
+        {
+            throw new InvalidOperationException(tab.StartupError);
+        }
     }
 
     private TerminalWorkspaceTabViewModel? ResolveTargetTab()
