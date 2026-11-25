@@ -27,9 +27,14 @@ foreach ($project in $projects) {
     Write-Host "=== $($project.Name) ===" -ForegroundColor Cyan
     Push-Location $dir
     try {
-        if (Test-Path (Join-Path $dir "package-lock.json")) {
+        $lock = Join-Path $dir "package-lock.json"
+        if (Test-Path $lock) {
             npm ci
-            if ($LASTEXITCODE -ne 0) { throw "npm ci failed in $($project.Name)" }
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "npm ci failed in $($project.Name); falling back to npm install"
+                npm install
+                if ($LASTEXITCODE -ne 0) { throw "npm install failed in $($project.Name)" }
+            }
         } else {
             npm install
             if ($LASTEXITCODE -ne 0) { throw "npm install failed in $($project.Name)" }
