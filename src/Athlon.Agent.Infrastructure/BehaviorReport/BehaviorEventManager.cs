@@ -24,8 +24,8 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
     private IAppLogger _logger = new NullLogger();
     private bool _started;
     private readonly Channel<BehaviorEvent> _channel = Channel.CreateUnbounded<BehaviorEvent>();
-    private readonly CancellationTokenSource _cts = new();
-    private readonly Task _workerTask;
+    private CancellationTokenSource _cts = new();
+    private Task _workerTask;
     private CancellationTokenSource? _uploadCts;
     private Task? _uploadTask;
     private CancellationTokenSource? _heartbeatCts;
@@ -42,6 +42,11 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
         Singleton.StopHeartbeatLoop();
         Singleton.StartedAt = DateTimeOffset.UtcNow;
         Singleton._started = false;
+        // Other tests may build a DI container that registers this singleton as IEventManager
+        // and Dispose() the provider — that used to cancel the process-wide worker. Revive it
+        // and drop any stranded events so the next Configure/Start sees a clean queue.
+        Singleton.EnsureWorkerAlive();
+        Singleton.DropQueuedEvents();
     }
 
     public BehaviorEventManager Configure(
@@ -204,6 +209,7 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
 
     public void Start()
     {
+        EnsureWorkerAlive();
         StartedAt = DateTimeOffset.UtcNow;
         _started = true;
         StartUploadLoop();
@@ -217,19 +223,14 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
         StopHeartbeatLoop();
     }
 
+    /// <summary>
+    /// Stops timed upload/heartbeat loops only. The process-wide queue worker stays alive so a
+    /// DI <see cref="IServiceProvider"/> disposing this singleton (common in tests) cannot
+    /// permanently strand later <see cref="Record"/> calls.
+    /// </summary>
     public void Dispose()
     {
-        StopUploadLoop();
-        StopHeartbeatLoop();
-        _cts.Cancel();
-        try
-        {
-            _workerTask.Wait(TimeSpan.FromSeconds(1));
-        }
-        catch
-        {
-            // ignore
-        }
+        Stop();
     }
 
     private void StartUploadLoop()
@@ -458,13 +459,52 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
 
     private async Task DrainChannelAsync(CancellationToken cancellationToken)
     {
-        // Let the writer drain queued events into the local store before upload.
+        EnsureWorkerAlive();
+
+        // Single consumer: the background worker owns ReadAllAsync. Wait for it to empty
+        // the channel into the local store before upload.
         var spins = 0;
         while (_channel.Reader.Count > 0 && spins < 500)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (_workerTask.IsCompleted)
+            {
+                EnsureWorkerAlive();
+            }
+
             await Task.Delay(10, cancellationToken).ConfigureAwait(false);
             spins++;
+        }
+    }
+
+    private void EnsureWorkerAlive()
+    {
+        lock (_gate)
+        {
+            if (!_workerTask.IsCompleted)
+            {
+                return;
+            }
+
+            try
+            {
+                _cts.Dispose();
+            }
+            catch
+            {
+                // ignore
+            }
+
+            _cts = new CancellationTokenSource();
+            _workerTask = Task.Run(ProcessQueueAsync);
+        }
+    }
+
+    private void DropQueuedEvents()
+    {
+        while (_channel.Reader.TryRead(out _))
+        {
+            // discard stranded events from a prior test / dead worker
         }
     }
 
@@ -476,20 +516,7 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
             {
                 try
                 {
-                    AppSettings settings;
-                    BehaviorEventLocalStore? store;
-                    lock (_gate)
-                    {
-                        settings = _settings;
-                        store = _store;
-                    }
-
-                    if (!settings.BehaviorReport.Enabled || store is null)
-                    {
-                        continue;
-                    }
-
-                    await store.AppendAsync(evt, CancellationToken.None).ConfigureAwait(false);
+                    await AppendEventAsync(evt, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -499,8 +526,26 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
         }
         catch (OperationCanceledException)
         {
-            // shutdown
+            // shutdown / worker restart
         }
+    }
+
+    private async Task AppendEventAsync(BehaviorEvent evt, CancellationToken cancellationToken)
+    {
+        AppSettings settings;
+        BehaviorEventLocalStore? store;
+        lock (_gate)
+        {
+            settings = _settings;
+            store = _store;
+        }
+
+        if (!settings.BehaviorReport.Enabled || store is null)
+        {
+            return;
+        }
+
+        await store.AppendAsync(evt, cancellationToken).ConfigureAwait(false);
     }
 
     private sealed class NullLogger : IAppLogger
