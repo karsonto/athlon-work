@@ -33,6 +33,7 @@ public sealed class PreCompletionPipeline(
             return session;
         }
 
+        var budgetBeforePrune = runtimeContext?.Budget;
         session = ApplyTruncateArgsIfNeeded(session, options, cfg, ref runtimeContext);
 
         var conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
@@ -42,8 +43,9 @@ public sealed class PreCompletionPipeline(
         }
 
         // Manual compact and model-requested compact still summarize after prune.
-        // Overflow / force compact does not: once truncation drops utilization under the target,
-        // the LLM checkpoint is skipped.
+        // Forced overflow / middle-cut still runs when the estimate never reached the target
+        // (the provider already returned context_length). It is skipped only when truncation
+        // itself dropped utilization from the target down to below it.
         var compactDespitePrune = isManualCompact || options.ApplyEvenWhenBelowThreshold;
         var executionForce = options.ForceConversationCompact || runtimeContext?.ForceOverflow == true;
         ContextPressureLevel pressure;
@@ -51,14 +53,21 @@ public sealed class PreCompletionPipeline(
 
         if (cfg.DynamicCompaction.Enabled && budget is { } dynamicBudget)
         {
-            // Re-measure from the post-prune budget. A stale Overflow override would force a
-            // summary even after truncation already brought utilization back under target.
+            var targetUtilization = ContextPressureEvaluator.ResolveCompactThreshold(cfg.DynamicCompaction);
+            var pruneDroppedBelowTarget = budgetBeforePrune is { } beforeBudget
+                && beforeBudget.TotalUtilization >= targetUtilization
+                && dynamicBudget.TotalUtilization < targetUtilization;
+            // A stale Overflow override must not force a summary after truncation already
+            // brought utilization back under target. Provider overflow still compacts when
+            // the local estimate was already under the target.
+            var honorForcedCompact = executionForce && !pruneDroppedBelowTarget;
             pressure = ContextPressureEvaluator.Evaluate(
                 dynamicBudget,
                 cfg.DynamicCompaction,
-                forceOverflow: false);
+                forceOverflow: honorForcedCompact && runtimeContext?.ForceOverflow == true);
 
             if (!compactDespitePrune
+                && !honorForcedCompact
                 && !ContextPressureEvaluator.ShouldCompact(
                     dynamicBudget,
                     conversation,
@@ -87,7 +96,7 @@ public sealed class PreCompletionPipeline(
                 dynamicBudget,
                 conversation,
                 cfg,
-                compactDespitePrune);
+                compactDespitePrune || honorForcedCompact);
             if (isManualCompact)
             {
                 plan = plan with { ApplyConversationCompact = true };

@@ -58,11 +58,17 @@ public sealed class ExecuteCommandTool(
             ToolArguments.GetInt32(invocation, "timeout", DefaultTimeoutSeconds),
             1,
             MaxTimeoutSeconds);
-        var blockUntilMs = Math.Clamp(
-            ToolArguments.GetInt32(invocation, "block_until_ms", BackgroundCommandRegistry.DefaultBlockUntilMs),
-            0,
-            BackgroundCommandRegistry.MaxBlockUntilMs);
-        blockUntilMs = Math.Min(blockUntilMs, timeoutSeconds * 1000);
+        var timeoutMs = timeoutSeconds * 1000L;
+        var blockUntilMs = (int)Math.Min(
+            timeoutMs,
+            Math.Clamp(
+                ToolArguments.GetInt32(invocation, "block_until_ms", BackgroundCommandRegistry.DefaultBlockUntilMs),
+                0,
+                BackgroundCommandRegistry.MaxBlockUntilMs));
+        // Backgrounding is only a successful handoff when control returns strictly
+        // before the hard stop. A block window clamped to the timeout races the
+        // kill and must not report success for a command that is timing out.
+        var backgroundBeforeTimeout = blockUntilMs < timeoutMs;
 
         var sessionId = string.IsNullOrWhiteSpace(sessionContext.SessionId) ? "local" : sessionContext.SessionId;
         if (backgroundCommands.RunningCount(sessionId) >= BackgroundCommandRegistry.MaxPerSession)
@@ -102,7 +108,9 @@ public sealed class ExecuteCommandTool(
         var stdoutTask = ReadStreamAsync(process.StandardOutput.BaseStream, stdout, () => Volatile.Read(ref mirrorOutput) == 1);
         var stderrTask = ReadStreamAsync(process.StandardError.BaseStream, stderr, () => Volatile.Read(ref mirrorOutput) == 1);
         var backgrounded = false;
-        var blockDelay = Task.Delay(blockUntilMs, blockTimeout.Token);
+        Task? blockDelay = backgroundBeforeTimeout
+            ? Task.Delay(blockUntilMs, blockTimeout.Token)
+            : null;
 
         var sw = Stopwatch.StartNew();
         try
@@ -112,7 +120,14 @@ public sealed class ExecuteCommandTool(
             var hardDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             using var hardRegistration = hardTimeout.Token.Register(() => hardDone.TrySetResult());
             var exitTask = process.WaitForExitAsync(CancellationToken.None);
-            await Task.WhenAny(exitTask, blockDelay, hardDone.Task, userDone.Task).ConfigureAwait(false);
+            if (blockDelay is null)
+            {
+                await Task.WhenAny(exitTask, hardDone.Task, userDone.Task).ConfigureAwait(false);
+            }
+            else
+            {
+                await Task.WhenAny(exitTask, blockDelay, hardDone.Task, userDone.Task).ConfigureAwait(false);
+            }
 
             if (cancellationToken.IsCancellationRequested)
             {
@@ -120,6 +135,7 @@ public sealed class ExecuteCommandTool(
                 throw new OperationCanceledException(cancellationToken);
             }
 
+            var hardStopReached = hardTimeout.IsCancellationRequested || sw.ElapsedMilliseconds >= timeoutMs;
             if (process.HasExited)
             {
                 await DrainAsync(stdoutTask, stderrTask).ConfigureAwait(false);
@@ -134,7 +150,7 @@ public sealed class ExecuteCommandTool(
                     : FailedCommand(command, exitCode, content, sw.Elapsed);
             }
 
-            if (hardTimeout.IsCancellationRequested)
+            if (hardStopReached || !backgroundBeforeTimeout)
             {
                 ProcessKillHelper.KillProcessTree(process);
                 await DrainAsync(stdoutTask, stderrTask).ConfigureAwait(false);
@@ -194,12 +210,16 @@ public sealed class ExecuteCommandTool(
         finally
         {
             killRegistration.Dispose();
-            if (!BlockDelayCompleted(blockDelay))
+            if (blockDelay is not null)
             {
-                blockTimeout.Cancel();
+                if (!BlockDelayCompleted(blockDelay))
+                {
+                    blockTimeout.Cancel();
+                }
+
+                Observe(blockDelay);
             }
 
-            Observe(blockDelay);
             blockTimeout.Dispose();
             if (!backgrounded)
             {

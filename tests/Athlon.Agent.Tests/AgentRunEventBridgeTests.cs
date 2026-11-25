@@ -1,3 +1,4 @@
+using System.Windows.Threading;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Events;
@@ -36,7 +37,8 @@ public sealed class AgentRunEventBridgeTests
         bool approved,
         ToolApprovalDecision expected)
     {
-        var ui = new SessionTurnUiController(System.Windows.Threading.Dispatcher.CurrentDispatcher);
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
         var callbacks = new AgentRunEventBridge().BuildCallbacks(ui);
         var approval = new PendingToolApproval(
             "call-1",
@@ -50,7 +52,7 @@ public sealed class AgentRunEventBridgeTests
         Assert.True(ui.TryResolveToolApproval(
             approval.ToolCallId,
             approved ? ToolApprovalDecision.Approved : ToolApprovalDecision.Denied));
-        var decision = await decisionTask;
+        var decision = await decisionTask.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(expected, decision);
     }
@@ -61,5 +63,22 @@ public sealed class AgentRunEventBridgeTests
         var ui = new SessionTurnUiController(System.Windows.Threading.Dispatcher.CurrentDispatcher);
 
         Assert.NotNull(new AgentRunEventBridge().BuildCallbacks(ui).OnToolApprovalRequested);
+    }
+
+    private static Task<Dispatcher> StartStaDispatcherAsync()
+    {
+        var tcs = new TaskCompletionSource<Dispatcher>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            var dispatcher = Dispatcher.CurrentDispatcher;
+            tcs.SetResult(dispatcher);
+            Dispatcher.Run();
+        })
+        {
+            IsBackground = true
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return tcs.Task;
     }
 }

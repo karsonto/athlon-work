@@ -29,22 +29,22 @@ public sealed partial class SessionTurnUiController
 
         try
         {
-            await RunOnUiAsync(() => EnsureToolApprovalBubble(pending)).ConfigureAwait(false);
+            await RunOnUiWithinAsync(() => EnsureToolApprovalBubble(pending)).ConfigureAwait(false);
 
             if (IsDisplayed)
             {
-                await ShowToolApprovalAsync(pending).ConfigureAwait(false);
+                await WithinAsync(ShowToolApprovalAsync(pending)).ConfigureAwait(false);
             }
 
             RaisePendingApprovalsChanged();
 
             var decision = await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-            await RunOnUiAsync(() => ApplyToolApprovalDecisionToViewModel(approval.ToolCallId, decision))
+            await RunOnUiWithinAsync(() => ApplyToolApprovalDecisionToViewModel(approval.ToolCallId, decision))
                 .ConfigureAwait(false);
 
             if (IsDisplayed)
             {
-                await ResolveToolApprovalAsync(approval.ToolCallId, decision).ConfigureAwait(false);
+                await WithinAsync(ResolveToolApprovalAsync(approval.ToolCallId, decision)).ConfigureAwait(false);
             }
 
             return decision;
@@ -146,6 +146,26 @@ public sealed partial class SessionTurnUiController
     private Task ResolveToolApprovalAsync(string toolCallId, ToolApprovalDecision decision) =>
         RunOnUiTaskAsync(() => ChatView?.ResolveToolApprovalAsync(toolCallId, decision)
             ?? Task.CompletedTask);
+
+    /// <summary>
+    /// UI hops inside an approval are bookkeeping. A dispatcher that is not pumping, or a chat
+    /// callback that never returns, must not keep the decision task incomplete.
+    /// </summary>
+    private static readonly TimeSpan UiCallbackTimeout = TimeSpan.FromSeconds(2);
+
+    private Task RunOnUiWithinAsync(Action action) => WithinAsync(RunOnUiAsync(action));
+
+    private async Task WithinAsync(Task uiTask)
+    {
+        try
+        {
+            await uiTask.WaitAsync(UiCallbackTimeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // The dispatcher never ran the callback. The approval decision still stands.
+        }
+    }
 
     private sealed record PendingUiApproval(
         PendingToolApproval Approval,

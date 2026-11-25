@@ -4,16 +4,18 @@ using Athlon.Agent.Core;
 namespace Athlon.Agent.App.Services;
 
 /// <summary>
-/// LRU cache of per-session <see cref="SessionTurnUiController"/> instances. Keeping a few
-/// controllers alive means switching back to a recently viewed conversation reuses its rendered
-/// messages and markdown view models instead of rebuilding them from scratch. Each controller
-/// holds the session's messages plus its markdown cache, so the capacity is deliberately small.
+/// Per-session <see cref="SessionTurnUiController"/> instances for conversations that have been
+/// opened. An opened session stays resident so switching back reuses its rendered messages and
+/// markdown view models. <see cref="Remove"/> is what drops one. The capacity bound only evicts
+/// sessions that are no longer open; running turns are also pinned so in-flight streaming state
+/// cannot be dropped.
 /// </summary>
 public sealed class SessionUiCache
 {
     private const int DefaultCapacity = 4;
 
     private readonly Dictionary<string, SessionTurnUiController> _controllers = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _opened = new(StringComparer.Ordinal);
     private readonly HashSet<string> _pinned = new(StringComparer.Ordinal);
     private readonly LinkedList<string> _lru = new();
     private readonly object _gate = new();
@@ -66,6 +68,7 @@ public sealed class SessionUiCache
                     PreserveSessionScroll = _settings.Ui.PreserveSessionUiState
                 };
                 _controllers[sessionId] = controller;
+                _opened.Add(sessionId);
                 _lru.AddFirst(sessionId);
                 evicted = EvictOverflowLocked();
             }
@@ -121,6 +124,7 @@ public sealed class SessionUiCache
         lock (_gate)
         {
             _pinned.Remove(sessionId);
+            _opened.Remove(sessionId);
             if (_controllers.Remove(sessionId, out var found))
             {
                 _lru.Remove(sessionId);
@@ -164,16 +168,18 @@ public sealed class SessionUiCache
         List<SessionTurnUiController>? evicted = null;
         while (_controllers.Count > _capacity)
         {
-            // Walk from the cold end and skip pinned (in-flight) sessions.
+            // Opened sessions stay for the life of the conversation. Pinned sessions are
+            // in-flight turns and are skipped even if they were explicitly closed.
             var node = _lru.Last;
-            while (node is not null && _pinned.Contains(node.Value))
+            while (node is not null && (_opened.Contains(node.Value) || _pinned.Contains(node.Value)))
             {
                 node = node.Previous;
             }
 
             if (node is null)
             {
-                // Everything left is pinned; evicting would break a running turn.
+                // Opened and pinned sessions stay. Evicting them would drop a conversation
+                // the user can switch back to, or a turn that is still streaming.
                 break;
             }
 

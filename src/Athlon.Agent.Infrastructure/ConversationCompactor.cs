@@ -77,8 +77,20 @@ public sealed partial class ConversationCompactor(
 
         var retainBudget = request.Plan?.RetainUserTokenBudget
             ?? CheckpointHistoryBuilder.ResolveRetainUserTokenBudget(cfg, pressure, request.Force);
-        var maxRetainedUsers = cfg.KeepMessages > 0 ? cfg.KeepMessages : int.MaxValue;
-        var split = CheckpointHistoryBuilder.TrySplit(conversation, retainBudget, maxRetainedUsers);
+        // Checkpoint plans retain recent user turns by token budget. A direct compact with no
+        // plan still uses the legacy KeepMessages cutoff so the tail is a message count, not an
+        // extra retained user plus that tail. Forced and manual compacts keep TrySplit so a
+        // thread shorter than KeepMessages can still shed a prefix.
+        CheckpointHistoryBuilder.CheckpointSplit? split;
+        if (request.Plan is null && !request.Force && !isManualCompact)
+        {
+            split = SplitByLegacyKeepMessages(conversation, estimatedTokens, cfg);
+        }
+        else
+        {
+            var maxRetainedUsers = cfg.KeepMessages > 0 ? cfg.KeepMessages : int.MaxValue;
+            split = CheckpointHistoryBuilder.TrySplit(conversation, retainBudget, maxRetainedUsers);
+        }
         if (split is null || split.PrefixToSummarize.Count == 0)
         {
             CompactionDecisionLog.Write(
@@ -235,6 +247,29 @@ public sealed partial class ConversationCompactor(
             keepBudget: retainBudget);
 
         return new ConversationCompactResult(session, true);
+    }
+
+    /// <summary>
+    /// Static cutoff: keep the last <see cref="ContextCompactionSettings.KeepMessages"/> messages,
+    /// walked back so a tool pair is not split. That puts the user turn before an open tool
+    /// group into the summarized prefix.
+    /// </summary>
+    private static CheckpointHistoryBuilder.CheckpointSplit? SplitByLegacyKeepMessages(
+        IReadOnlyList<ChatMessage> conversation,
+        int estimatedTokens,
+        ContextCompactionSettings cfg)
+    {
+        var cutoff = ConversationCutoffPlanner.DetermineCutoffIndex(conversation, estimatedTokens, cfg);
+        if (cutoff <= 0 || cutoff >= conversation.Count)
+        {
+            return null;
+        }
+
+        return new CheckpointHistoryBuilder.CheckpointSplit(
+            conversation.Take(cutoff).ToList(),
+            Array.Empty<ChatMessage>(),
+            conversation.Skip(cutoff).ToList(),
+            cutoff);
     }
 
     private async Task<(string Summary, bool UsedTemplate)> SummarizeWithRetryAsync(

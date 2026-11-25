@@ -19,7 +19,10 @@ namespace Athlon.Agent.App.Services;
 /// </summary>
 public sealed class ChatReplaySnapshotCache
 {
-    /// <summary>Kept in line with <see cref="SessionUiCache"/> so both caches evict together.</summary>
+    /// <summary>
+    /// Independent of <see cref="SessionUiCache"/>. Opened session controllers stay resident;
+    /// this cache only keeps a small LRU of serialized replay shards.
+    /// </summary>
     public const int DefaultCapacity = 4;
 
     private readonly object _gate = new();
