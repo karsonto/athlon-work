@@ -302,16 +302,29 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
     internal static string? ResolveRelativePath(HttpListenerRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!string.IsNullOrEmpty(request.RawUrl))
+        // RawUrl is the request target. On Linux, HttpListener may also expose a Uri whose
+        // AbsolutePath has already collapsed ".." while OriginalString still contains it.
+        // Reject when either form escapes the root.
+        var rawTarget = request.RawUrl;
+        if (!string.IsNullOrEmpty(rawTarget))
         {
-            var path = request.RawUrl;
-            var queryIndex = path.IndexOf('?', StringComparison.Ordinal);
+            var queryIndex = rawTarget.IndexOf('?', StringComparison.Ordinal);
             if (queryIndex >= 0)
             {
-                path = path[..queryIndex];
+                rawTarget = rawTarget[..queryIndex];
             }
+        }
 
-            return ResolveRawPath(path);
+        var originalTarget = request.Url is null ? null : GetRawRequestPath(request.Url);
+        if (ResolveRawPath(rawTarget ?? string.Empty) is null
+            || (originalTarget is not null && ResolveRawPath(originalTarget) is null))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrEmpty(rawTarget))
+        {
+            return ResolveRawPath(rawTarget);
         }
 
         return ResolveRelativePath(request.Url);

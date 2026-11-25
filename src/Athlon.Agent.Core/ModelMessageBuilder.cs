@@ -259,12 +259,25 @@ internal static class ModelMessageBuilder
         }
 
         messages.Add(new AgentModelMessage("assistant", message.Content, ToolCalls: toolCalls, ReasoningContent: reasoningContent));
+        var toolImages = new List<IReadOnlyList<ImageAttachment>>();
         foreach (var toolCall in toolCalls)
         {
-            var rawContent = toolByCallId.TryGetValue(toolCall.Id, out var toolMessage)
-                ? toolMessage.Content
+            var hasResult = toolByCallId.TryGetValue(toolCall.Id, out var toolMessage);
+            var rawContent = hasResult
+                ? toolMessage!.Content
                 : "Tool did not run or the result was not recorded.";
             messages.Add(new AgentModelMessage("tool", HistoryToolBody(rawContent, stripUiTrees), toolCall.Id));
+            if (hasResult && toolMessage!.ImageAttachments is { Count: > 0 } images)
+            {
+                toolImages.Add(images);
+            }
+        }
+
+        // Provider APIs reject images on role "tool". Emit them as a following user message,
+        // after every tool result for this assistant turn so the tool block stays contiguous.
+        foreach (var images in toolImages)
+        {
+            AppendToolImageMessage(messages, images);
         }
 
         var consumed = new HashSet<string>(toolCalls.Select(call => call.Id), StringComparer.Ordinal);
@@ -279,6 +292,10 @@ internal static class ModelMessageBuilder
             messages.Add(new AgentModelMessage(
                 "user",
                 HistoryToolBody(FormatToolResultAsUserContent(toolMessage.Content), stripUiTrees)));
+            if (toolMessage.ImageAttachments is { Count: > 0 } extraImages)
+            {
+                AppendToolImageMessage(messages, extraImages);
+            }
         }
 
         return scanIndex - 1;
@@ -382,6 +399,40 @@ internal static class ModelMessageBuilder
         {
             AppendToolImageMessage(messages, batch);
         }
+    }
+
+    /// <summary>
+    /// Drops tool-screenshot user messages that were attached beside history tool results.
+    /// The API builder re-appends the newest shots after the stable prefix.
+    /// </summary>
+    public static void RemoveInlineToolScreenshots(List<AgentModelMessage> messages) =>
+        messages.RemoveAll(IsInlineToolScreenshot);
+
+    private static bool IsInlineToolScreenshot(AgentModelMessage message)
+    {
+        if (!string.Equals(message.Role, "user", StringComparison.Ordinal)
+            || message.Content is not IEnumerable<object> parts)
+        {
+            return false;
+        }
+
+        foreach (var part in parts)
+        {
+            if (part is not IDictionary<string, object?> map
+                || !map.TryGetValue("type", out var typeObj)
+                || typeObj is not string type
+                || !string.Equals(type, "text", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return map.TryGetValue("text", out var textObj)
+                && textObj is string text
+                && (string.Equals(text, ToolScreenshotCaption, StringComparison.Ordinal)
+                    || string.Equals(text, BrowserScreenshotCaption, StringComparison.Ordinal));
+        }
+
+        return false;
     }
 
     private static void AppendToolImageMessage(

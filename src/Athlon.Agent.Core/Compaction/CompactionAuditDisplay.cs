@@ -208,7 +208,20 @@ public static class CompactionAuditDisplay
             }
         }
 
-        return layers.Count == 0 ? [CompactionLayer.ConversationCompact] : layers;
+        if (layers.Count == 0)
+        {
+            layers.Add(CompactionLayer.ConversationCompact);
+        }
+
+        // Force compact always runs tool-arg truncation before the LLM summary, even when the
+        // audit only recorded the summary layer.
+        if (strategy == CompactionStrategy.ForceCompact
+            && !layers.Contains(CompactionLayer.TruncateArgs))
+        {
+            layers.Insert(0, CompactionLayer.TruncateArgs);
+        }
+
+        return layers;
     }
 
     private static string BuildStrategySubtitle(

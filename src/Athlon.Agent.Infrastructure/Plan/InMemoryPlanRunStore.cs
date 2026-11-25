@@ -33,9 +33,11 @@ public sealed class InMemoryPlanRunStore : IPlanRunStore
         }
 
         _active[run.SessionId] = run.Clone();
+        // Markdown written by publish_plan (or an in-memory edit) is canonical. A run object can
+        // still carry a stale copy; saving the run must not clobber the newer document.
         if (!string.IsNullOrWhiteSpace(run.PlanMarkdown))
         {
-            _markdown[run.SessionId] = run.PlanMarkdown;
+            _markdown.TryAdd(run.SessionId, run.PlanMarkdown);
         }
 
         return Task.CompletedTask;

@@ -131,7 +131,7 @@ public sealed class ExecuteCommandTool(
                     CancellationToken.None).ConfigureAwait(false);
                 return exitCode == 0
                     ? ToolResult.Success($"Command exited 0 in {sw.ElapsedMilliseconds}ms", content, sw.Elapsed)
-                    : ToolResult.Failure("Command failed", content, sw.Elapsed);
+                    : FailedCommand(command, exitCode, content, sw.Elapsed);
             }
 
             if (hardTimeout.IsCancellationRequested)
@@ -208,6 +208,16 @@ public sealed class ExecuteCommandTool(
                 hardTimeout.Dispose();
             }
         }
+    }
+
+    private static ToolResult FailedCommand(string command, int exitCode, string content, TimeSpan elapsed)
+    {
+        // ToolResult.Failure stores the body only on Error, which drops the command text from
+        // Content. Callers (and the model formatter's Content-first read) need the readable output.
+        var text = string.IsNullOrWhiteSpace(content)
+            ? $"'{command}' failed with exit code {exitCode}."
+            : content;
+        return new ToolResult(false, "Command failed", text, text, elapsed);
     }
 
     private static bool BlockDelayCompleted(Task blockDelay) =>

@@ -79,7 +79,12 @@ public sealed class ChatTtsController(
 
         await PostStateAsync(messageId, "loading", null).ConfigureAwait(false);
 
-        var started = false;
+        // Open the device before the first network chunk. Stop() has to be able to halt a
+        // synthesis that is still blocked on the socket; waiting for PCM first deadlocks that path.
+        const int defaultSampleRate = 24_000;
+        audioPlayer.Start(defaultSampleRate);
+        var startedRate = defaultSampleRate;
+        var announcedPlaying = false;
         try
         {
             await foreach (var chunk in ttsClient
@@ -91,10 +96,15 @@ public sealed class ChatTtsController(
                     return;
                 }
 
-                if (!started)
+                if (chunk.SampleRate > 0 && chunk.SampleRate != startedRate)
                 {
                     audioPlayer.Start(chunk.SampleRate);
-                    started = true;
+                    startedRate = chunk.SampleRate;
+                }
+
+                if (!announcedPlaying)
+                {
+                    announcedPlaying = true;
                     await PostStateAsync(messageId, "playing", null).ConfigureAwait(false);
                 }
 
@@ -117,11 +127,13 @@ public sealed class ChatTtsController(
         catch (TtsClientException ex)
         {
             _logger.Warning("TTS 合成失败：{Message}", ex.Message);
+            audioPlayer.Stop();
             await PostStateAsync(messageId, "error", ex.Message).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "TTS 朗读失败");
+            audioPlayer.Stop();
             await PostStateAsync(messageId, "error", ex.Message).ConfigureAwait(false);
         }
         finally
@@ -135,7 +147,28 @@ public sealed class ChatTtsController(
                 }
             }
 
-            cts.Dispose();
+            // Cancel() runs the await continuation inline and still holds the source lock.
+            // Disposing on that stack deadlocks, so a cancelled source is released later.
+            if (cts.IsCancellationRequested)
+            {
+                ThreadPool.UnsafeQueueUserWorkItem(
+                    static state =>
+                    {
+                        try
+                        {
+                            ((CancellationTokenSource)state!).Dispose();
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // Already disposed.
+                        }
+                    },
+                    cts);
+            }
+            else
+            {
+                cts.Dispose();
+            }
         }
     }
 

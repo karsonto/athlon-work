@@ -129,13 +129,17 @@ public sealed class CliIpcServerTests
         var responseTask = http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        var sessionId = harness.Storage.LastSaved?.Id;
+        using var response = await responseTask.WaitAsync(TimeSpan.FromSeconds(5));
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        var sessionFrame = await ReadUntilAsync(stream, CliSseEventNames.Session, TimeSpan.FromSeconds(5));
+        using var sessionJson = JsonDocument.Parse(sessionFrame.Data);
+        var sessionId = sessionJson.RootElement.TryGetProperty("sessionId", out var sessionIdElement)
+            ? sessionIdElement.GetString()
+            : null;
         Assert.False(string.IsNullOrWhiteSpace(sessionId));
         using var cancelResponse = await http.PostAsync(harness.Url + $"v1/turns/{sessionId}/cancel", content: null);
         Assert.True(cancelResponse.IsSuccessStatusCode);
 
-        using var response = await responseTask.WaitAsync(TimeSpan.FromSeconds(5));
-        await using var stream = await response.Content.ReadAsStreamAsync();
         var events = await ReadAllAsync(stream, TimeSpan.FromSeconds(5));
         Assert.Contains(events, e => e.Event == CliSseEventNames.Error && e.Data.Contains("cancelled", StringComparison.OrdinalIgnoreCase));
     }

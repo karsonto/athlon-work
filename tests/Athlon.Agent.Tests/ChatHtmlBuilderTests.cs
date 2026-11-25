@@ -74,7 +74,9 @@ public sealed class ChatHtmlBuilderTests
         // Welcome copy is rendered by the WPF centered composer hero.
         Assert.DoesNotContain("empty-state-title", surface, StringComparison.Ordinal);
         Assert.DoesNotContain("empty-state-description", surface, StringComparison.Ordinal);
-        Assert.DoesNotContain(Strings.Get("Chat_WelcomeDescription")[..20], surface, StringComparison.Ordinal);
+        var welcome = Strings.Get("Chat_WelcomeDescription");
+        var welcomeProbe = welcome.Length <= 20 ? welcome : welcome[..20];
+        Assert.DoesNotContain(welcomeProbe, surface, StringComparison.Ordinal);
     }
 
     [Fact]

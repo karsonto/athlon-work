@@ -120,7 +120,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
         builder.AppendLine("  2. Consecutive read-only calls may be sent together; keep writes and execute_command in their own groups, and preserve dependency order.");
 
-        builder.AppendLine("  3. Multi-step / multi-file work: follow Long-task discipline; maintain an accurate todo list before and during writes.");
+        builder.AppendLine("  3. Multi-step / multi-file work: follow Long-task discipline; maintain an accurate todo list with todo_write before and during writes.");
 
         builder.AppendLine("  4. When file_write, file_edit, or apply_patch are advertised, explain the intended write before calling them.");
 

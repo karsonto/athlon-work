@@ -92,8 +92,11 @@ public static class TruncateArgsService
             }
 
             changed = true;
-            var preview = text[..Math.Min(text.Length, Math.Max(16, maxLength - TruncationSuffix.Length))];
-            output[key] = JsonSerializer.SerializeToElement(preview + TruncationSuffix);
+            // Keep a short head plus the marker. MaxArgLength is the trigger, not the retained
+            // size: a 2_000-character stub still dominates the window and would not drop
+            // utilization below the compact target.
+            var previewLength = Math.Min(20, text.Length);
+            output[key] = JsonSerializer.SerializeToElement(text[..previewLength] + TruncationSuffix);
         }
 
         return changed ? new AgentToolCall(call.Id, call.Name, new ToolCallArguments(output)) : call;

@@ -5,7 +5,7 @@ internal static class ComputerUsePostActionSettler
     internal static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(75);
     internal const int MaxSamples = 8;
     internal const int MinimumSamples = 4;
-    private const int RequiredConsecutiveMatches = 1;
+    private const int RequiredConsecutiveMatches = 2;
 
     /// <summary>
     /// Waits until the desktop signature stops changing. The budget is caller-supplied so that
@@ -29,6 +29,10 @@ internal static class ComputerUsePostActionSettler
         maxSamples = Math.Max(2, maxSamples);
         minimumSamples = Math.Clamp(minimumSamples, 2, maxSamples);
         requiredConsecutiveMatches = Math.Clamp(requiredConsecutiveMatches, 1, maxSamples - 1);
+        // The first sample has no predecessor, so a window of N samples can prove at most N-1
+        // matches. Clamp so a short budget (keyboard / scroll) can still settle, while a change
+        // still restarts the match run inside the longer default window.
+        requiredConsecutiveMatches = Math.Min(requiredConsecutiveMatches, minimumSamples - 1);
         var interval = sampleInterval is { Ticks: > 0 } configured ? configured : SampleInterval;
 
         ulong? previous = null;

@@ -105,7 +105,9 @@ public sealed class ComputerUseHistoryHygieneTests
     {
         var settings = new ContextCompactionSettings();
         var hygiene = settings.RequestHistoryHygiene;
-        var body = string.Join('\n', Enumerable.Range(1, 400).Select(index => $"ui_{index} Button ok"));
+        // 400 short lines are only ~2700 tokens, under the 3000-token Computer Use cap.
+        // The estimator assertion needs a payload that actually exceeds that cap.
+        var body = string.Join('\n', Enumerable.Range(1, 520).Select(index => $"ui_{index} Button ok"));
         var messages = ToChatMessages(BuildToolExchange("computer_observe", body));
 
         var estimated = ContextTokenEstimator.Estimate(messages, hygiene: hygiene);

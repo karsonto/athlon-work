@@ -226,7 +226,10 @@ public sealed class BrowserScreenshotTests
             LocalPath: "/etc/passwd");
         var assistant = new ChatMessageViewModel(ChatMessage.Create(
             MessageRole.Assistant,
-            "![登录页](screenshot:browser-frame-abc.png)\n\n![missing](screenshot:browser-frame-missing.png)\n\n![other](screenshot:notes.png)\n\n![path](screenshot:../../etc/passwd)"));
+            // The traversal citation must not contain the decoy LocalPath "/etc/passwd".
+            // "screenshot:../../etc/passwd" contains that substring, so the leak check below
+            // would fail even when the absolute path is never rewritten into the HTML.
+            "![登录页](screenshot:browser-frame-abc.png)\n\n![missing](screenshot:browser-frame-missing.png)\n\n![other](screenshot:notes.png)\n\n![path](screenshot:../../etc/shadow)"));
 
         var json = ChatEventSerializer.SerializeStaticAssistantHtml(
             assistant,
@@ -237,7 +240,7 @@ public sealed class BrowserScreenshotTests
         Assert.Contains("data:image/png;base64,AQID", html, StringComparison.Ordinal);
         Assert.Contains("screenshot:browser-frame-missing.png", html, StringComparison.Ordinal);
         Assert.Contains("screenshot:notes.png", html, StringComparison.Ordinal);
-        Assert.Contains("screenshot:../../etc/passwd", html, StringComparison.Ordinal);
+        Assert.Contains("screenshot:../../etc/shadow", html, StringComparison.Ordinal);
         Assert.DoesNotContain("DECOY", html, StringComparison.Ordinal);
         Assert.DoesNotContain("/tmp/secret.png", html, StringComparison.Ordinal);
         Assert.DoesNotContain("/etc/passwd", html, StringComparison.Ordinal);

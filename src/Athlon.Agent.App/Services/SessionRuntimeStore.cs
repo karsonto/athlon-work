@@ -26,6 +26,9 @@ public sealed class RuntimeSessionEntry
 
     internal string? InFlightAppendMessageId { get; set; }
 
+    /// <summary>Cancels the storage write for <see cref="InFlightAppendMessageId"/> when the append is discarded.</summary>
+    internal CancellationTokenSource? InFlightAppendCancellation { get; set; }
+
     internal bool SessionDirty { get; set; }
 }
 
@@ -175,6 +178,7 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             return;
         }
 
+        CancellationTokenSource? inFlight;
         lock (_gate)
         {
             foreach (var pendingId in entry.PendingAppendIds)
@@ -189,6 +193,19 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
 
             entry.PendingAppends.Clear();
             entry.PendingAppendIds.Clear();
+            inFlight = entry.InFlightAppendCancellation;
+        }
+
+        // Cancel outside the gate. The write may be blocked inside storage; cancelling it
+        // must not run while we hold _gate, and must not dispose the source on this stack
+        // (Dispose from a cancellation callback deadlocks).
+        try
+        {
+            inFlight?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The flush already finished and disposed the source.
         }
     }
 
@@ -312,6 +329,7 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         while (true)
         {
             ChatMessage? message;
+            CancellationTokenSource? appendCts = null;
             lock (_gate)
             {
                 if (!_sessions.TryGetValue(sessionId, out var entry))
@@ -336,6 +354,8 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
                 entry.PendingAppends.RemoveAt(0);
                 entry.PendingAppendIds.Remove(message.Id);
                 entry.InFlightAppendMessageId = message.Id;
+                appendCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                entry.InFlightAppendCancellation = appendCts;
             }
 
             try
@@ -353,9 +373,15 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
                 if (!suppress)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    await _storage.AppendConversationMessageAsync(sessionId, message, cancellationToken)
+                    await _storage.AppendConversationMessageAsync(sessionId, message, appendCts!.Token)
                         .ConfigureAwait(false);
                 }
+            }
+            catch (OperationCanceledException) when (appendCts!.IsCancellationRequested
+                                                       && !cancellationToken.IsCancellationRequested)
+            {
+                // DiscardPending cancelled the write while it was blocked in storage.
+                // The row must not land, and the caller of AppendAsync should still complete.
             }
             catch
             {
@@ -377,7 +403,16 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
                     if (_sessions.TryGetValue(sessionId, out var entry))
                     {
                         entry.InFlightAppendMessageId = null;
+                        if (ReferenceEquals(entry.InFlightAppendCancellation, appendCts))
+                        {
+                            entry.InFlightAppendCancellation = null;
+                        }
                     }
+                }
+
+                if (appendCts is not null)
+                {
+                    DisposeAppendCancellation(appendCts);
                 }
             }
         }
@@ -415,5 +450,33 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         }
 
         _disposed = true;
+    }
+
+    /// <summary>
+    /// <see cref="CancellationTokenSource.Dispose"/> deadlocks when called from a callback of the
+    /// same source. <see cref="DiscardPending"/> cancels inline, so a cancelled source is disposed
+    /// on the thread pool instead of on that stack.
+    /// </summary>
+    private static void DisposeAppendCancellation(CancellationTokenSource cancellation)
+    {
+        if (!cancellation.IsCancellationRequested)
+        {
+            cancellation.Dispose();
+            return;
+        }
+
+        ThreadPool.UnsafeQueueUserWorkItem(
+            static state =>
+            {
+                try
+                {
+                    ((CancellationTokenSource)state!).Dispose();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Already disposed by a racing completion path.
+                }
+            },
+            cancellation);
     }
 }

@@ -70,6 +70,10 @@ public static class ModelMessagesForApiBuilder
         }
 
         var withMedia = result.Messages.ToList();
+        // History build attaches screenshots beside their tool result so a direct model-message
+        // build stays provider-compatible. The API payload keeps that prefix byte-stable and
+        // re-appends only the newest shots after runtime context.
+        ModelMessageBuilder.RemoveInlineToolScreenshots(withMedia);
         ModelMessageBuilder.AppendRetainedToolMedia(
             withMedia,
             history,

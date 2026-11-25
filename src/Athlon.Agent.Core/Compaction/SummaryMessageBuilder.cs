@@ -57,6 +57,8 @@ public static class SummaryMessageBuilder
                 resumePrefix +
                 "Below is a conversation that has been summarized. The full history was archived as transcript file " +
                 fileName +
+                " at " +
+                transcriptPath +
                 ". Use history_list_transcripts, history_read_transcript, or history_search_transcripts to recover details. Use history_read_evicted for truncated tool output.\n\n" +
                 handoffHint +
                 "<summary>\n" +

@@ -432,10 +432,9 @@ public static class ContextTokenEstimator
             hygiene.MaxToolResultBytes,
             hygiene.MaxToolResultTokens);
         var maxTokens = Math.Max(0, effective.MaxTokens);
-        var enforceLineLimit = RequestHistoryHygiene.EnforcesPerToolLineLimit(hygiene, limit);
         var lineCount = content.Count(static c => c == '\n') + 1;
         var overTokens = tokens > maxTokens;
-        var overLines = enforceLineLimit && lineCount > effective.MaxLines;
+        var overLines = effective.MaxLines > 0 && lineCount > effective.MaxLines;
         if (!overTokens && !overLines)
         {
             return tokens;

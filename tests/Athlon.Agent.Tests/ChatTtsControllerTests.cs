@@ -80,9 +80,10 @@ public sealed class ChatTtsControllerTests
         var first = controller.PlayAsync("msg-1", "第一条");
         await player.Started.Task;
 
-        await controller.PlayAsync("msg-2", "第二条");
+        var second = controller.PlayAsync("msg-2", "第二条");
         client.Gate.TrySetResult();
         await first;
+        await second;
 
         // The first utterance must not keep the device busy, and only the newest id stays active.
         Assert.True(player.StopCount >= 1);
@@ -144,7 +145,11 @@ public sealed class ChatTtsControllerTests
     private static Task CaptureError(string json, List<string?> errors)
     {
         using var document = JsonDocument.Parse(json);
-        errors.Add(document.RootElement.TryGetProperty("error", out var error) ? error.GetString() : null);
+        if (document.RootElement.TryGetProperty("error", out var error))
+        {
+            errors.Add(error.GetString());
+        }
+
         return Task.CompletedTask;
     }
 

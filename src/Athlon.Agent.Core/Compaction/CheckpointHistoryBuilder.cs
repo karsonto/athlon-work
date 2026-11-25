@@ -98,28 +98,6 @@ public static class CheckpointHistoryBuilder
             afterUsers.Add(conversation[i]);
         }
 
-        if (afterUsers.Count > 0 && selectedUserIndices.Count == 1)
-        {
-            var soleUserIndex = selectedUserIndices[0];
-            var advancedCutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(conversation, soleUserIndex + 1);
-            if (advancedCutoff <= 0)
-            {
-                advancedCutoff = ForcePairingSafeCutoff(conversation, soleUserIndex + 1);
-            }
-
-            if (advancedCutoff > cutoff)
-            {
-                cutoff = advancedCutoff;
-                retainedUsers = [];
-                lastRetainedUserIndex = -1;
-                afterUsers.Clear();
-                for (var i = Math.Max(cutoff, soleUserIndex + 1); i < conversation.Count; i++)
-                {
-                    afterUsers.Add(conversation[i]);
-                }
-            }
-        }
-
         // If the conversation ends with an open tool group, keep that whole group even when it is
         // not a "user" message — otherwise the next API call 400s.
         var pairingTail = BuildPairingTail(conversation, cutoff, retainedUsers, afterUsers);

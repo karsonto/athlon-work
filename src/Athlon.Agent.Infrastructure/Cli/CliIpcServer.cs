@@ -535,7 +535,8 @@ public sealed class CliIpcServer(
         }
 
         var created = AgentSession.Create($"CLI · {folder}").WithWorkspace(cwd);
-        await storage.SaveSessionAsync(created, cancellationToken).ConfigureAwait(false);
+        // The completed turn is persisted once, after SendAsync. Saving the empty shell here as
+        // well would count a second write for the first turn.
         sessionMap.Set(cwd, created.Id);
         return created;
     }

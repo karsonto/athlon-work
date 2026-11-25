@@ -96,7 +96,11 @@ public sealed class AthlonWebStaticServerTests
         var baseUrl = await server.EnsureStartedAsync();
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-        var response = await http.GetAsync($"{baseUrl}../index.html");
+        // HttpClient otherwise collapses ".." before the request is sent, so the server never
+        // sees the traversal. Keep the original target so AbsolutePath/RawUrl can still differ.
+        var options = new UriCreationOptions { DangerousDisablePathAndQueryCanonicalization = true };
+        var traversal = new Uri($"{baseUrl}../index.html", in options);
+        var response = await http.GetAsync(traversal);
 
         Assert.True(response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound);
     }

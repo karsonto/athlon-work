@@ -52,7 +52,11 @@ public sealed class OpenAiCompatibleTtsClient(
         }
 
         var requestJson = JsonSerializer.Serialize(payload);
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        // Do not dispose the request. Disposing HttpRequestMessage disposes its StringContent,
+        // and an async iterator's finally can run that dispose before SendAsync finishes reading
+        // the body (or before the caller inspects the captured request). StringContent holds only
+        // managed bytes, so leaving the request for GC is safe.
+        var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
             Content = new StringContent(requestJson, Encoding.UTF8, "application/json")
         };

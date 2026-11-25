@@ -41,30 +41,30 @@ public sealed class PreCompletionPipeline(
             return session;
         }
 
-        // ForceConversationCompact (overflow / manual) must still invoke the compactor even when
-        // utilization is below the automatic threshold.
-        var requireCompact = isManualCompact
-            || options.ApplyEvenWhenBelowThreshold
-            || options.ForceConversationCompact;
+        // Manual compact and model-requested compact still summarize after prune.
+        // Overflow / force compact does not: once truncation drops utilization under the target,
+        // the LLM checkpoint is skipped.
+        var compactDespitePrune = isManualCompact || options.ApplyEvenWhenBelowThreshold;
         var executionForce = options.ForceConversationCompact || runtimeContext?.ForceOverflow == true;
         ContextPressureLevel pressure;
         ContextBudgetSnapshot? budget = runtimeContext?.Budget;
 
         if (cfg.DynamicCompaction.Enabled && budget is { } dynamicBudget)
         {
+            // Re-measure from the post-prune budget. A stale Overflow override would force a
+            // summary even after truncation already brought utilization back under target.
             pressure = ContextPressureEvaluator.Evaluate(
                 dynamicBudget,
                 cfg.DynamicCompaction,
-                runtimeContext!.ForceOverflow);
+                forceOverflow: false);
 
-            if (!requireCompact
-                && !executionForce
+            if (!compactDespitePrune
                 && !ContextPressureEvaluator.ShouldCompact(
                     dynamicBudget,
                     conversation,
                     cfg,
                     pressure,
-                    executionForce))
+                    force: false))
             {
                 return session;
             }
@@ -87,7 +87,7 @@ public sealed class PreCompletionPipeline(
                 dynamicBudget,
                 conversation,
                 cfg,
-                requireCompact || executionForce);
+                compactDespitePrune);
             if (isManualCompact)
             {
                 plan = plan with { ApplyConversationCompact = true };
@@ -126,9 +126,9 @@ public sealed class PreCompletionPipeline(
             cfg.IncludeReasoningInModelContext,
             maxToolScreenshots: cfg.MaxToolScreenshotsInModelContext,
             hygiene: cfg.RequestHistoryHygiene);
-        if (!requireCompact
+        if (!compactDespitePrune
             && !executionForce
-            && !ConversationCutoffPlanner.ShouldCompact(conversation, estimated, cfg, executionForce))
+            && !ConversationCutoffPlanner.ShouldCompact(conversation, estimated, cfg, force: false))
         {
             return session;
         }
