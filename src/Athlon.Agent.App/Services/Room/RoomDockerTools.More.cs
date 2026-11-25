@@ -239,8 +239,7 @@ internal sealed class RoomDockerExecuteCommandTool(
 {
     public ToolDefinition Definition { get; } = new(
         "execute_command",
-        ToolDescriptions.ExecuteCommandLocal(
-            BackgroundCommandRegistry.DefaultBlockUntilMs,
+        ToolDescriptions.ExecuteCommandSandbox(
             ExecuteCommandTool.DefaultTimeoutSeconds,
             ExecuteCommandTool.MaxTimeoutSeconds),
         ToolSchema.Object()

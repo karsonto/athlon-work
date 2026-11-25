@@ -54,6 +54,15 @@ public static class ToolDescriptions
         + "A still-running process stays in the background until it exits, timeout, or command_kill. "
         + $"Default timeout {defaultTimeoutSeconds}s (max {maxTimeoutSeconds}s) stops the process; it does not end the agent turn.";
 
+    public static string ExecuteCommandSandbox(int defaultTimeoutSeconds, int maxTimeoutSeconds) =>
+        "Execute a shell command inside the sandbox container (user approval required). "
+        + "The sandbox is a Linux (Debian) container with bash — use Linux/shell semantics, "
+        + "NOT Windows cmd.exe (no dir, findstr, chcp; use ls, grep, forward-slash paths). "
+        + "Available tooling includes Python 3.12, Node 20, Java 8 and Chromium. "
+        + "Console I/O is UTF-8. "
+        + "Commands always run to completion or timeout (no background mode). "
+        + $"Default timeout {defaultTimeoutSeconds}s (max {maxTimeoutSeconds}s) stops the process; it does not end the agent turn.";
+
     public const string TodoWrite =
         "Create or update the session task list. "
         + "Pass todos as an array of objects with id, content, and status "
