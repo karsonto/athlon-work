@@ -963,8 +963,6 @@ export default function App() {
         onOpenSettings={(t) => void openRoomSettings(t)}
         onOpenAgentCaps={(t) => void openAgentCaps(t)}
         canCreateLocal={canCreateLocal}
-        isDarkMode={isDarkMode}
-        onToggleTheme={toggleTheme}
       />
 
       {activeTab ? (

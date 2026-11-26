@@ -29,6 +29,16 @@ internal sealed class RoomDockerEngineClient : IAsyncDisposable
         _handler = handler;
     }
 
+    /// <summary>
+    /// Docker Desktop (Linux engine) exposes <c>dockerDesktopLinuxEngine</c>;
+    /// older / some installs still use <c>docker_engine</c>.
+    /// </summary>
+    private static readonly string[] WindowsDockerPipeNames =
+    [
+        "dockerDesktopLinuxEngine",
+        "docker_engine"
+    ];
+
     public static RoomDockerEngineClient Create()
     {
         if (OperatingSystem.IsWindows())
@@ -37,13 +47,33 @@ internal sealed class RoomDockerEngineClient : IAsyncDisposable
             {
                 ConnectCallback = async (context, ct) =>
                 {
-                    var pipe = new NamedPipeClientStream(
-                        ".",
-                        "docker_engine",
-                        PipeDirection.InOut,
-                        PipeOptions.Asynchronous);
-                    await pipe.ConnectAsync(5000, ct).ConfigureAwait(false);
-                    return pipe;
+                    Exception? last = null;
+                    foreach (var pipeName in WindowsDockerPipeNames)
+                    {
+                        NamedPipeClientStream? pipe = null;
+                        try
+                        {
+                            pipe = new NamedPipeClientStream(
+                                ".",
+                                pipeName,
+                                PipeDirection.InOut,
+                                PipeOptions.Asynchronous);
+                            // Short per-pipe timeout so we can fall through quickly when Docker is down.
+                            await pipe.ConnectAsync(1500, ct).ConfigureAwait(false);
+                            return pipe;
+                        }
+                        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
+                        {
+                            last = ex;
+                            if (pipe is not null)
+                            {
+                                await pipe.DisposeAsync().ConfigureAwait(false);
+                            }
+                        }
+                    }
+
+                    throw last ?? new TimeoutException(
+                        "无法连接 Docker named pipe（dockerDesktopLinuxEngine / docker_engine）。请启动 Docker Desktop。");
                 }
             };
             var http = new HttpClient(handler)

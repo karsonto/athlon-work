@@ -11,7 +11,6 @@ import {
 import type { RoomTab } from "../types";
 import { agentRuntimeModeLabel } from "../lib/runtimeMode";
 import { AthlonIcon } from "./AthlonIcon";
-import { ThemeToggleButton } from "./ThemeToggleButton";
 
 interface RoomSidebarProps {
   rooms: RoomTab[];
@@ -25,8 +24,6 @@ interface RoomSidebarProps {
   onOpenSettings: (tab: RoomTab) => void;
   onOpenAgentCaps: (tab: RoomTab) => void;
   canCreateLocal: boolean;
-  isDarkMode: boolean;
-  onToggleTheme: () => void;
 }
 
 export function roomKey(tab: Pick<RoomTab, "id" | "baseUrl">): string {
@@ -100,8 +97,6 @@ export function RoomSidebar({
   onOpenSettings,
   onOpenAgentCaps,
   canCreateLocal,
-  isDarkMode,
-  onToggleTheme,
 }: RoomSidebarProps) {
   const isDesktop = useWideSidebarBreakpoint();
   const [railHover, setRailHover] = useState(false);
@@ -275,15 +270,6 @@ export function RoomSidebar({
               </div>
             );
           })}
-        </div>
-
-        <div className={collapsed ? "mt-3 flex justify-center" : "mt-3"}>
-          <ThemeToggleButton
-            isDarkMode={isDarkMode}
-            onToggle={onToggleTheme}
-            compact={collapsed}
-            className={collapsed ? "" : "w-full"}
-          />
         </div>
       </aside>
     </div>
