@@ -65,10 +65,11 @@ public sealed class SkillPackageInstaller(
             return false;
         }
 
+        var trackedFiles = SkillIntegrity.FilterAdmissionFiles(manifest.Files);
         var localHashes = fullDownload || sourceDir is null
             ? new Dictionary<string, byte[]>(StringComparer.Ordinal)
-            : CollectReusableFiles(sourceDir, manifest.Files);
-        var missing = manifest.Files
+            : CollectReusableFiles(sourceDir, trackedFiles);
+        var missing = trackedFiles
             .Select(static file => file.Sha256)
             .Where(hash => !localHashes.ContainsKey(hash))
             .Distinct(StringComparer.Ordinal)
@@ -83,8 +84,12 @@ public sealed class SkillPackageInstaller(
                 ? new Dictionary<string, byte[]>(StringComparer.Ordinal)
                 : await ReadObjectZipAsync(missing, stagingRoot, cancellationToken).ConfigureAwait(false);
             Materialize(assemblyDir, manifest, localHashes, downloaded);
-            var canonical = SkillManifest.Canonical(manifest.SkillId, manifest.CommitSeq, SkillIntegrity.ListFiles(assemblyDir));
-            if (!string.Equals(canonical, manifestText, StringComparison.Ordinal))
+            var canonicalDisk = SkillManifest.Canonical(
+                manifest.SkillId,
+                manifest.CommitSeq,
+                SkillIntegrity.ListFiles(assemblyDir));
+            var canonicalExpected = SkillManifest.Canonical(manifest.SkillId, manifest.CommitSeq, trackedFiles);
+            if (!string.Equals(canonicalDisk, canonicalExpected, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("Assembled skill does not match the manifest.");
             }
@@ -162,7 +167,9 @@ public sealed class SkillPackageInstaller(
         var reusable = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (var file in files)
         {
-            if (reusable.ContainsKey(file.Sha256) || !TryReadMatchingFile(skillDirectory, file, out var content))
+            if (SkillIntegrity.IsAdmissionIgnoredPath(file.Path)
+                || reusable.ContainsKey(file.Sha256)
+                || !TryReadMatchingFile(skillDirectory, file, out var content))
             {
                 continue;
             }
@@ -220,6 +227,11 @@ public sealed class SkillPackageInstaller(
     {
         foreach (var file in manifest.Files)
         {
+            if (SkillIntegrity.IsAdmissionIgnoredPath(file.Path))
+            {
+                continue;
+            }
+
             if (!downloaded.TryGetValue(file.Sha256, out var content)
                 && !localHashes.TryGetValue(file.Sha256, out content))
             {

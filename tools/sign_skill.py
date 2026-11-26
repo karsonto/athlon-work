@@ -82,6 +82,12 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def is_admission_ignored_path(relative: str) -> bool:
+    """Local secrets (.env / .env.*) are not part of skill integrity admission."""
+    name = relative.replace("\\", "/").rsplit("/", 1)[-1]
+    return name == ".env" or name.startswith(".env.")
+
+
 def list_files(skill_dir: Path) -> list[tuple[str, int, str]]:
     root = skill_dir.resolve()
     files: list[tuple[str, int, str]] = []
@@ -89,6 +95,8 @@ def list_files(skill_dir: Path) -> list[tuple[str, int, str]]:
         if not path.is_file():
             continue
         relative = path.resolve().relative_to(root).as_posix()
+        if is_admission_ignored_path(relative):
+            continue
         validate_relative_path(relative)
         data_size = path.stat().st_size
         files.append((relative, data_size, sha256_file(path)))
@@ -175,6 +183,10 @@ def self_test() -> None:
     ordered = canonical("demo", 1, [("b.txt", 1, "b" * 64), ("a.txt", 1, "c" * 64)])
     if '"path":"a.txt"' not in ordered or ordered.index("a.txt") > ordered.index("b.txt"):
         raise SystemExit("path sort mismatch")
+    if not is_admission_ignored_path(".env") or not is_admission_ignored_path("config/.env.local"):
+        raise SystemExit("dotenv ignore mismatch")
+    if is_admission_ignored_path("env.example") or is_admission_ignored_path("notes.env"):
+        raise SystemExit("dotenv ignore false positive")
 
 
 def main() -> None:

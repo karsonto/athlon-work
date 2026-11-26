@@ -204,6 +204,43 @@ public sealed class SkillHubTests
     }
 
     [Fact]
+    public void TryVerify_ignores_local_dotenv_files()
+    {
+        var body = Encoding.UTF8.GetBytes("hello");
+        var sha = SkillManifest.Sha256Hex(body);
+        var envBody = Encoding.UTF8.GetBytes("SECRET=1");
+        var envSha = SkillManifest.Sha256Hex(envBody);
+        // Manifest may still list .env historically; admission must ignore it either way.
+        var manifestText = SkillManifest.Canonical(
+            "demo",
+            1,
+            [
+                new SkillManifest.FileEntry("SKILL.md", body.Length, sha),
+                new SkillManifest.FileEntry(".env", envBody.Length, envSha)
+            ]);
+        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-dotenv", Guid.NewGuid().ToString("N"));
+        var dest = Path.Combine(root, "skill");
+        Directory.CreateDirectory(dest);
+        try
+        {
+            File.WriteAllBytes(Path.Combine(dest, "SKILL.md"), body);
+            File.WriteAllText(Path.Combine(dest, ".env"), "SECRET=changed-locally");
+            File.WriteAllText(Path.Combine(dest, ".env.local"), "OTHER=1");
+            Assert.True(SkillIntegrity.TryVerify(dest, manifestText, 0, "demo", out var error), error);
+            Assert.DoesNotContain(
+                SkillIntegrity.ListFiles(dest),
+                static entry => entry.Path is ".env" or ".env.local");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void Unsigned_skill_stays_out_of_catalog_until_manifest_matches()
     {
         var root = Path.Combine(Path.GetTempPath(), "athlon-skill-catalog", Guid.NewGuid().ToString("N"));

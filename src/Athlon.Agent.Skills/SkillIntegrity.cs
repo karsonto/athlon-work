@@ -7,6 +7,26 @@ namespace Athlon.Agent.Skills;
 /// </summary>
 public static class SkillIntegrity
 {
+    /// <summary>
+    /// Local secrets such as <c>.env</c> / <c>.env.*</c> are ignored during admission and signing
+    /// so machine-local credentials do not break catalog integrity checks.
+    /// </summary>
+    public static bool IsAdmissionIgnoredPath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            return false;
+        }
+
+        var name = Path.GetFileName(relativePath.Replace('\\', '/'));
+        return string.Equals(name, ".env", StringComparison.Ordinal)
+               || name.StartsWith(".env.", StringComparison.Ordinal);
+    }
+
+    public static IReadOnlyList<SkillManifest.FileEntry> FilterAdmissionFiles(
+        IEnumerable<SkillManifest.FileEntry> files) =>
+        files.Where(static file => !IsAdmissionIgnoredPath(file.Path)).ToArray();
+
     public static bool TryVerify(string skillDirectory, string manifestText, long anchorCommitSeq, string expectedSkillId, out string error)
     {
         error = "";
@@ -30,9 +50,11 @@ public static class SkillIntegrity
 
         try
         {
-            var files = ListFiles(skillDirectory);
-            var canonical = SkillManifest.Canonical(manifest.SkillId, manifest.CommitSeq, files);
-            if (!string.Equals(canonical, manifestText, StringComparison.Ordinal))
+            var onDisk = ListFiles(skillDirectory);
+            var expected = FilterAdmissionFiles(manifest.Files);
+            var canonicalDisk = SkillManifest.Canonical(manifest.SkillId, manifest.CommitSeq, onDisk);
+            var canonicalExpected = SkillManifest.Canonical(manifest.SkillId, manifest.CommitSeq, expected);
+            if (!string.Equals(canonicalDisk, canonicalExpected, StringComparison.Ordinal))
             {
                 error = "skill files do not match the manifest";
                 return false;
@@ -67,6 +89,11 @@ public static class SkillIntegrity
             }
 
             var relative = Path.GetRelativePath(root, full).Replace('\\', '/');
+            if (IsAdmissionIgnoredPath(relative))
+            {
+                continue;
+            }
+
             SkillManifest.ValidateRelativePath(relative);
             var info = new FileInfo(full);
             entries.Add(new SkillManifest.FileEntry(relative, info.Length, SkillManifest.Sha256File(full)));
