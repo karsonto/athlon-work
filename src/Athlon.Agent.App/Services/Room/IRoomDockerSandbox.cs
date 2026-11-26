@@ -14,7 +14,7 @@ public sealed class RoomDockerProbeResult
     public string? QuotaHint { get; init; }
 
     public IReadOnlyList<string> RuntimeHints { get; init; } =
-        ["python3.12", "java8", "node20", "chromium"];
+        ["python3.12", "java8", "node24", "chromium"];
 
     public RoomSandboxProbeResult ToSandboxProbe() =>
         new()

@@ -297,7 +297,7 @@ export function RoomSettingsDialog({
             <span className="mt-0.5 block text-xs text-slate-500 dark:text-zinc-400">
               {sshSelected
                 ? "SSH 工作区不可用"
-                : "本机容器：Python 3.12 / Java 8 / Node 20 / Chromium"}
+                : "本机容器：Python 3.12 / Java 8 / Node 24 / Chromium"}
             </span>
           </span>
         </label>

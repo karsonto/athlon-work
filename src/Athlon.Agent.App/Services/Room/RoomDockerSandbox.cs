@@ -48,7 +48,7 @@ public sealed class RoomDockerSandbox : IRoomDockerSandbox, IAsyncDisposable
                 ImageReady = imageReady,
                 DockerVersion = version,
                 Message = imageReady
-                    ? "Docker 已就绪（含 Python 3.12 / Java 8 / Node 20 / Chromium）。"
+                    ? "Docker 已就绪（含 Python 3.12 / Java 8 / Node 24 / Chromium）。"
                     : "Docker 已连接；首次使用 Sandbox 时将构建镜像。"
             };
         }
@@ -502,7 +502,7 @@ public sealed class RoomDockerSandbox : IRoomDockerSandbox, IAsyncDisposable
             && apt-get install -y --no-install-recommends \
                 ca-certificates curl gnupg git bash coreutils findutils grep sed gawk xz-utils \
                 chromium fonts-liberation fonts-noto-core \
-            && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+            && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
             && apt-get install -y --no-install-recommends nodejs \
             && mkdir -p /opt/java /opt/athlon \
             && curl -fsSL "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u432-b06/OpenJDK8U-jdk_x64_linux_hotspot_8u432b06.tar.gz" \

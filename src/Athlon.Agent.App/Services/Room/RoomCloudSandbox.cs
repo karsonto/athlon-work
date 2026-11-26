@@ -123,7 +123,7 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
                 QuotaHint = quota,
                 RuntimeHints = hints is { Length: > 0 }
                     ? hints
-                    : ["python3.12", "java8", "node20", "chromium"]
+                    : ["python3.12", "java8", "node24", "chromium"]
             };
         }
         catch (Exception ex)
