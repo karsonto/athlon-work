@@ -1,5 +1,3 @@
-using System.Formats.Tar;
-using System.IO.Compression;
 using System.Text;
 using Athlon.Agent.App.Services.Room;
 
@@ -34,7 +32,7 @@ public sealed class CloudWorkspaceSyncSkillFilterTests
     }
 
     [Fact]
-    public void PackDirectoryTarGz_EmptyAllowList_PacksNothing()
+    public void PackDirectoryTarGz_EmptyAllowList_UnpacksToEmptyDirectory()
     {
         using var root = new TempDir();
         var skill = Path.Combine(root.Path, "keep");
@@ -42,9 +40,9 @@ public sealed class CloudWorkspaceSyncSkillFilterTests
         File.WriteAllText(Path.Combine(skill, "SKILL.md"), "---\nname: keep\ndescription: d\n---\n\nbody\n");
 
         using var tar = CloudWorkspaceSync.PackDirectoryTarGz(root.Path, onlyTopLevelNames: []);
-        using var gzip = new GZipStream(tar, CompressionMode.Decompress, leaveOpen: true);
-        using var reader = new TarReader(gzip);
-        Assert.Null(reader.GetNextEntry());
+        using var dest = new TempDir();
+        CloudWorkspaceSync.UnpackTarGzToDirectory(tar, dest.Path);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(dest.Path));
     }
 
     [Fact]

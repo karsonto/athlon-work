@@ -51,7 +51,7 @@ internal static class CloudWorkspaceSync
         }
 
         var ms = new MemoryStream();
-        using (var gzip = new GZipStream(ms, CompressionLevel.Fastest, leaveOpen: true))
+        using (var gzip = new GZipStream(ms, CompressionLevel.SmallestSize, leaveOpen: true))
         using (var writer = new TarWriter(gzip, leaveOpen: true))
         {
             var root = Path.GetFullPath(hostRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -69,6 +69,12 @@ internal static class CloudWorkspaceSync
             }
         }
 
+        // TarWriter Dispose writes two 512-byte EOF records; gzip footer must be present.
+        if (ms.Length == 0)
+        {
+            throw new InvalidOperationException("PackDirectoryTarGz produced an empty archive.");
+        }
+
         ms.Position = 0;
         return ms;
     }
@@ -82,8 +88,25 @@ internal static class CloudWorkspaceSync
 
         using var gzip = new GZipStream(tarGz, CompressionMode.Decompress, leaveOpen: true);
         using var reader = new TarReader(gzip);
-        while (reader.GetNextEntry() is { } entry)
+        while (true)
         {
+            TarEntry? entry;
+            try
+            {
+                entry = reader.GetNextEntry();
+            }
+            catch (EndOfStreamException)
+            {
+                // Empty allow-list packs can yield a gzip that decompresses to 0 bytes;
+                // TarReader then throws instead of returning null. Treat as end of archive.
+                break;
+            }
+
+            if (entry is null)
+            {
+                break;
+            }
+
             if (string.IsNullOrWhiteSpace(entry.Name) || entry.Name.Contains("..", StringComparison.Ordinal))
             {
                 continue;
