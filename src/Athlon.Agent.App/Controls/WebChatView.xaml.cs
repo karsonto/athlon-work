@@ -64,7 +64,9 @@ public partial class WebChatView : UserControl
     private int _themeApplyGeneration;
     private int _i18nApplyGeneration;
     private readonly AssistantMarkdownCoalesceGate _assistantMarkdownCoalesce = new();
+    private readonly AssistantMarkdownCoalesceGate _assistantStreamTextCoalesce = new();
     private AssistantMarkdownQueueItem? _queuedAssistantMarkdown;
+    private AssistantStreamTextQueueItem? _queuedAssistantStreamText;
 
     public WebChatView()
     {

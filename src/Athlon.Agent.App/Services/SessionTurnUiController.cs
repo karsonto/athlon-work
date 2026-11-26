@@ -154,6 +154,12 @@ public sealed partial class SessionTurnUiController
     public bool PreserveSessionScroll { get; set; } = true;
 
     /// <summary>
+    /// When true, turn end still runs an authoritative timeline replay after live seal.
+    /// Bound to <c>Ui.ChatRenderTurnEndReplay</c> (default false).
+    /// </summary>
+    public bool ChatRenderTurnEndReplay { get; set; }
+
+    /// <summary>
     /// Replay shard cache shared across sessions. Assigned by <see cref="SessionUiCache"/>; null in
     /// unit tests, where reloads use <see cref="ReloadChatViewOverride"/> instead.
     /// </summary>

@@ -346,14 +346,14 @@ public sealed partial class SessionTurnUiController
 
         if (pendingTokens.Length > 0 && textMessageId is not null)
         {
-            // Live-render Markdown from the accumulated assistant content (C# Markdig → HTML).
+            // Live stream as plain text lines (blur-fade). Finalize / TextMessageEnd still posts
+            // STATIC_ASSISTANT_HTML via ApplyAssistantMarkdownAsync(streaming: false).
             var assistant = FindAssistantMessage(textMessageId);
             if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
             {
-                _ = ChatView.ApplyAssistantMarkdownAsync(
-                    assistant,
-                    streaming: true,
-                    browserScreenshots: BrowserScreenshotsSoFar());
+                _ = ChatView.ApplyAssistantStreamTextAsync(
+                    assistant.MessageId,
+                    assistant.Content);
             }
         }
 

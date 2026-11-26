@@ -350,6 +350,13 @@ public sealed class UiSettings
     public bool ChatRenderAtomicReplay { get; set; } = true;
 
     /// <summary>
+    /// When true, <c>FinalizeTurn</c> still runs an authoritative full-timeline replay after the
+    /// live surface is sealed. Default false keeps the live-sealed tree (no end-of-turn
+    /// <c>replaceChildren</c> flash). Session switch / theme rebuild paths are unchanged.
+    /// </summary>
+    public bool ChatRenderTurnEndReplay { get; set; }
+
+    /// <summary>
     /// Last durable chat session the user had open. Restored on cold start so the shell opens the
     /// previous conversation instead of an empty New Chat.
     /// </summary>

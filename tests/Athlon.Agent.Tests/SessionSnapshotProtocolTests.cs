@@ -128,6 +128,24 @@ public sealed class SessionSnapshotProtocolTests
         Assert.Contains("root.innerHTML = '';", render, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Stream_text_reveals_lines_with_blur_fade_and_crossfades_to_markdown()
+    {
+        var state = ReadChatAsset("timeline-state.js");
+        var protocol = ReadChatAsset("timeline-protocol.js");
+        var css = ReadChatAsset("chat-shell.css");
+
+        Assert.Contains("case 'ASSISTANT_STREAM_TEXT':", protocol, StringComparison.Ordinal);
+        Assert.Contains("function applyAssistantStreamText(", state, StringComparison.Ordinal);
+        Assert.Contains("function splitStreamVisualLines(", state, StringComparison.Ordinal);
+        Assert.Contains("function crossfadeStreamLinesToMarkdown(", state, StringComparison.Ordinal);
+        Assert.Contains("stream-line-enter", state, StringComparison.Ordinal);
+        Assert.Contains("prefers-reduced-motion", state, StringComparison.Ordinal);
+        Assert.Contains("@keyframes streamLineReveal", css, StringComparison.Ordinal);
+        Assert.Contains(".stream-line.is-pending", css, StringComparison.Ordinal);
+        Assert.Contains(".stream-lines-exit", css, StringComparison.Ordinal);
+    }
+
     private static string ExtractFunction(string source, string signature)
     {
         var start = source.IndexOf(signature, StringComparison.Ordinal);

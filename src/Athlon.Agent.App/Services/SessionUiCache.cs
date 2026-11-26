@@ -65,7 +65,8 @@ public sealed class SessionUiCache
                 {
                     SessionId = sessionId,
                     ReplayCache = _replayCache,
-                    PreserveSessionScroll = _settings.Ui.PreserveSessionUiState
+                    PreserveSessionScroll = _settings.Ui.PreserveSessionUiState,
+                    ChatRenderTurnEndReplay = _settings.Ui.ChatRenderTurnEndReplay
                 };
                 _controllers[sessionId] = controller;
                 _opened.Add(sessionId);
@@ -81,6 +82,8 @@ public sealed class SessionUiCache
         controller.SetShowToolCalls(true);
         // Always-on: migrate legacy false values when controllers are created.
         _settings.Ui.ShowToolCalls = true;
+        controller.PreserveSessionScroll = _settings.Ui.PreserveSessionUiState;
+        controller.ChatRenderTurnEndReplay = _settings.Ui.ChatRenderTurnEndReplay;
         if (requestScroll is not null)
         {
             controller.RequestScroll = requestScroll;

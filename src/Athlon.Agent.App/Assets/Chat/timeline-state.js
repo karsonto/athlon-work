@@ -1104,6 +1104,120 @@ function enhanceTeamTraceBubbles(root) {
   });
 }
 
+/** Soft visual-line width for long runs without newlines (CJK-friendly character count). */
+var STREAM_SOFT_LINE_CHARS = 96;
+var STREAM_MD_CROSSFADE_MS = 200;
+
+function prefersReducedStreamMotion() {
+  try {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Split accumulated stream text into complete lines + optional trailing pending fragment. */
+function splitStreamVisualLines(text) {
+  var raw = text == null ? '' : String(text);
+  var soft = STREAM_SOFT_LINE_CHARS;
+  var complete = [];
+  var pending = '';
+  var parts = raw.split('\n');
+  for (var i = 0; i < parts.length; i++) {
+    var chunk = parts[i];
+    var isLast = i === parts.length - 1;
+    // Soft-wrap overlong segments so a single fence/paragraph still reveals progressively.
+    while (chunk.length > soft) {
+      complete.push(chunk.slice(0, soft));
+      chunk = chunk.slice(soft);
+    }
+    if (isLast) {
+      pending = chunk;
+    } else {
+      complete.push(chunk);
+    }
+  }
+  return { complete: complete, pending: pending };
+}
+
+function ensureStreamLinesHost(contentNode) {
+  if (!contentNode) return null;
+  var host = contentNode.querySelector('.stream-lines');
+  if (host) return host;
+  contentNode.innerHTML = '';
+  delete contentNode.dataset.mdHtml;
+  contentNode.classList.add('md-root');
+  host = document.createElement('div');
+  host.className = 'stream-lines';
+  contentNode.appendChild(host);
+  contentNode.dataset.streamActive = '1';
+  delete contentNode.dataset.streamDone;
+  return host;
+}
+
+/**
+ * Live streaming body: reveal complete lines with blur-fade; keep the trailing fragment pending.
+ * Finalize still swaps to Markdown via applyAssistantHtml(streaming: false).
+ */
+function applyAssistantStreamText(messageId, text, createIfMissing, seq) {
+  var row = findAssistantBubbleRow(messageId);
+  if (!row && createIfMissing) {
+    row = createAssistantRow(messageId);
+    registerEntry('msg:' + messageId, row, seq === undefined ? nextLiveContentSeq() : seq);
+    state.assistantStarted[messageId] = true;
+    state.currentAssistantEl = row;
+  } else if (row && seq !== undefined) {
+    insertBySeq(row, seq);
+  }
+  if (!row) return;
+
+  var contentNode = row.querySelector('.bubble > .message-content');
+  if (!contentNode) return;
+  // Late stream patches after finalize must not resurrect the line layer.
+  if (contentNode.dataset.streamDone === '1') return;
+
+  var host = ensureStreamLinesHost(contentNode);
+  if (!host) return;
+
+  var split = splitStreamVisualLines(text);
+  var reduceMotion = prefersReducedStreamMotion();
+  var existingComplete = host.querySelectorAll('.stream-line:not(.is-pending)');
+  var already = existingComplete.length;
+
+  for (var i = already; i < split.complete.length; i++) {
+    var line = document.createElement('div');
+    line.className = 'stream-line' + (reduceMotion ? '' : ' stream-line-enter');
+    line.textContent = split.complete[i];
+    host.appendChild(line);
+  }
+
+  // Drop surplus complete lines if the host sent a shorter snapshot (rare).
+  var completeNodes = host.querySelectorAll('.stream-line:not(.is-pending)');
+  while (completeNodes.length > split.complete.length) {
+    host.removeChild(completeNodes[completeNodes.length - 1]);
+    completeNodes = host.querySelectorAll('.stream-line:not(.is-pending)');
+  }
+
+  var pendingEl = host.querySelector('.stream-line.is-pending');
+  if (split.pending) {
+    if (!pendingEl) {
+      pendingEl = document.createElement('div');
+      pendingEl.className = 'stream-line is-pending';
+      host.appendChild(pendingEl);
+    }
+    if (pendingEl.textContent !== split.pending) {
+      pendingEl.textContent = split.pending;
+    }
+  } else if (pendingEl) {
+    host.removeChild(pendingEl);
+  }
+
+  state.assistantStarted[messageId] = true;
+  state.currentAssistantEl = row;
+  updateEmptyStateVisibility();
+  scrollToBottom();
+}
+
 function applyMarkdownHtml(node, html, enhance) {
   if (!node) return;
   node.classList.add('md-root');
@@ -1127,6 +1241,55 @@ function applyMarkdownHtml(node, html, enhance) {
   }
 }
 
+function crossfadeStreamLinesToMarkdown(contentNode, html, enhance) {
+  if (!contentNode) return;
+  var reduceMotion = prefersReducedStreamMotion();
+  var lines = contentNode.querySelector('.stream-lines');
+  var nextHtml = html || '';
+
+  contentNode.dataset.streamDone = '1';
+  delete contentNode.dataset.streamActive;
+  contentNode.dataset.mdHtml = nextHtml;
+
+  if (!lines || reduceMotion) {
+    contentNode.innerHTML = nextHtml;
+    contentNode.classList.add('md-root');
+    if (enhance !== false) {
+      enhanceTeamTraceBubbles(contentNode);
+      if (state.batching) state.pendingEnhancementRoots.push(contentNode);
+      else {
+        enhanceCodeBlocksNow(contentNode);
+        scheduleMermaidRender(contentNode);
+      }
+    }
+    return;
+  }
+
+  var md = document.createElement('div');
+  md.className = 'md-root stream-md-enter';
+  md.innerHTML = nextHtml;
+  lines.classList.add('stream-lines-exit');
+  contentNode.appendChild(md);
+
+  if (enhance !== false) {
+    enhanceTeamTraceBubbles(md);
+    if (state.batching) state.pendingEnhancementRoots.push(md);
+    else {
+      enhanceCodeBlocksNow(md);
+      scheduleMermaidRender(md);
+    }
+  }
+
+  window.setTimeout(function () {
+    if (!contentNode.isConnected) return;
+    if (lines.parentNode === contentNode) contentNode.removeChild(lines);
+    // Flatten: move md children into contentNode so selectors stay `.message-content`.
+    while (md.firstChild) contentNode.insertBefore(md.firstChild, md);
+    if (md.parentNode === contentNode) contentNode.removeChild(md);
+    contentNode.classList.add('md-root');
+  }, STREAM_MD_CROSSFADE_MS);
+}
+
 function applyAssistantHtml(messageId, html, createIfMissing, streaming, responseDurationMs, seq) {
   let row = findAssistantBubbleRow(messageId);
   if (!row && createIfMissing) {
@@ -1143,19 +1306,28 @@ function applyAssistantHtml(messageId, html, createIfMissing, streaming, respons
   // Query content on the row itself — do not re-query document (breaks DocumentFragment batches).
   var contentNode = row.querySelector('.bubble > .message-content');
   var nextHtml = html || '';
-  var sameHtml = !!(contentNode && contentNode.dataset.mdHtml === nextHtml);
-  applyMarkdownHtml(contentNode, nextHtml, streaming !== true);
-  if (streaming !== true) {
-    // The files-changed card take its own seq slot, so no reordering is needed here.
-    setMessageMeta(row, formatResponseDuration(responseDurationMs));
-    ensureDownloadButton(row);
+  var hasStreamLines = !!(contentNode && contentNode.querySelector('.stream-lines'));
+
+  if (streaming === true) {
+    // Legacy streaming HTML path (tests / old hosts): fall back to plain markdown patch.
+    var sameHtml = !!(contentNode && contentNode.dataset.mdHtml === nextHtml);
+    applyMarkdownHtml(contentNode, nextHtml, false);
+    updateEmptyStateVisibility();
+    if (!sameHtml) scrollToBottom();
+    return;
   }
+
+  if (hasStreamLines) {
+    crossfadeStreamLinesToMarkdown(contentNode, nextHtml, true);
+  } else {
+    applyMarkdownHtml(contentNode, nextHtml, true);
+  }
+
+  // The files-changed card take its own seq slot, so no reordering is needed here.
+  setMessageMeta(row, formatResponseDuration(responseDurationMs));
+  ensureDownloadButton(row);
   updateEmptyStateVisibility();
-  // Identical streaming patches still need scroll follow only when height may have changed;
-  // same HTML means no growth, so skip the layout-forcing scroll path.
-  if (!(streaming === true && sameHtml)) {
-    scrollToBottom();
-  }
+  scrollToBottom();
 }
 
 const codeObserver = typeof IntersectionObserver === 'function'

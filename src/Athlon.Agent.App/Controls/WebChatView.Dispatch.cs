@@ -65,8 +65,18 @@ public partial class WebChatView
         int? responseDurationMs = null,
         IReadOnlyList<ImageAttachment>? browserScreenshots = null)
     {
+        // Streaming display uses ASSISTANT_STREAM_TEXT (line blur-fade). Markdown HTML is reserved
+        // for finalize / replay so we do not Markdig on every token flush.
+        if (streaming)
+        {
+            return ApplyAssistantStreamTextAsync(message.MessageId, message.Content ?? string.Empty);
+        }
+
+        // Drop any queued stream-text follow-up; finalize owns the bubble from here.
+        _queuedAssistantStreamText = null;
+
         var content = message.Content ?? string.Empty;
-        var decision = _assistantMarkdownCoalesce.TryBegin(message.MessageId, content, streaming);
+        var decision = _assistantMarkdownCoalesce.TryBegin(message.MessageId, content, streaming: false);
         switch (decision)
         {
             case CoalesceDecision.SkipUnchanged:
@@ -75,7 +85,7 @@ public partial class WebChatView
                 // Keep the live ViewModel reference so a follow-up flush sees the latest Content.
                 _queuedAssistantMarkdown = new AssistantMarkdownQueueItem(
                     message,
-                    streaming,
+                    Streaming: false,
                     responseDurationMs,
                     browserScreenshots);
                 return Task.CompletedTask;
@@ -83,9 +93,57 @@ public partial class WebChatView
                 _queuedAssistantMarkdown = null;
                 return PostAssistantMarkdownCoalescedAsync(
                     message,
-                    streaming,
+                    streaming: false,
                     responseDurationMs,
                     browserScreenshots);
+        }
+    }
+
+    public Task ApplyAssistantStreamTextAsync(string messageId, string text)
+    {
+        var decision = _assistantStreamTextCoalesce.TryBegin(messageId, text ?? string.Empty, streaming: true);
+        switch (decision)
+        {
+            case CoalesceDecision.SkipUnchanged:
+                return Task.CompletedTask;
+            case CoalesceDecision.Queued:
+                _queuedAssistantStreamText = new AssistantStreamTextQueueItem(messageId, text ?? string.Empty);
+                return Task.CompletedTask;
+            default:
+                _queuedAssistantStreamText = null;
+                return PostAssistantStreamTextCoalescedAsync(messageId, text ?? string.Empty);
+        }
+    }
+
+    private async Task PostAssistantStreamTextCoalescedAsync(string messageId, string text)
+    {
+        try
+        {
+            var json = ChatEventSerializer.SerializeAssistantStreamText(messageId, text);
+            await PostTimelineEventAsync(json).ConfigureAwait(true);
+        }
+        catch
+        {
+            _assistantStreamTextCoalesce.Fail();
+            _queuedAssistantStreamText = null;
+            throw;
+        }
+
+        _assistantStreamTextCoalesce.Complete();
+        var queued = _queuedAssistantStreamText;
+        _queuedAssistantStreamText = null;
+        if (queued is null)
+        {
+            return;
+        }
+
+        var followDecision = _assistantStreamTextCoalesce.TryBegin(
+            queued.MessageId,
+            queued.Text,
+            streaming: true);
+        if (followDecision == CoalesceDecision.PostNow)
+        {
+            await PostAssistantStreamTextCoalescedAsync(queued.MessageId, queued.Text).ConfigureAwait(true);
         }
     }
 
@@ -139,6 +197,8 @@ public partial class WebChatView
         bool Streaming,
         int? ResponseDurationMs,
         IReadOnlyList<ImageAttachment>? BrowserScreenshots);
+
+    private sealed record AssistantStreamTextQueueItem(string MessageId, string Text);
 
     public Task ApplyToolResultMarkdownAsync(ChatMessageViewModel message)
     {

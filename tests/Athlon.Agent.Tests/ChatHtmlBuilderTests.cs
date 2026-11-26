@@ -213,6 +213,15 @@ public sealed class ChatHtmlBuilderTests
     }
 
     [Fact]
+    public void Timeline_css_includes_stream_line_blur_fade()
+    {
+        var css = ReadChatAsset("chat-shell.css");
+        Assert.Contains("@keyframes streamLineReveal", css, StringComparison.Ordinal);
+        Assert.Contains(".stream-line-enter", css, StringComparison.Ordinal);
+        Assert.Contains("prefers-reduced-motion: reduce", css, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildShellHtml_uses_gated_coalesced_scrolling()
     {
         var surface = Surface();

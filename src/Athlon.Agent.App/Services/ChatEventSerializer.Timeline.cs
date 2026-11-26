@@ -172,6 +172,21 @@ internal static partial class ChatEventSerializer
         });
     }
 
+    /// <summary>
+    /// Live streaming body as plain text (no Markdig). The page reveals complete lines with a
+    /// blur-fade; finalize still uses <see cref="SerializeStaticAssistantHtml"/>.
+    /// </summary>
+    public static string SerializeAssistantStreamText(string messageId, string text, long? seq = null)
+    {
+        return SerializeAgui("ASSISTANT_STREAM_TEXT", new
+        {
+            seq,
+            messageId,
+            text = text ?? string.Empty,
+            createIfMissing = true
+        });
+    }
+
     public static string SerializeCompactionCheckpoint(ChatMessageViewModel message)
     {
         var id = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;

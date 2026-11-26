@@ -108,19 +108,28 @@ public sealed partial class SessionTurnUiController
                 // Seal the now-finished segment: this drops the provisional live reasoning and
                 // reduces the fold to the transcript's own record.
                 SealActivitySegment();
-                // Re-render from the transcript so the resting timeline is byte-for-byte what a
-                // session switch or restart would produce. The incremental live events only need to
-                // look right while the turn is in flight; this replay is what settles the timeline
-                // into the canonical projection.
-                SyncChatView(immediate: true, authoritative: true);
-                // Overlay the still-open fold (activity between the last seal and turn end) onto the
-                // replayed fold, keyed by the same turn anchor and block index.
-                RestoreLiveTurnCardsAfterReload();
+                if (ChatRenderTurnEndReplay)
+                {
+                    // Rollback path: re-render from the transcript so the resting timeline is
+                    // byte-for-byte what a session switch or restart would produce.
+                    SyncChatView(immediate: true, authoritative: true);
+                    // Overlay the still-open fold onto the replayed fold.
+                    RestoreLiveTurnCardsAfterReload();
+                }
+
                 _turnLifecycle.EnterResting();
 
                 if (IsDisplayed)
                 {
-                    RequestScrollImmediate();
+                    // Soft follow after in-place seal; force scroll only when we rebuilt the tree.
+                    if (ChatRenderTurnEndReplay)
+                    {
+                        RequestScrollImmediate();
+                    }
+                    else
+                    {
+                        RequestScroll();
+                    }
                 }
             }
         });

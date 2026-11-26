@@ -152,12 +152,20 @@ function handleEvent(event) {
       state.assistantStarted[event.messageId] = false;
       break;
     case 'TEXT_MESSAGE_CONTENT':
-      // Plain-text deltas are unused for display; live Markdown arrives via STATIC_ASSISTANT_HTML.
+      // Deltas are unused for display; live body arrives via ASSISTANT_STREAM_TEXT.
       finalizeReasoningLabel(event.messageId);
       if (!state.assistantStarted[event.messageId]) ensureAssistantBubble(event.messageId);
       break;
     case 'TEXT_MESSAGE_END':
       state.currentAssistantEl = null;
+      break;
+    case 'ASSISTANT_STREAM_TEXT':
+      applyAssistantStreamText(
+        event.messageId,
+        event.text || '',
+        event.createIfMissing !== false,
+        event.seq);
+      updateCopyText(findAssistantBubbleRow(event.messageId), event.text || '');
       break;
     case 'STATIC_ASSISTANT_HTML':
       applyAssistantHtml(
