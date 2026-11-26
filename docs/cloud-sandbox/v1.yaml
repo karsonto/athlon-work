@@ -104,6 +104,10 @@ paths:
   /v1/sessions/{id}/sync/delta:
     post:
       summary: Apply desired manifest + uploaded blobs (deletes staging extras)
+      description: |
+        Multipart fields: `kind`, `manifest` (JSON desired list), and one part per uploaded file.
+        Prefer part name `blob:<base64url(utf8 relative path)>` with any ASCII filename (e.g. `bin`).
+        Legacy parts that rely on Content-Disposition filename are still accepted when ASCII-safe.
       parameters:
         - in: path
           name: id
@@ -112,6 +116,8 @@ paths:
       responses:
         "204":
           description: applied
+        "400":
+          description: missing blob for a desired path
   /v1/sessions/{id}/sync/pull:
     get:
       summary: Pull workspace tar.gz

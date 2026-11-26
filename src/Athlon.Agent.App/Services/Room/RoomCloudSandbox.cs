@@ -518,11 +518,15 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
                 var full = Path.Combine(hostRoot, entry.Path.Replace('/', Path.DirectorySeparatorChar));
                 if (!File.Exists(full))
                 {
-                    continue;
+                    throw new InvalidOperationException($"增量同步缺少本地文件：{entry.Path}");
                 }
 
                 var bytes = await File.ReadAllBytesAsync(full, cancellationToken).ConfigureAwait(false);
-                form.Add(new ByteArrayContent(bytes), "files", entry.Path);
+                // ASCII-safe field name: blob:<base64url(utf8 path)> — avoids non-ASCII multipart filename breakage.
+                var fieldName = EncodeBlobFieldName(entry.Path);
+                var part = new ByteArrayContent(bytes);
+                part.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                form.Add(part, fieldName, "bin");
             }
 
             using var deltaReq = CreateRequest(
@@ -646,6 +650,16 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         }
 
         throw new InvalidOperationException($"{action}失败（{(int)res.StatusCode}）：{Truncate(body, 240)}");
+    }
+
+    /// <summary>Multipart field name carrying a UTF-8 path without relying on Content-Disposition filename.</summary>
+    internal static string EncodeBlobFieldName(string relativePath)
+    {
+        var token = Convert.ToBase64String(Encoding.UTF8.GetBytes(relativePath))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+        return "blob:" + token;
     }
 
     /// <summary>

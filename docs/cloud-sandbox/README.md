@@ -15,6 +15,7 @@ This is **not** an Athlon Skill package manifest. It describes files the desktop
 2. `POST /v1/sessions/{id}/sync/manifest` — server compares desired to **current staging**.
 3. Response `need` / `needUpload` = paths the **desktop must upload** (sha missing or changed). `mtimeUnixMs` is ignored for decisions.
 4. `POST /v1/sessions/{id}/sync/delta` — full desired manifest + blobs for `needUpload`; staging extras are deleted.
+   Blob parts use ASCII-safe field names `blob:<base64url(utf8 path)>` (not Content-Disposition filename), so non-ASCII names like `POC白皮书翻译版.pdf` survive multipart.
 5. Full `POST /v1/sessions/{id}/sync` (tar.gz) **replaces** staging the same way (clear + extract).
 
 When skills are filtered by selected names, the filtered tree is the full desired set for `kind=skills` (unselected skills are removed from staging).

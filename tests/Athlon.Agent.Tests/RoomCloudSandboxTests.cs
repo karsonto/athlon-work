@@ -22,6 +22,20 @@ public sealed class RoomCloudSandboxTests
     }
 
     [Fact]
+    public void EncodeBlobFieldName_IsAsciiSafeForChinesePath()
+    {
+        var path = "POC白皮书翻译版.pdf";
+        var field = RoomCloudSandbox.EncodeBlobFieldName(path);
+        Assert.StartsWith("blob:", field, StringComparison.Ordinal);
+        Assert.True(field.All(static ch => ch <= 0x7F));
+        var token = field["blob:".Length..];
+        var pad = new string('=', (4 - token.Length % 4) % 4);
+        var decoded = Encoding.UTF8.GetString(
+            Convert.FromBase64String(token.Replace('-', '+').Replace('_', '/') + pad));
+        Assert.Equal(path, decoded);
+    }
+
+    [Fact]
     public async Task Probe_WithoutBaseUrl_IsUnavailable()
     {
         var settings = new AppSettings();
