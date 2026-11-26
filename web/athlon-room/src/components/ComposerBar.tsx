@@ -19,8 +19,38 @@ interface ComposerBarProps {
   selfSenderId?: string;
   onDraftChange: (v: string) => void;
   onSend: () => void;
-  onPickFiles: (files: FileList | null) => void;
+  onPickFiles: (files: FileList | File[] | null) => void;
   onRemovePending: (id: string) => void;
+}
+
+function clipboardImageFile(file: File): File {
+  const hasName = Boolean(file.name && file.name !== "image.png" && !file.name.startsWith("image."));
+  if (hasName) return file;
+  const ext = (file.type.split("/")[1] || "png").replace(/[^a-z0-9]/gi, "") || "png";
+  return new File([file], `clipboard-${Date.now()}.${ext}`, {
+    type: file.type || "image/png",
+    lastModified: Date.now(),
+  });
+}
+
+function extractClipboardImages(data: DataTransfer | null): File[] {
+  if (!data) return [];
+  const files: File[] = [];
+  const items = data.items;
+  if (items) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
+      const raw = item.getAsFile();
+      if (raw) files.push(clipboardImageFile(raw));
+    }
+  }
+  if (files.length > 0) return files;
+  // Some browsers expose screenshot files on clipboardData.files instead of items.
+  for (const file of Array.from(data.files ?? [])) {
+    if (file.type.startsWith("image/")) files.push(clipboardImageFile(file));
+  }
+  return files;
 }
 
 const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
@@ -356,7 +386,7 @@ export function ComposerBar({
             ref={textareaRef}
             className="max-h-28 min-h-[42px] flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] text-slate-900 outline-none placeholder:text-slate-400 dark:text-zinc-100 dark:placeholder:text-zinc-500"
             rows={1}
-            placeholder="输入消息，@ 可提及成员或召唤助手"
+            placeholder="输入消息，可粘贴图片；@ 可提及成员或召唤助手"
             value={draft}
             disabled={sending}
             onChange={(e) => {
@@ -367,6 +397,12 @@ export function ComposerBar({
             onKeyUp={syncCaret}
             onSelect={syncCaret}
             onFocus={() => setEmojiOpen(false)}
+            onPaste={(e) => {
+              const images = extractClipboardImages(e.clipboardData);
+              if (images.length === 0) return;
+              e.preventDefault();
+              onPickFiles(images);
+            }}
             onKeyDown={(e) => {
               if (showMention && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
                 e.preventDefault();

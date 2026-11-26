@@ -478,7 +478,7 @@ public sealed class ParallelToolExecutionTests
         new FileListTool(RouterTestDependencies.CreateWorkspaceGuard(), CreateAudit()).Definition.Name;
 
     private static string MemorySearchToolName() =>
-        new MemorySearchTool(new StubLongTermMemory(), new NoOpLogger()).Definition.Name;
+        new MemorySearchTool(new StubLongTermMemory()).Definition.Name;
 
     private static AuditLogService CreateAudit()
     {

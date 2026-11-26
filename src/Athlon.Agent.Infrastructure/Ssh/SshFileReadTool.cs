@@ -31,76 +31,69 @@ public sealed class SshFileReadTool(
             return error;
         }
 
-        try
+        var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
+        if (info is null)
         {
-            var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
-            if (info is null)
-            {
-                var suggestions = await SuggestSimilarNamesAsync(fullPath, cancellationToken).ConfigureAwait(false);
-                return ToolResult.Failure(SimilarFileNameSuggester.FormatNotFound(suggestions), fullPath);
-            }
-
-            if (info.IsDirectory)
-            {
-                return ToolResult.Failure("Path is a directory", fullPath);
-            }
-
-            var fileRead = settings.FileRead;
-            if (info.Length > fileRead.MaxFileBytes)
-            {
-                return ToolResult.Failure(
-                    "File exceeds the configured size limit — use grep_files to locate the needed range, then read with start_line/end_line",
-                    fullPath);
-            }
-
-            if (invocation.Arguments.TryGetInt32("start_line", out var startLine)
-                && invocation.Arguments.TryGetInt32("end_line", out var endLine)
-                && endLine < startLine)
-            {
-                return ToolInvocationErrors.Failure(
-                    "Invalid line range",
-                    new ToolInvocationError(
-                        "file_read.invalid_range",
-                        "$.end_line",
-                        $">= start_line ({startLine})",
-                        endLine.ToString(),
-                        "Set end_line to the same value as start_line or a later 1-based line number."));
-            }
-
-            var selection = FileReadLineReader.ResolveSelection(invocation, fileRead);
-            // Stream line-by-line over SFTP so we do not materialize the whole remote file in memory
-            // when only a window is needed (and can stop early when CountTotalLines is false).
-            var read = await client.ReadViaStreamAsync(
-                    fullPath,
-                    (stream, ct) => FileReadLineReader.ReadFromStreamAsync(stream, selection, fileRead, ct),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            await WorkspaceToolHelper.AuditAsync(
-                audit,
-                "file_read",
-                new
-                {
-                    path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath),
-                    totalLines = read.TotalLines,
-                    linesReturned = read.LinesReturned,
-                    startLine = read.StartLine,
-                    nextStartLine = read.NextStartLine,
-                    truncated = read.Truncated,
-                    remote = true
-                },
-                cancellationToken).ConfigureAwait(false);
-
-            var summary = FileReadLineReader.BuildSummary(RemotePathNormalizer.GetFileName(fullPath), read);
-            var content = read.LinesReturned == 0 && string.IsNullOrEmpty(read.Body)
-                ? "(no lines in range)"
-                : read.Body;
-            return ToolResult.Success(summary, content);
+            var suggestions = await SuggestSimilarNamesAsync(fullPath, cancellationToken).ConfigureAwait(false);
+            return ToolResult.Failure(SimilarFileNameSuggester.FormatNotFound(suggestions), fullPath);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+
+        if (info.IsDirectory)
         {
-            return ToolResult.Failure("Read failed", ex.Message);
+            return ToolResult.Failure("Path is a directory", fullPath);
         }
+
+        var fileRead = settings.FileRead;
+        if (info.Length > fileRead.MaxFileBytes)
+        {
+            return ToolResult.Failure(
+                "File exceeds the configured size limit — use grep_files to locate the needed range, then read with start_line/end_line",
+                fullPath);
+        }
+
+        if (invocation.Arguments.TryGetInt32("start_line", out var startLine)
+            && invocation.Arguments.TryGetInt32("end_line", out var endLine)
+            && endLine < startLine)
+        {
+            return ToolInvocationErrors.Failure(
+                "Invalid line range",
+                new ToolInvocationError(
+                    "file_read.invalid_range",
+                    "$.end_line",
+                    $">= start_line ({startLine})",
+                    endLine.ToString(),
+                    "Set end_line to the same value as start_line or a later 1-based line number."));
+        }
+
+        var selection = FileReadLineReader.ResolveSelection(invocation, fileRead);
+        // Stream line-by-line over SFTP so we do not materialize the whole remote file in memory
+        // when only a window is needed (and can stop early when CountTotalLines is false).
+        var read = await client.ReadViaStreamAsync(
+                fullPath,
+                (stream, ct) => FileReadLineReader.ReadFromStreamAsync(stream, selection, fileRead, ct),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await WorkspaceToolHelper.AuditAsync(
+            audit,
+            "file_read",
+            new
+            {
+                path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath),
+                totalLines = read.TotalLines,
+                linesReturned = read.LinesReturned,
+                startLine = read.StartLine,
+                nextStartLine = read.NextStartLine,
+                truncated = read.Truncated,
+                remote = true
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        var summary = FileReadLineReader.BuildSummary(RemotePathNormalizer.GetFileName(fullPath), read);
+        var content = read.LinesReturned == 0 && string.IsNullOrEmpty(read.Body)
+            ? "(no lines in range)"
+            : read.Body;
+        return ToolResult.Success(summary, content);
     }
 
     private async Task<IReadOnlyList<string>> SuggestSimilarNamesAsync(string fullPath, CancellationToken cancellationToken)

@@ -10,11 +10,8 @@ namespace Athlon.Agent.Infrastructure.Memory;
 /// </summary>
 public sealed class ProfileGetTool(
     IProfileMemory profileMemory,
-    AppSettings settings,
-    IAppLogger logger) : IAgentTool, ILongTermMemoryTool
+    AppSettings settings) : IAgentTool, ILongTermMemoryTool
 {
-    private readonly IAppLogger _logger = logger.ForContext("ProfileGetTool");
-
     public ToolDefinition Definition => new(
         Name: "profile_get",
         Description:
@@ -41,27 +38,19 @@ public sealed class ProfileGetTool(
             return ToolResult.Success("Profile disabled", "The account profile is disabled in settings.");
         }
 
-        try
+        if (invocation.Arguments.TryGetString("file", out var file) && !string.IsNullOrWhiteSpace(file))
         {
-            if (invocation.Arguments.TryGetString("file", out var file) && !string.IsNullOrWhiteSpace(file))
+            if (!TryParseKind(file, out var kind))
             {
-                if (!TryParseKind(file, out var kind))
-                {
-                    return ToolResult.Failure(
-                        "Unknown profile file",
-                        $"file must be one of: {string.Join(", ", ProfileKinds.All.Select(ToArgument))}");
-                }
-
-                return await ReadOneAsync(kind, cancellationToken).ConfigureAwait(false);
+                return ToolResult.Failure(
+                    "Unknown profile file",
+                    $"file must be one of: {string.Join(", ", ProfileKinds.All.Select(ToArgument))}");
             }
 
-            return await ListAsync(cancellationToken).ConfigureAwait(false);
+            return await ReadOneAsync(kind, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex)
-        {
-            _logger.Warning("Profile read failed: {Error}", ex.Message);
-            return ToolResult.Failure("Profile read failed", ex.Message);
-        }
+
+        return await ListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ToolResult> ListAsync(CancellationToken cancellationToken)

@@ -34,70 +34,63 @@ public sealed class SshFileEditTool(
         }
 
         var newText = invocation.Arguments.GetString("new_text") ?? string.Empty;
-        try
+        var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
+        if (info is null)
         {
-            var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
-            if (info is null)
-            {
-                return ToolResult.Failure("File not found", fullPath);
-            }
-
-            if (info.IsDirectory)
-            {
-                return ToolResult.Failure("Path is a directory", fullPath);
-            }
-
-            if (info.Length > MaxFileEditBytes)
-            {
-                return ToolResult.Failure(
-                    "File too large for file_edit",
-                    $"File is {info.Length:N0} bytes, exceeding the {MaxFileEditBytes / 1024} KiB file_edit threshold. Use apply_patch instead.");
-            }
-
-            var content = await client.ReadTextAsync(fullPath, cancellationToken).ConfigureAwait(false);
-            var replaceAll = invocation.Arguments.GetBoolean("replace_all");
-            var match = FileEditMatcher.TryMatch(content, oldText, replaceAll);
-            switch (match.Status)
-            {
-                case FileEditMatchStatus.NotFound:
-                    return ToolResult.Failure("Text not found", FileEditMatcher.BuildNotFoundMessage(content, oldText));
-                case FileEditMatchStatus.NotUnique:
-                    return ToolResult.Failure(
-                        "Text is not unique",
-                        FileEditMatcher.BuildNotUniqueMessage(content, match.MatchedOldText, match.Occurrences));
-            }
-
-            var effectiveNewText = FileEditMatcher.ResolveNewText(oldText, newText, match);
-            var updated = FileEditMatcher.ApplyMatchedEdit(content, match, newText, replaceAll);
-            await client.WriteTextAsync(fullPath, updated, cancellationToken).ConfigureAwait(false);
-            var readBack = await client.ReadTextAsync(fullPath, cancellationToken).ConfigureAwait(false);
-            if (!string.Equals(readBack, updated, StringComparison.Ordinal))
-            {
-                await client.WriteTextAsync(fullPath, content, CancellationToken.None).ConfigureAwait(false);
-                return ToolResult.Failure(
-                    "Write failed",
-                    $"{RemotePathNormalizer.GetFileName(fullPath)}: written content did not match the edit.");
-            }
-
-            await WorkspaceToolHelper.AuditAsync(
-                audit,
-                "file_edit",
-                new
-                {
-                    path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath),
-                    oldChars = match.MatchedOldText.Length,
-                    newChars = effectiveNewText.Length,
-                    occurrences = replaceAll ? match.Occurrences : 1,
-                    remote = true,
-                    normalized = match.Kind != OldTextCandidateKind.Exact,
-                    nonstandardEol = TextLineEndings.IsNonstandard(content)
-                },
-                cancellationToken).ConfigureAwait(false);
-            return ToolResult.Success($"Edited {RemotePathNormalizer.GetFileName(fullPath)}");
+            return ToolResult.Failure("File not found", fullPath);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+
+        if (info.IsDirectory)
         {
-            return ToolResult.Failure("Edit failed", ex.Message);
+            return ToolResult.Failure("Path is a directory", fullPath);
         }
+
+        if (info.Length > MaxFileEditBytes)
+        {
+            return ToolResult.Failure(
+                "File too large for file_edit",
+                $"File is {info.Length:N0} bytes, exceeding the {MaxFileEditBytes / 1024} KiB file_edit threshold. Use apply_patch instead.");
+        }
+
+        var content = await client.ReadTextAsync(fullPath, cancellationToken).ConfigureAwait(false);
+        var replaceAll = invocation.Arguments.GetBoolean("replace_all");
+        var match = FileEditMatcher.TryMatch(content, oldText, replaceAll);
+        switch (match.Status)
+        {
+            case FileEditMatchStatus.NotFound:
+                return ToolResult.Failure("Text not found", FileEditMatcher.BuildNotFoundMessage(content, oldText));
+            case FileEditMatchStatus.NotUnique:
+                return ToolResult.Failure(
+                    "Text is not unique",
+                    FileEditMatcher.BuildNotUniqueMessage(content, match.MatchedOldText, match.Occurrences));
+        }
+
+        var effectiveNewText = FileEditMatcher.ResolveNewText(oldText, newText, match);
+        var updated = FileEditMatcher.ApplyMatchedEdit(content, match, newText, replaceAll);
+        await client.WriteTextAsync(fullPath, updated, cancellationToken).ConfigureAwait(false);
+        var readBack = await client.ReadTextAsync(fullPath, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(readBack, updated, StringComparison.Ordinal))
+        {
+            await client.WriteTextAsync(fullPath, content, CancellationToken.None).ConfigureAwait(false);
+            return ToolResult.Failure(
+                "Write failed",
+                $"{RemotePathNormalizer.GetFileName(fullPath)}: written content did not match the edit.");
+        }
+
+        await WorkspaceToolHelper.AuditAsync(
+            audit,
+            "file_edit",
+            new
+            {
+                path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath),
+                oldChars = match.MatchedOldText.Length,
+                newChars = effectiveNewText.Length,
+                occurrences = replaceAll ? match.Occurrences : 1,
+                remote = true,
+                normalized = match.Kind != OldTextCandidateKind.Exact,
+                nonstandardEol = TextLineEndings.IsNonstandard(content)
+            },
+            cancellationToken).ConfigureAwait(false);
+        return ToolResult.Success($"Edited {RemotePathNormalizer.GetFileName(fullPath)}");
     }
 }

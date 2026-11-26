@@ -7,11 +7,8 @@ namespace Athlon.Agent.Infrastructure.Knowledge;
 
 public sealed class KnowledgeSearchTool(
     IKnowledgeSearchService searchService,
-    IActiveAgentSessionContext activeSessionContext,
-    IAppLogger logger) : IAgentTool, IGlobalKnowledgeTool
+    IActiveAgentSessionContext activeSessionContext) : IAgentTool, IGlobalKnowledgeTool
 {
-    private readonly IAppLogger _logger = logger.ForContext("KnowledgeSearchTool");
-
     public ToolDefinition Definition => new(
         Name: "knowledge_search",
         Description: "Search the global knowledge base modules explicitly enabled for the current session. Use for questions that may need uploaded reference documents. If no modules are enabled, the tool returns no results.",
@@ -39,37 +36,29 @@ public sealed class KnowledgeSearchTool(
             return ToolResult.Success("No active session", "No active session id is available, so no knowledge modules are enabled.");
         }
 
-        try
+        var result = await searchService.SearchAsync(sessionId, query, topK, cancellationToken).ConfigureAwait(false);
+        if (result.Hits.Count == 0 && result.Graph.IsEmpty)
         {
-            var result = await searchService.SearchAsync(sessionId, query, topK, cancellationToken).ConfigureAwait(false);
-            if (result.Hits.Count == 0 && result.Graph.IsEmpty)
-            {
-                return ToolResult.Success(
-                    "No knowledge hits",
-                    "No results found. The current session may have no enabled knowledge modules, or no indexed chunks matched the query.");
-            }
-
-            var builder = new StringBuilder();
-            for (var i = 0; i < result.Hits.Count; i++)
-            {
-                var hit = result.Hits[i];
-                builder.AppendLine($"[{i + 1}] score={hit.Score.ToString("0.000", CultureInfo.InvariantCulture)}");
-                builder.AppendLine(FormatSource(hit.ModuleName, hit.FileName, hit.TitlePath, hit.PageNumber));
-                builder.AppendLine(hit.Content.Trim());
-                builder.AppendLine();
-            }
-
-            AppendGraph(builder, result.Graph);
-            var summary = result.Hits.Count > 0
-                ? $"Found {result.Hits.Count} knowledge hits"
-                : "Found graph context";
-            return ToolResult.Success(summary, builder.ToString().TrimEnd());
+            return ToolResult.Success(
+                "No knowledge hits",
+                "No results found. The current session may have no enabled knowledge modules, or no indexed chunks matched the query.");
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+
+        var builder = new StringBuilder();
+        for (var i = 0; i < result.Hits.Count; i++)
         {
-            _logger.Warning("Knowledge search failed: {Message}", exception.Message);
-            return ToolResult.Failure("Knowledge search failed", exception.Message);
+            var hit = result.Hits[i];
+            builder.AppendLine($"[{i + 1}] score={hit.Score.ToString("0.000", CultureInfo.InvariantCulture)}");
+            builder.AppendLine(FormatSource(hit.ModuleName, hit.FileName, hit.TitlePath, hit.PageNumber));
+            builder.AppendLine(hit.Content.Trim());
+            builder.AppendLine();
         }
+
+        AppendGraph(builder, result.Graph);
+        var summary = result.Hits.Count > 0
+            ? $"Found {result.Hits.Count} knowledge hits"
+            : "Found graph context";
+        return ToolResult.Success(summary, builder.ToString().TrimEnd());
     }
 
     private static void AppendGraph(StringBuilder builder, KnowledgeGraphSearchBlock graph)

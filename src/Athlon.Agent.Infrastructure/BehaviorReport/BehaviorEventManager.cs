@@ -261,24 +261,8 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
             _uploadTask = null;
         }
 
-        try
-        {
-            cts?.Cancel();
-        }
-        catch
-        {
-            // ignore
-        }
-
-        try
-        {
-            task?.Wait(TimeSpan.FromSeconds(2));
-        }
-        catch
-        {
-            // ignore shutdown races
-        }
-
+        BestEffort.Ignore(() => cts?.Cancel(), _logger, "behavior upload cancel");
+        BestEffort.Ignore(() => task?.Wait(TimeSpan.FromSeconds(2)), _logger, "behavior upload join");
         cts?.Dispose();
     }
 
@@ -383,24 +367,8 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
             _heartbeatTask = null;
         }
 
-        try
-        {
-            cts?.Cancel();
-        }
-        catch
-        {
-            // ignore
-        }
-
-        try
-        {
-            task?.Wait(TimeSpan.FromSeconds(2));
-        }
-        catch
-        {
-            // ignore shutdown races
-        }
-
+        BestEffort.Ignore(() => cts?.Cancel(), _logger, "behavior heartbeat cancel");
+        BestEffort.Ignore(() => task?.Wait(TimeSpan.FromSeconds(2)), _logger, "behavior heartbeat join");
         cts?.Dispose();
     }
 

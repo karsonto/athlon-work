@@ -102,19 +102,11 @@ public sealed class TodoWriteTool(
             });
         }
 
-        try
-        {
-            var list = await taskListStore.ApplyMergeAsync(sessionId, normalized, merge, cancellationToken).ConfigureAwait(false);
-            taskListChangedNotifier.Notify(sessionId);
-            var summary = BuildSummary(list);
-            _logger.Information("Updated task list for session {SessionId}: {Summary}", sessionId, summary);
-            return ToolResult.Success(summary, FormatListForAgent(list));
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning("todo_write failed: {Error}", ex.Message);
-            return ToolResult.Failure("Persist failed", ex.Message);
-        }
+        var list = await taskListStore.ApplyMergeAsync(sessionId, normalized, merge, cancellationToken).ConfigureAwait(false);
+        taskListChangedNotifier.Notify(sessionId);
+        var summary = BuildSummary(list);
+        _logger.Information("Updated task list for session {SessionId}: {Summary}", sessionId, summary);
+        return ToolResult.Success(summary, FormatListForAgent(list));
     }
 
     private static string BuildSummary(SessionTaskList list)

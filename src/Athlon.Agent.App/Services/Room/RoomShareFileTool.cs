@@ -72,7 +72,7 @@ public sealed class RoomShareFileTool(
             }
 
             var workspaceRoot = roomStore.GetRoom(roomId)?.WorkspaceRoot;
-            // Reference the workspace file in place — no second copy under rooms/ or .athlon-room.
+            // Reference the workspace file in place — no second copy under rooms/ or user-upload.
             var localAttachment = roomStore.SaveAttachmentFromPath(roomId, fullPath, workspaceRoot);
 
             var kind = localAttachment.IsImage ? "image" : "file";

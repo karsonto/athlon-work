@@ -29,6 +29,10 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        UnhandledExceptionObserver.Configure(ReportUnhandled);
+        UnhandledExceptionObserver.RegisterProcessHooks();
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+
         StartupTrace("OnStartup entered");
         base.OnStartup(e);
         AppThemeManager.Apply(AppThemeKind.Dark);
@@ -173,6 +177,40 @@ public partial class App : Application
         }
 
         System.Diagnostics.Trace.WriteLine($"[Startup] {AppTimeZone.Now:O} {message}");
+    }
+
+    private static void ReportUnhandled(string message, Exception? exception)
+    {
+        try
+        {
+            if (Current is App { _services: { } services }
+                && services.GetService<IAppLogger>() is { } logger)
+            {
+                var unhandled = logger.ForContext("Unhandled");
+                if (exception is null)
+                {
+                    unhandled.Warning("{Message}", message);
+                }
+                else
+                {
+                    unhandled.Error(exception, "{Message}", message);
+                }
+
+                return;
+            }
+        }
+        catch
+        {
+            // Fall through to StartupTrace.
+        }
+
+        StartupTrace(message);
+    }
+
+    private void OnDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+    {
+        UnhandledExceptionObserver.Report("Dispatcher", e.Exception);
+        // Do not set Handled = true: a half-updated UI is worse than a crash report.
     }
 
     private static void StartCliIpc(ServiceProvider services)

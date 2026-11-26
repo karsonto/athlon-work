@@ -30,7 +30,7 @@ interface ChatPaneProps {
   stoppingAgent?: boolean;
   onDraftChange: (v: string) => void;
   onSend: () => void;
-  onPickFiles: (files: FileList | null) => void;
+  onPickFiles: (files: FileList | File[] | null) => void;
   onRemovePending: (id: string) => void;
   onPreviewImage: (src: string, alt: string) => void;
   onOpenSettings?: () => void;

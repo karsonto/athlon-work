@@ -785,10 +785,12 @@ export default function App() {
     }
   };
 
-  const onPickFiles = (files: FileList | null) => {
-    if (!files?.length || !activeKey) return;
+  const onPickFiles = (files: FileList | File[] | null) => {
+    if (!files || !activeKey) return;
+    const list = Array.isArray(files) ? files : Array.from(files);
+    if (list.length === 0) return;
     const next: PendingFile[] = [];
-    for (const file of Array.from(files)) {
+    for (const file of list) {
       const id = newId();
       const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
       next.push({ id, file, previewUrl });

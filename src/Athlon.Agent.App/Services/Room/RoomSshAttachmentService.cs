@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Athlon.Agent.App.Services.Room;
 
-/// <summary>Mirrors room chat attachments into an SSH workspace <c>.athlon-room/{roomId}</c> tree.</summary>
+/// <summary>Mirrors room chat attachments into an SSH workspace <c>user-upload</c> tree.</summary>
 public sealed class RoomSshAttachmentService(
     RoomStore store,
     AppSettings settings,

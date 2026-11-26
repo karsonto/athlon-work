@@ -140,16 +140,22 @@ public readonly record struct RoomWorkspaceBinding(
             : $"[SSH] {ssh.Username}@{ssh.Host}";
     }
 
+    /// <summary>
+    /// User chat uploads land under <c>{workspace}/user-upload</c> (local or SSH), not under
+    /// a hidden room metadata tree.
+    /// </summary>
     public static string AttachmentMirrorDir(string workspaceRoot, string roomId, WorkspaceKind kind)
     {
+        _ = roomId;
+        const string folder = "user-upload";
         if (kind == WorkspaceKind.Ssh)
         {
             return RemotePathNormalizer.Combine(
                 RemotePathNormalizer.NormalizeRoot(workspaceRoot),
-                $".athlon-room/{roomId}");
+                folder);
         }
 
-        return Path.Combine(Path.GetFullPath(workspaceRoot), ".athlon-room", roomId);
+        return Path.Combine(Path.GetFullPath(workspaceRoot), folder);
     }
 
     private static bool RootsEqual(string configured, string candidate, WorkspaceKind kind)

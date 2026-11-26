@@ -77,14 +77,7 @@ public sealed class CliIpcServer(
 
         foreach (var pair in _turnCancellations)
         {
-            try
-            {
-                pair.Value.Cancel();
-            }
-            catch
-            {
-                // ignored
-            }
+            BestEffort.Ignore(() => pair.Value.Cancel(), _logger, "cancel turn");
         }
 
         foreach (var pair in _pendingApprovals)
@@ -260,15 +253,10 @@ public sealed class CliIpcServer(
         catch (Exception ex)
         {
             _logger.Error(ex, "CLI IPC request failed");
-            try
-            {
-                await WriteJsonAsync(context.Response, HttpStatusCode.InternalServerError, new CliErrorResponse("internal error"))
-                    .ConfigureAwait(false);
-            }
-            catch
-            {
-                // ignored
-            }
+            await BestEffort.IgnoreAsync(
+                () => WriteJsonAsync(context.Response, HttpStatusCode.InternalServerError, new CliErrorResponse("internal error")),
+                _logger,
+                "CLI error response").ConfigureAwait(false);
         }
     }
 
@@ -435,14 +423,7 @@ public sealed class CliIpcServer(
         {
             _turnCancellations.TryRemove(session.Id, out _);
             turnCts.Dispose();
-            try
-            {
-                response.Close();
-            }
-            catch
-            {
-                // ignored
-            }
+            BestEffort.Ignore(response.Close, _logger, "CLI response close");
         }
     }
 

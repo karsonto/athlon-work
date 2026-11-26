@@ -70,7 +70,7 @@ public sealed class ProfileGetToolTests
     }
 
     private static ProfileGetTool CreateSut(IProfileMemory profile, AppSettings? settings = null) =>
-        new(profile, settings ?? new AppSettings(), new NoOpLogger());
+        new(profile, settings ?? new AppSettings());
 
     private static ToolInvocation Invoke(params (string Key, string Value)[] arguments) =>
         new("profile_get", arguments.ToDictionary(pair => pair.Key, pair => pair.Value));

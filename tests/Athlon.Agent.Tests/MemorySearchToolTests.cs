@@ -66,7 +66,7 @@ public sealed class MemorySearchToolTests
                 ["2026-07-21.md"] = "Notes about lunch only.\n",
             });
 
-        var tool = new MemorySearchTool(memory, new NoOpLogger());
+        var tool = new MemorySearchTool(memory);
         var result = await tool.InvokeAsync(
             new ToolInvocation("memory_search", new Dictionary<string, string>
             {
@@ -87,7 +87,7 @@ public sealed class MemorySearchToolTests
             curated: "用户偏好深色主题。\n其他杂记。\n",
             daily: new Dictionary<string, string>());
 
-        var tool = new MemorySearchTool(memory, new NoOpLogger());
+        var tool = new MemorySearchTool(memory);
         var result = await tool.InvokeAsync(
             new ToolInvocation("memory_search", new Dictionary<string, string>
             {
@@ -112,7 +112,7 @@ public sealed class MemorySearchToolTests
                      """,
             daily: new Dictionary<string, string>());
 
-        var tool = new MemorySearchTool(memory, new NoOpLogger());
+        var tool = new MemorySearchTool(memory);
         var result = await tool.InvokeAsync(
             new ToolInvocation("memory_search", new Dictionary<string, string>
             {
@@ -180,14 +180,5 @@ public sealed class MemorySearchToolTests
             string sessionId,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
-    }
-
-    private sealed class NoOpLogger : IAppLogger
-    {
-        public void Debug(string messageTemplate, params object[] values) { }
-        public void Information(string messageTemplate, params object[] values) { }
-        public void Warning(string messageTemplate, params object[] values) { }
-        public void Error(Exception exception, string messageTemplate, params object[] values) { }
-        public IAppLogger ForContext(string context) => this;
     }
 }

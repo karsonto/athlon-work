@@ -3,6 +3,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.App.Services.Room;
@@ -228,7 +229,7 @@ public sealed class RoomStore
 
     /// <summary>
     /// Persist an upload. When <paramref name="workspaceRoot"/> is set, bytes live only under
-    /// <c>{workspace}/.athlon-room/{roomId}/</c> (single copy for local + Docker mount).
+    /// <c>{workspace}/user-upload/</c> (single copy for local + Docker mount).
     /// Room store keeps metadata only. Without workspace, falls back to app-data <c>rooms/.../files</c>.
     /// </summary>
     public RoomAttachmentInfo SaveAttachment(
@@ -255,7 +256,7 @@ public sealed class RoomStore
         if (!string.IsNullOrWhiteSpace(workspaceFull))
         {
             Directory.CreateDirectory(workspaceFull);
-            var targetDir = Path.Combine(workspaceFull, ".athlon-room", roomId);
+            var targetDir = RoomWorkspaceBinding.AttachmentMirrorDir(workspaceFull, roomId, WorkspaceKind.Local);
             Directory.CreateDirectory(targetDir);
             storedPath = AllocateUniquePath(targetDir, safeName, attachmentId);
             var storedFull = Path.GetFullPath(storedPath);
@@ -345,7 +346,7 @@ public sealed class RoomStore
         try
         {
             var rootFull = Path.GetFullPath(workspaceRoot.Trim());
-            var targetDir = Path.Combine(rootFull, ".athlon-room", roomId);
+            var targetDir = RoomWorkspaceBinding.AttachmentMirrorDir(rootFull, roomId, WorkspaceKind.Local);
             Directory.CreateDirectory(targetDir);
             var targetFull = AllocateUniquePath(targetDir, SanitizeFileName(info.FileName), attachmentId);
             if (!IsPathUnderRoot(targetFull, rootFull))

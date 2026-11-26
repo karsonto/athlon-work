@@ -492,15 +492,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         _cts = null;
         if (cts is not null)
         {
-            try
-            {
-                cts.Cancel();
-            }
-            catch
-            {
-                // ignore
-            }
-
+            BestEffort.Ignore(cts.Cancel, reason: "room listener cancel");
             cts.Dispose();
         }
 
@@ -508,28 +500,16 @@ public sealed class AthlonRoomServer : IAsyncDisposable
         _listener = null;
         if (listener is not null)
         {
-            try
-            {
-                listener.Stop();
-            }
-            catch
-            {
-                // ignore
-            }
+            BestEffort.Ignore(listener.Stop, reason: "room listener stop");
         }
 
         var loop = _loop;
         _loop = null;
         if (loop is not null)
         {
-            try
-            {
-                await Task.WhenAny(loop, Task.Delay(2000)).ConfigureAwait(false);
-            }
-            catch
-            {
-                // ignore
-            }
+            await BestEffort.IgnoreAsync(
+                () => Task.WhenAny(loop, Task.Delay(2000)),
+                reason: "room listener join").ConfigureAwait(false);
         }
     }
 
@@ -1389,7 +1369,7 @@ public sealed class AthlonRoomServer : IAsyncDisposable
 
             await using (contentStream)
             {
-                // Local: mirror under workspace/.athlon-room. SSH: local blob + SFTP mirror.
+                // Local: mirror under workspace/user-upload. SSH: local blob + SFTP mirror.
                 var info = await _sshAttachments
                     .SaveUploadAsync(
                         roomId,

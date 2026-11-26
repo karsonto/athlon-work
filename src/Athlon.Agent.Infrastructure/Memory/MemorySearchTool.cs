@@ -8,11 +8,9 @@ namespace Athlon.Agent.Infrastructure.Memory;
 /// Searches session memory with line-level BM25 ranking, exact token matching,
 /// and merged ±N context windows so adjacent hits do not explode token usage.
 /// </summary>
-public sealed class MemorySearchTool(ILongTermMemory longTermMemory, IAppLogger logger)
+public sealed class MemorySearchTool(ILongTermMemory longTermMemory)
     : IAgentTool, ILongTermMemoryTool, IParallelizableAgentTool
 {
-    private readonly IAppLogger _logger = logger.ForContext("MemorySearchTool");
-
     private const double K1 = 1.2;
     private const double B = 0.75;
     private const int ContextRadius = 3;
@@ -34,71 +32,63 @@ public sealed class MemorySearchTool(ILongTermMemory longTermMemory, IAppLogger 
             string.IsNullOrWhiteSpace(query))
             return ToolResult.Failure("No query provided", "query parameter is required");
 
-        try
+        var queryTerms = Tokenize(query)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (queryTerms.Count == 0)
+            return ToolResult.Success("Search completed",
+                $"No meaningful search terms extracted from: {query}");
+
+        var memoryPaths = await longTermMemory.ListAllMemoryFilePathsAsync(cancellationToken);
+        var lineDocs = await LoadLineDocumentsAsync(memoryPaths, cancellationToken);
+        if (lineDocs.Count == 0)
+            return ToolResult.Success("Search completed", "No memory files found to search");
+
+        var scorer = new Bm25Scorer(lineDocs, queryTerms);
+        var hits = new List<LineHit>();
+        foreach (var line in lineDocs)
         {
-            var queryTerms = Tokenize(query)
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-            if (queryTerms.Count == 0)
-                return ToolResult.Success("Search completed",
-                    $"No meaningful search terms extracted from: {query}");
+            if (!LineContainsAnyTerm(line.Tokens, queryTerms))
+                continue;
 
-            var memoryPaths = await longTermMemory.ListAllMemoryFilePathsAsync(cancellationToken);
-            var lineDocs = await LoadLineDocumentsAsync(memoryPaths, cancellationToken);
-            if (lineDocs.Count == 0)
-                return ToolResult.Success("Search completed", "No memory files found to search");
+            var score = scorer.Score(line);
+            if (score <= 0)
+                continue;
 
-            var scorer = new Bm25Scorer(lineDocs, queryTerms);
-            var hits = new List<LineHit>();
-            foreach (var line in lineDocs)
-            {
-                if (!LineContainsAnyTerm(line.Tokens, queryTerms))
-                    continue;
-
-                var score = scorer.Score(line);
-                if (score <= 0)
-                    continue;
-
-                hits.Add(new LineHit(line.Path, line.LineNumber, line.Text, score));
-            }
-
-            if (hits.Count == 0)
-                return ToolResult.Success("Search completed",
-                    $"No matching memories found for: {query}");
-
-            var clusters = MergeOverlappingHits(hits, ContextRadius);
-            clusters.Sort((a, b) =>
-            {
-                var cmp = b.Score.CompareTo(a.Score);
-                return cmp != 0 ? cmp : a.PrimaryLine.CompareTo(b.PrimaryLine);
-            });
-
-            var linesByPath = lineDocs
-                .GroupBy(d => d.Path, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.OrderBy(x => x.LineNumber).Select(x => x.Text).ToArray(),
-                    StringComparer.OrdinalIgnoreCase);
-
-            var formatted = new List<string>(Math.Min(MaxResults, clusters.Count));
-            foreach (var cluster in clusters.Take(MaxResults))
-            {
-                if (!linesByPath.TryGetValue(cluster.Path, out var fileLines))
-                    continue;
-                formatted.Add(FormatCluster(cluster, fileLines));
-            }
-
-            var summary = clusters.Count <= MaxResults
-                ? $"Found {clusters.Count} matches"
-                : $"Found {clusters.Count} matches (showing first {MaxResults})";
-
-            return ToolResult.Success(summary, string.Join("\n\n", formatted));
+            hits.Add(new LineHit(line.Path, line.LineNumber, line.Text, score));
         }
-        catch (Exception ex)
+
+        if (hits.Count == 0)
+            return ToolResult.Success("Search completed",
+                $"No matching memories found for: {query}");
+
+        var clusters = MergeOverlappingHits(hits, ContextRadius);
+        clusters.Sort((a, b) =>
         {
-            _logger.Warning("Memory search failed: {Error}", ex.Message);
-            return ToolResult.Failure("Search failed", ex.Message);
+            var cmp = b.Score.CompareTo(a.Score);
+            return cmp != 0 ? cmp : a.PrimaryLine.CompareTo(b.PrimaryLine);
+        });
+
+        var linesByPath = lineDocs
+            .GroupBy(d => d.Path, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(x => x.LineNumber).Select(x => x.Text).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+
+        var formatted = new List<string>(Math.Min(MaxResults, clusters.Count));
+        foreach (var cluster in clusters.Take(MaxResults))
+        {
+            if (!linesByPath.TryGetValue(cluster.Path, out var fileLines))
+                continue;
+            formatted.Add(FormatCluster(cluster, fileLines));
         }
+
+        var summary = clusters.Count <= MaxResults
+            ? $"Found {clusters.Count} matches"
+            : $"Found {clusters.Count} matches (showing first {MaxResults})";
+
+        return ToolResult.Success(summary, string.Join("\n\n", formatted));
     }
 
     private async Task<List<LineDocument>> LoadLineDocumentsAsync(

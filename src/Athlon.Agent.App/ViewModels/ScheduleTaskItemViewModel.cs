@@ -21,6 +21,7 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
     private readonly ITeamDefinitionStore _teamStore;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
+    private readonly IAppLogger _logger;
     private readonly Action<ScheduleTaskItemViewModel>? _onDeleted;
     private readonly Func<string, Task>? _openSession;
 
@@ -34,6 +35,7 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
         ITeamDefinitionStore teamStore,
         ILocalizationService localization,
         IUserNotifier notifier,
+        IAppLogger logger,
         Action<ScheduleTaskItemViewModel>? onDeleted = null,
         Func<string, Task>? openSession = null)
     {
@@ -46,6 +48,7 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
         _teamStore = teamStore;
         _loc = localization;
         _notifier = notifier;
+        _logger = logger.ForContext("ScheduleTaskItem");
         _onDeleted = onDeleted;
         _openSession = openSession;
         Refresh();
@@ -233,7 +236,10 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
         {
             await _storage.SaveSettingsAsync(_settings);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.Warning("Failed to persist schedule task {TaskId}: {Error}", _task.Id, ex.Message);
+        }
     }
 
     private static string FormatAtTime(string atTime)

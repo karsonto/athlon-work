@@ -130,7 +130,7 @@ public sealed class RoomStoreTests
     }
 
     [Fact]
-    public void SaveAttachment_WithWorkspace_WritesOnlyUnderAthlonRoom()
+    public void SaveAttachment_WithWorkspace_WritesOnlyUnderUserUpload()
     {
         using var temp = new TempDirectoryScope("athlon-room-ws");
         var store = new RoomStore(new TempPathProvider(temp.Root));
@@ -143,7 +143,11 @@ public sealed class RoomStoreTests
 
         Assert.NotNull(meta.WorkspacePath);
         Assert.True(File.Exists(meta.WorkspacePath));
-        Assert.Contains(Path.Combine(".athlon-room", room.Id), meta.WorkspacePath!, StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(
+            Path.GetFullPath(Path.Combine(workspace, "user-upload")),
+            Path.GetFullPath(meta.WorkspacePath!),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(".athlon-room", meta.WorkspacePath!, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("only-once", File.ReadAllText(meta.WorkspacePath!));
 
         var storeBlob = Path.Combine(temp.Root, "rooms", room.Id, "files", meta.Id, meta.StoredName);

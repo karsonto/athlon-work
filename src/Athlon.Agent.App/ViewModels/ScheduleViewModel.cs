@@ -22,6 +22,7 @@ public sealed partial class ScheduleViewModel : ObservableObject
     private readonly ITeamDefinitionStore _teamStore;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
+    private readonly IAppLogger _logger;
     private readonly Func<string, Task>? _openSession;
     private bool _isSyncing;
 
@@ -34,7 +35,8 @@ public sealed partial class ScheduleViewModel : ObservableObject
         ITeamDefinitionStore teamStore,
         Lazy<ISessionHost> sessionHost,
         ILocalizationService localization,
-        IUserNotifier notifier)
+        IUserNotifier notifier,
+        IAppLogger logger)
     {
         _settings = settings;
         _storage = storage;
@@ -44,6 +46,7 @@ public sealed partial class ScheduleViewModel : ObservableObject
         _teamStore = teamStore;
         _loc = localization;
         _notifier = notifier;
+        _logger = logger.ForContext("ScheduleViewModel");
         _openSession = id => sessionHost.Value.OpenSessionByIdAsync(id);
         _scheduler.TaskStatusChanged += OnTaskStatusChanged;
         AppCultureManager.CultureChanged += OnCultureChanged;
@@ -142,6 +145,7 @@ public sealed partial class ScheduleViewModel : ObservableObject
             _teamStore,
             _loc,
             _notifier,
+            _logger,
             onDeleted: HandleTaskDeleted,
             openSession: _openSession);
 
@@ -240,7 +244,10 @@ public sealed partial class ScheduleViewModel : ObservableObject
         {
             await _storage.SaveSettingsAsync(_settings);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.Warning("Failed to persist schedule settings: {Error}", ex.Message);
+        }
     }
 
     [RelayCommand]

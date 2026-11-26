@@ -38,100 +38,93 @@ public sealed class SshGlobFilesTool(
             return error;
         }
 
-        try
+        var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
+        if (info is null || !info.IsDirectory)
         {
-            var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
-            if (info is null || !info.IsDirectory)
-            {
-                return ToolResult.Failure("Directory not found", fullPath);
-            }
+            return ToolResult.Failure("Directory not found", fullPath);
+        }
 
-            var ignorePatterns = guard.GetIgnorePatterns();
+        var ignorePatterns = guard.GetIgnorePatterns();
 
-            var remoteMatches = await SshRemoteSearch.TryGlobAsync(
-                    client,
-                    fullPath,
-                    pattern,
-                    MaxFiles,
-                    ignorePatterns,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (remoteMatches is not null)
-            {
-                await WorkspaceToolHelper.AuditAsync(
-                    audit,
-                    "glob_files",
-                    new { path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath), pattern, count = remoteMatches.Count, remote = true, via = "shell" },
-                    cancellationToken).ConfigureAwait(false);
-
-                return remoteMatches.Count == 0
-                    ? ToolResult.Success("No matching files found", "No matching files found")
-                    : ToolResult.Success(
-                        $"Found {remoteMatches.Count} matching entries",
-                        string.Join(Environment.NewLine, remoteMatches));
-            }
-
-            var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
-            matcher.AddInclude(pattern.Replace('\\', '/'));
-            var matches = new List<string>();
-            var queue = new Queue<(string Path, string Relative, int Depth)>();
-            queue.Enqueue((fullPath, string.Empty, 0));
-
-            while (queue.Count > 0 && matches.Count < MaxFiles)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var (current, relative, depth) = queue.Dequeue();
-                await foreach (var entry in client.ListAsync(current, cancellationToken).ConfigureAwait(false))
-                {
-                    if (SshWorkspaceToolHelper.ShouldIgnore(entry.FullPath, ignorePatterns))
-                    {
-                        continue;
-                    }
-
-                    var childRelative = string.IsNullOrEmpty(relative)
-                        ? entry.Name
-                        : relative + "/" + entry.Name;
-
-                    if (entry.IsDirectory)
-                    {
-                        if (depth < MaxDepth)
-                        {
-                            queue.Enqueue((entry.FullPath, childRelative, depth + 1));
-                        }
-
-                        if (matcher.Match(childRelative + "/").HasMatches || matcher.Match(childRelative).HasMatches)
-                        {
-                            matches.Add(childRelative + "/");
-                        }
-
-                        continue;
-                    }
-
-                    if (matcher.Match(childRelative).HasMatches)
-                    {
-                        matches.Add($"{childRelative} ({entry.Length} bytes)");
-                    }
-
-                    if (matches.Count >= MaxFiles)
-                    {
-                        break;
-                    }
-                }
-            }
-
+        var remoteMatches = await SshRemoteSearch.TryGlobAsync(
+                client,
+                fullPath,
+                pattern,
+                MaxFiles,
+                ignorePatterns,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (remoteMatches is not null)
+        {
             await WorkspaceToolHelper.AuditAsync(
                 audit,
                 "glob_files",
-                new { path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath), pattern, count = matches.Count, remote = true, via = "sftp" },
+                new { path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath), pattern, count = remoteMatches.Count, remote = true, via = "shell" },
                 cancellationToken).ConfigureAwait(false);
 
-            return matches.Count == 0
+            return remoteMatches.Count == 0
                 ? ToolResult.Success("No matching files found", "No matching files found")
-                : ToolResult.Success($"Found {matches.Count} matching entries", string.Join(Environment.NewLine, matches));
+                : ToolResult.Success(
+                    $"Found {remoteMatches.Count} matching entries",
+                    string.Join(Environment.NewLine, remoteMatches));
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+
+        var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
+        matcher.AddInclude(pattern.Replace('\\', '/'));
+        var matches = new List<string>();
+        var queue = new Queue<(string Path, string Relative, int Depth)>();
+        queue.Enqueue((fullPath, string.Empty, 0));
+
+        while (queue.Count > 0 && matches.Count < MaxFiles)
         {
-            return ToolResult.Failure("Glob failed", ex.Message);
+            cancellationToken.ThrowIfCancellationRequested();
+            var (current, relative, depth) = queue.Dequeue();
+            await foreach (var entry in client.ListAsync(current, cancellationToken).ConfigureAwait(false))
+            {
+                if (SshWorkspaceToolHelper.ShouldIgnore(entry.FullPath, ignorePatterns))
+                {
+                    continue;
+                }
+
+                var childRelative = string.IsNullOrEmpty(relative)
+                    ? entry.Name
+                    : relative + "/" + entry.Name;
+
+                if (entry.IsDirectory)
+                {
+                    if (depth < MaxDepth)
+                    {
+                        queue.Enqueue((entry.FullPath, childRelative, depth + 1));
+                    }
+
+                    if (matcher.Match(childRelative + "/").HasMatches || matcher.Match(childRelative).HasMatches)
+                    {
+                        matches.Add(childRelative + "/");
+                    }
+
+                    continue;
+                }
+
+                if (matcher.Match(childRelative).HasMatches)
+                {
+                    matches.Add($"{childRelative} ({entry.Length} bytes)");
+                }
+
+                if (matches.Count >= MaxFiles)
+                {
+                    break;
+                }
+            }
         }
+
+        await WorkspaceToolHelper.AuditAsync(
+            audit,
+            "glob_files",
+            new { path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath), pattern, count = matches.Count, remote = true, via = "sftp" },
+            cancellationToken).ConfigureAwait(false);
+
+        return matches.Count == 0
+            ? ToolResult.Success("No matching files found", "No matching files found")
+            : ToolResult.Success($"Found {matches.Count} matching entries", string.Join(Environment.NewLine, matches));
     }
 }

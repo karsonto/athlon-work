@@ -125,7 +125,7 @@ public sealed class RoomWorkspaceBindingTests
             "roomABC",
             WorkspaceKind.Ssh);
 
-        Assert.Equal("/home/remote/project/.athlon-room/roomABC", dir);
+        Assert.Equal("/home/remote/project/user-upload", dir);
         Assert.DoesNotContain('\\', dir);
     }
 

@@ -529,9 +529,11 @@ public sealed class RoomAgentBridge : IAsyncDisposable
 
         try
         {
+            var imageAttachments = BuildImageAttachments(roomId, trigger);
             var result = await _runtime.SendAsync(
                 session,
                 prompt,
+                imageAttachments: imageAttachments,
                 callbacks: new AgentTurnCallbacks
                 {
                     OnSessionUpdated = async updated =>
@@ -921,7 +923,7 @@ public sealed class RoomAgentBridge : IAsyncDisposable
             string.IsNullOrWhiteSpace(taskText) ? "(see attachments)" : taskText);
         if (trigger.Attachments.Count > 0)
         {
-            sb.AppendLine("Attachments on this message (use these workspace paths with file tools):");
+            sb.AppendLine("Attachments on this message (images are also attached as vision input; paths remain available to file tools):");
             foreach (var att in trigger.Attachments)
             {
                 sb.Append("- ").AppendLine(FormatAttachmentForPrompt(att));
@@ -929,6 +931,37 @@ public sealed class RoomAgentBridge : IAsyncDisposable
         }
 
         return sb.ToString();
+    }
+
+    private IReadOnlyList<ImageAttachment>? BuildImageAttachments(string roomId, RoomMessage trigger)
+    {
+        if (trigger.Attachments.Count == 0)
+        {
+            return null;
+        }
+
+        List<ImageAttachment>? images = null;
+        foreach (var att in trigger.Attachments)
+        {
+            if (!att.IsImage)
+            {
+                continue;
+            }
+
+            var path = _store.GetAttachmentFilePath(roomId, att.Id);
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                continue;
+            }
+
+            images ??= [];
+            images.Add(new ImageAttachment(
+                FileName: string.IsNullOrWhiteSpace(att.FileName) ? Path.GetFileName(path) : att.FileName,
+                MimeType: string.IsNullOrWhiteSpace(att.MimeType) ? "image/png" : att.MimeType,
+                LocalPath: path));
+        }
+
+        return images is { Count: > 0 } ? images : null;
     }
 
     private static string FormatAttachmentForPrompt(RoomAttachmentInfo att)

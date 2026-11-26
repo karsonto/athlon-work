@@ -73,45 +73,38 @@ public sealed class SshExecuteCommandTool(
             1,
             MaxTimeoutSeconds);
 
-        try
-        {
-            var result = await client.ExecuteAsync(
-                    command,
-                    cwd,
-                    TimeSpan.FromSeconds(timeoutSeconds),
-                    cancellationToken)
-                .ConfigureAwait(false);
+        var result = await client.ExecuteAsync(
+                command,
+                cwd,
+                TimeSpan.FromSeconds(timeoutSeconds),
+                cancellationToken)
+            .ConfigureAwait(false);
 
-            var output = CombineOutput(result.StdOut, result.StdErr);
-            if (output.Length > MaxCapturedOutputChars)
+        var output = CombineOutput(result.StdOut, result.StdErr);
+        if (output.Length > MaxCapturedOutputChars)
+        {
+            output = output[..MaxCapturedOutputChars] + "\n... [output truncated]";
+        }
+
+        await WorkspaceToolHelper.AuditAsync(
+            audit,
+            "execute_command",
+            new
             {
-                output = output[..MaxCapturedOutputChars] + "\n... [output truncated]";
-            }
+                command,
+                cwd,
+                exitCode = result.ExitCode,
+                durationMs = (int)result.Duration.TotalMilliseconds,
+                remote = true
+            },
+            cancellationToken).ConfigureAwait(false);
 
-            await WorkspaceToolHelper.AuditAsync(
-                audit,
-                "execute_command",
-                new
-                {
-                    command,
-                    cwd,
-                    exitCode = result.ExitCode,
-                    durationMs = (int)result.Duration.TotalMilliseconds,
-                    remote = true
-                },
-                cancellationToken).ConfigureAwait(false);
-
-            var summary = result.ExitCode == 0
-                ? $"Command succeeded (exit {result.ExitCode})"
-                : $"Command failed (exit {result.ExitCode})";
-            return result.ExitCode == 0
-                ? ToolResult.Success(summary, output, result.Duration)
-                : ToolResult.Failure(summary, string.IsNullOrWhiteSpace(output) ? summary : output, result.Duration);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            return ToolResult.Failure("Command failed", ex.Message);
-        }
+        var summary = result.ExitCode == 0
+            ? $"Command succeeded (exit {result.ExitCode})"
+            : $"Command failed (exit {result.ExitCode})";
+        return result.ExitCode == 0
+            ? ToolResult.Success(summary, output, result.Duration)
+            : ToolResult.Failure(summary, string.IsNullOrWhiteSpace(output) ? summary : output, result.Duration);
     }
 
     private bool TryResolveRemoteWorkingDirectory(ToolInvocation invocation, out string fullPath, out ToolResult error)
