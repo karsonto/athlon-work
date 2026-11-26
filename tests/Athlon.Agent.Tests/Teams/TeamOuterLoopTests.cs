@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Teams;
 using Athlon.Agent.Infrastructure;
@@ -171,7 +172,9 @@ public sealed class TeamOuterLoopTests : IDisposable
                 "## Result\nstatus: completed\naccomplished:\n- work",
                 AgentSession.Create("mbr")));
 
-        var reports = new List<TeamRunProgress>();
+        // Progress callbacks can arrive on thread-pool threads after completion races;
+        // ConcurrentBag + snapshot avoids "Collection was modified" flakes.
+        var reports = new ConcurrentBag<TeamRunProgress>();
         var progress = new Progress<TeamRunProgress>(reports.Add);
         var orch = CreateOrchestrator(executor);
         var began = await orch.BeginAsync(new TeamTaskStartRequest
@@ -188,11 +191,12 @@ public sealed class TeamOuterLoopTests : IDisposable
             progress: progress);
         Assert.Equal(TeamTaskStatus.Succeeded, completed.Status);
 
-        Assert.Contains(reports, r => r.Kind == TeamRunProgressKind.LeaderTurnCompleted);
-        Assert.Contains(reports, r =>
+        var snapshot = reports.ToArray();
+        Assert.Contains(snapshot, r => r.Kind == TeamRunProgressKind.LeaderTurnCompleted);
+        Assert.Contains(snapshot, r =>
             r.Kind == TeamRunProgressKind.WorkerCompleted
             && r.ResponseText.Contains("status: completed", StringComparison.Ordinal));
-        Assert.Contains(reports, r => r.Kind == TeamRunProgressKind.LeaderTurnCompleted
+        Assert.Contains(snapshot, r => r.Kind == TeamRunProgressKind.LeaderTurnCompleted
             && r.ResponseText.Contains("all done", StringComparison.Ordinal));
     }
 
