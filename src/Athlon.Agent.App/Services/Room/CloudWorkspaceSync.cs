@@ -7,9 +7,16 @@ using System.Text.Json;
 
 namespace Athlon.Agent.App.Services.Room;
 
+/// <summary>
+/// One file in a push-oriented cloud sync manifest.
+/// Comparison on the control plane uses <see cref="Sha256"/> only; <see cref="MtimeUnixMs"/> is metadata.
+/// </summary>
 internal sealed record CloudFileManifestEntry(string Path, long Size, long MtimeUnixMs, string Sha256);
 
-/// <summary>Pack / unpack host workspace and skills for cloud sandbox sync.</summary>
+/// <summary>
+/// Pack / unpack host workspace and skills for cloud sandbox sync (desktop → control plane).
+/// Incremental flow: build desired manifest → POST /sync/manifest → upload blobs listed in need/needUpload → POST /sync/delta.
+/// </summary>
 internal static class CloudWorkspaceSync
 {
     private static readonly HashSet<string> IgnoredDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
@@ -178,6 +185,11 @@ internal static class CloudWorkspaceSync
         return relative.Replace('\\', '/');
     }
 
+    /// <summary>
+    /// Build the client's <c>desired</c> manifest for push sync.
+    /// When <paramref name="onlyTopLevelNames"/> is set (skills), only those top-level trees are included;
+    /// the control plane treats this as the full desired tree for that kind (extras on staging are removed).
+    /// </summary>
     public static List<CloudFileManifestEntry> BuildManifest(
         string hostRoot,
         IReadOnlyList<string>? onlyTopLevelNames = null)

@@ -502,25 +502,15 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
             await EnsureSuccessAsync(res, $"同步清单 {kind}").ConfigureAwait(false);
             var body = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
-            var need = new HashSet<string>(StringComparer.Ordinal);
-            if (doc.RootElement.TryGetProperty("need", out var needEl) && needEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var e in needEl.EnumerateArray())
-                {
-                    var p = e.GetString();
-                    if (!string.IsNullOrWhiteSpace(p))
-                    {
-                        need.Add(p);
-                    }
-                }
-            }
+            // need / needUpload = paths this desktop client must upload (push), not download.
+            var needUpload = ReadNeedUploadPaths(doc.RootElement);
 
             using var form = new MultipartFormDataContent();
             form.Add(new StringContent(kind), "kind");
             form.Add(new StringContent(CloudWorkspaceSync.SerializeManifest(manifest)), "manifest");
             foreach (var entry in manifest)
             {
-                if (!need.Contains(entry.Path))
+                if (!needUpload.Contains(entry.Path))
                 {
                     continue;
                 }
@@ -656,6 +646,39 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         }
 
         throw new InvalidOperationException($"{action}失败（{(int)res.StatusCode}）：{Truncate(body, 240)}");
+    }
+
+    /// <summary>
+    /// Paths the desktop must upload so control-plane staging matches the desired manifest.
+    /// Prefers <c>needUpload</c>; falls back to legacy <c>need</c>.
+    /// </summary>
+    private static HashSet<string> ReadNeedUploadPaths(JsonElement root)
+    {
+        var needUpload = new HashSet<string>(StringComparer.Ordinal);
+        JsonElement needEl;
+        if (root.TryGetProperty("needUpload", out var modern) && modern.ValueKind == JsonValueKind.Array)
+        {
+            needEl = modern;
+        }
+        else if (root.TryGetProperty("need", out var legacy) && legacy.ValueKind == JsonValueKind.Array)
+        {
+            needEl = legacy;
+        }
+        else
+        {
+            return needUpload;
+        }
+
+        foreach (var e in needEl.EnumerateArray())
+        {
+            var p = e.GetString();
+            if (!string.IsNullOrWhiteSpace(p))
+            {
+                needUpload.Add(p);
+            }
+        }
+
+        return needUpload;
     }
 
     private static string ShellQuote(string value) =>
