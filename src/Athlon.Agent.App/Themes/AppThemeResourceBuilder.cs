@@ -8,7 +8,10 @@ internal static class AppThemeResourceBuilder
     internal const string PaletteMarkerKey = "__AthlonChromePalette__";
     internal const string TextBrushKey = "Brush.Text";
 
-    public static ResourceDictionary BuildChromeResources(UiChromeColors c)
+    public static ResourceDictionary BuildChromeResources(AppThemePalette palette) =>
+        BuildChromeResources(palette.Chrome, palette.Teams);
+
+    public static ResourceDictionary BuildChromeResources(UiChromeColors c, UiTeamsColors teams)
     {
         var resources = new ResourceDictionary
         {
@@ -105,6 +108,24 @@ internal static class AppThemeResourceBuilder
             ["Brush.PreviewContentBackground"] = Brush(c.PreviewContentBackground),
             ["Brush.ScrollThumb"] = Brush(c.ScrollThumb, c.ScrollThumbOpacity),
             ["Brush.ChatBackground"] = Brush(c.ChatBackgroundTop),
+            ["Brush.Teams.Leader"] = Brush(teams.Leader),
+            ["Brush.Teams.LeaderSoft"] = Brush(teams.LeaderSoft),
+            ["Brush.Teams.Worker"] = Brush(teams.Worker),
+            ["Brush.Teams.WorkerSoft"] = Brush(teams.WorkerSoft),
+            ["Brush.Teams.Success"] = Brush(teams.Success),
+            ["Brush.Teams.SuccessSoft"] = Brush(teams.SuccessSoft),
+            ["Brush.Teams.Warn"] = Brush(teams.Warn),
+            ["Brush.Teams.WarnSoft"] = Brush(teams.WarnSoft),
+            ["Brush.Teams.Error"] = Brush(teams.Error),
+            ["Brush.Teams.ErrorSoft"] = Brush(teams.ErrorSoft),
+            ["Brush.Teams.ErrorBorder"] = Brush(teams.ErrorBorder),
+            ["Brush.Teams.AvatarWorker"] = DiagonalGradient(teams.AvatarWorkerStart, teams.AvatarWorkerEnd),
+            ["Brush.Teams.AvatarLeader"] = DiagonalGradient(teams.AvatarLeaderStart, teams.AvatarLeaderEnd),
+            ["Brush.Teams.OrgPreview"] = DiagonalGradient(
+                teams.OrgPreviewStart,
+                teams.OrgPreviewMid,
+                teams.OrgPreviewEnd,
+                midOffset: 0.55),
         };
 
         // The app loads MaterialDesign's control styles without installing its theme, so the keys
@@ -117,9 +138,9 @@ internal static class AppThemeResourceBuilder
         return resources;
     }
 
-    public static void ApplyPalette(ResourceDictionary root, UiChromeColors chrome)
+    public static void ApplyPalette(ResourceDictionary root, AppThemePalette palette)
     {
-        var newPalette = BuildChromeResources(chrome);
+        var newPalette = BuildChromeResources(palette);
         var existing = FindPaletteDictionary(root);
         if (existing is null)
         {
@@ -163,4 +184,41 @@ internal static class AppThemeResourceBuilder
 
     private static SolidColorBrush Brush(Color color, double? opacity = null) =>
         AppThemeColor.ToFrozenBrush(color, opacity);
+
+    private static LinearGradientBrush DiagonalGradient(Color start, Color end)
+    {
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(1, 1),
+            GradientStops =
+            {
+                new GradientStop(start, 0),
+                new GradientStop(end, 1),
+            },
+        };
+        brush.Freeze();
+        return brush;
+    }
+
+    private static LinearGradientBrush DiagonalGradient(
+        Color start,
+        Color mid,
+        Color end,
+        double midOffset)
+    {
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(1, 1),
+            GradientStops =
+            {
+                new GradientStop(start, 0),
+                new GradientStop(mid, midOffset),
+                new GradientStop(end, 1),
+            },
+        };
+        brush.Freeze();
+        return brush;
+    }
 }

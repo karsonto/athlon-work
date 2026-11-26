@@ -20,7 +20,7 @@ public sealed class AppThemeResourceBuilderTests
             var app = EnsureApplication();
             var root = (ResourceDictionary)app.Resources;
 
-            AppThemeResourceBuilder.ApplyPalette(root, DarkAppThemePalette.Create().Chrome);
+            AppThemeResourceBuilder.ApplyPalette(root, DarkAppThemePalette.Create());
 
             var palette = AppThemeResourceBuilder.FindPaletteDictionary(root);
             Assert.NotNull(palette);
@@ -58,7 +58,7 @@ public sealed class AppThemeResourceBuilderTests
             var app = EnsureApplication();
             var root = (ResourceDictionary)app.Resources;
 
-            AppThemeResourceBuilder.ApplyPalette(root, DarkAppThemePalette.Create().Chrome);
+            AppThemeResourceBuilder.ApplyPalette(root, DarkAppThemePalette.Create());
 
             var surface = Assert.IsType<SolidColorBrush>(
                 root[MaterialDesignBrushBridge.SurfaceKey]);
@@ -106,6 +106,29 @@ public sealed class AppThemeResourceBuilderTests
 
             var surface = Assert.IsType<SolidColorBrush>(brushes[MaterialDesignBrushBridge.SurfaceKey]);
             Assert.Equal(0xFF, surface.Color.A);
+        });
+    }
+
+    [Theory]
+    [InlineData(AppThemeKind.Dark)]
+    [InlineData(AppThemeKind.Light)]
+    public void ApplyPalette_injects_teams_semantic_brushes(AppThemeKind kind)
+    {
+        RunOnStaThread(() =>
+        {
+            var app = EnsureApplication();
+            var root = (ResourceDictionary)app.Resources;
+            var palette = AppThemeManager.GetPalette(kind);
+
+            AppThemeResourceBuilder.ApplyPalette(root, palette);
+
+            var leader = Assert.IsType<SolidColorBrush>(root["Brush.Teams.Leader"]);
+            Assert.Equal(palette.Teams.Leader, leader.Color);
+            Assert.IsType<LinearGradientBrush>(root["Brush.Teams.AvatarLeader"]);
+            Assert.IsType<LinearGradientBrush>(root["Brush.Teams.AvatarWorker"]);
+            Assert.IsType<LinearGradientBrush>(root["Brush.Teams.OrgPreview"]);
+            Assert.IsType<SolidColorBrush>(root["Brush.Teams.Worker"]);
+            Assert.IsType<SolidColorBrush>(root["Brush.Teams.ErrorBorder"]);
         });
     }
 

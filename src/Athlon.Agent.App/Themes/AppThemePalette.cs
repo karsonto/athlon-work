@@ -5,6 +5,7 @@ public sealed class AppThemePalette
 {
     public required AppThemeKind Kind { get; init; }
     public required UiChromeColors Chrome { get; init; }
+    public required UiTeamsColors Teams { get; init; }
     public required EditorThemeColors Editor { get; init; }
     public required WorkspaceFileIconThemeColors FileIcons { get; init; }
 }

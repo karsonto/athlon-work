@@ -45,10 +45,10 @@ public static class AppThemeManager
 
     private static void ApplyToApplication(Application app)
     {
-        AppThemeResourceBuilder.ApplyPalette(app.Resources, Current.Chrome);
+        AppThemeResourceBuilder.ApplyPalette(app.Resources, Current);
         foreach (Window window in app.Windows)
         {
-            AppThemeResourceBuilder.ApplyPalette(window.Resources, Current.Chrome);
+            AppThemeResourceBuilder.ApplyPalette(window.Resources, Current);
         }
     }
 

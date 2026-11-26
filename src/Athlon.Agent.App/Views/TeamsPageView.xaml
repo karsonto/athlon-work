@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
              xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              Background="{DynamicResource Brush.ChatBackground}">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -93,10 +94,10 @@
                         <Border Margin="10,0,0,0">
                             <Border.Style>
                                 <Style TargetType="Border" BasedOn="{StaticResource TeamsBadgeStyle}">
-                                    <Setter Property="Background" Value="{StaticResource Teams.WarnSoft}" />
+                                    <Setter Property="Background" Value="{DynamicResource Brush.Teams.WarnSoft}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding TeamsEnabled}" Value="True">
-                                            <Setter Property="Background" Value="{StaticResource Teams.SuccessSoft}" />
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Teams.SuccessSoft}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -104,10 +105,10 @@
                             <TextBlock Text="{Binding EnabledBadgeText}" FontSize="11" FontWeight="SemiBold">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="{StaticResource Teams.Warn}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Teams.Warn}" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding TeamsEnabled}" Value="True">
-                                                <Setter Property="Foreground" Value="{StaticResource Teams.Success}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Teams.Success}" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -122,6 +123,14 @@
                     </StackPanel>
 
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Command="{Binding DataContext.ToggleThemeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                ToolTip="{Binding DataContext.ThemeToggleToolTip, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Style="{StaticResource HeaderIconButtonStyle}"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{Binding DataContext.ThemeToggleToolTip, RelativeSource={RelativeSource AncestorType=Window}}">
+                            <materialDesign:PackIcon Style="{StaticResource ThemeTogglePackIconStyle}" />
+                        </Button>
                         <Button Content="创建示例" Command="{Binding CreateSampleTeamCommand}"
                                 Style="{StaticResource TeamsSecondaryButtonStyle}" Margin="0,0,8,0" />
                         <Button Content="导入" Command="{Binding ImportTeamCommand}"
@@ -157,9 +166,9 @@
                             <Border DockPanel.Dock="Top" Style="{StaticResource TeamsCardHeaderStyle}">
                                 <DockPanel>
                                     <Border DockPanel.Dock="Right" Style="{StaticResource TeamsBadgeStyle}"
-                                            Background="{StaticResource Teams.WarnSoft}">
+                                            Background="{DynamicResource Brush.Teams.WarnSoft}">
                                         <TextBlock Text="配置" FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource Teams.Warn}" />
+                                                   Foreground="{DynamicResource Brush.Teams.Warn}" />
                                     </Border>
                                     <TextBlock Text="Team 基本信息" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 </DockPanel>
@@ -235,10 +244,10 @@
                                                                 <Border>
                                                                     <Border.Style>
                                                                         <Style TargetType="Border" BasedOn="{StaticResource TeamsBadgeStyle}">
-                                                                            <Setter Property="Background" Value="{StaticResource Teams.WorkerSoft}" />
+                                                                            <Setter Property="Background" Value="{DynamicResource Brush.Teams.WorkerSoft}" />
                                                                             <Style.Triggers>
                                                                                 <DataTrigger Binding="{Binding IsLeader}" Value="True">
-                                                                                    <Setter Property="Background" Value="{StaticResource Teams.LeaderSoft}" />
+                                                                                    <Setter Property="Background" Value="{DynamicResource Brush.Teams.LeaderSoft}" />
                                                                                 </DataTrigger>
                                                                             </Style.Triggers>
                                                                         </Style>
@@ -246,10 +255,10 @@
                                                                     <TextBlock Text="{Binding RoleLabel}" FontSize="11" FontWeight="SemiBold">
                                                                         <TextBlock.Style>
                                                                             <Style TargetType="TextBlock">
-                                                                                <Setter Property="Foreground" Value="{StaticResource Teams.Worker}" />
+                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Teams.Worker}" />
                                                                                 <Style.Triggers>
                                                                                     <DataTrigger Binding="{Binding IsLeader}" Value="True">
-                                                                                        <Setter Property="Foreground" Value="{StaticResource Teams.Leader}" />
+                                                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Teams.Leader}" />
                                                                                     </DataTrigger>
                                                                                 </Style.Triggers>
                                                                             </Style>
@@ -262,24 +271,10 @@
                                                                 <Border Width="28" Height="28" CornerRadius="8" Margin="0,0,8,0">
                                                                     <Border.Style>
                                                                         <Style TargetType="Border">
-                                                                            <Setter Property="Background">
-                                                                                <Setter.Value>
-                                                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                                                        <GradientStop Color="#FF0891B2" Offset="0" />
-                                                                                        <GradientStop Color="#FF2563EB" Offset="1" />
-                                                                                    </LinearGradientBrush>
-                                                                                </Setter.Value>
-                                                                            </Setter>
+                                                                            <Setter Property="Background" Value="{DynamicResource Brush.Teams.AvatarWorker}" />
                                                                             <Style.Triggers>
                                                                                 <DataTrigger Binding="{Binding IsLeader}" Value="True">
-                                                                                    <Setter Property="Background">
-                                                                                        <Setter.Value>
-                                                                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                                                                <GradientStop Color="#FF7C3AED" Offset="0" />
-                                                                                                <GradientStop Color="#FF4F46E5" Offset="1" />
-                                                                                            </LinearGradientBrush>
-                                                                                        </Setter.Value>
-                                                                                    </Setter>
+                                                                                    <Setter Property="Background" Value="{DynamicResource Brush.Teams.AvatarLeader}" />
                                                                                 </DataTrigger>
                                                                             </Style.Triggers>
                                                                         </Style>
@@ -355,10 +350,10 @@
                                     <Border DockPanel.Dock="Right">
                                         <Border.Style>
                                             <Style TargetType="Border" BasedOn="{StaticResource TeamsBadgeStyle}">
-                                                <Setter Property="Background" Value="{StaticResource Teams.WorkerSoft}" />
+                                                <Setter Property="Background" Value="{DynamicResource Brush.Teams.WorkerSoft}" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding SelectedMember.IsLeader}" Value="True">
-                                                        <Setter Property="Background" Value="{StaticResource Teams.LeaderSoft}" />
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.Teams.LeaderSoft}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -366,10 +361,10 @@
                                         <TextBlock Text="{Binding SelectedMember.RoleLabel}" FontSize="11" FontWeight="SemiBold">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
-                                                    <Setter Property="Foreground" Value="{StaticResource Teams.Worker}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Teams.Worker}" />
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding SelectedMember.IsLeader}" Value="True">
-                                                            <Setter Property="Foreground" Value="{StaticResource Teams.Leader}" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Teams.Leader}" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -524,21 +519,18 @@
 
                                         <!-- Org preview -->
                                         <TextBlock Text="组织预览" FontSize="13" FontWeight="SemiBold" Margin="0,14,0,8" />
-                                        <Border CornerRadius="10" Padding="12" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1">
-                                            <Border.Background>
-                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                    <GradientStop Color="#1F6366F1" Offset="0" />
-                                                    <GradientStop Color="#140891B2" Offset="0.55" />
-                                                    <GradientStop Color="#00FFFFFF" Offset="1" />
-                                                </LinearGradientBrush>
-                                            </Border.Background>
+                                        <Border CornerRadius="10"
+                                                Padding="12"
+                                                BorderBrush="{DynamicResource Brush.Border}"
+                                                BorderThickness="1"
+                                                Background="{DynamicResource Brush.Teams.OrgPreview}">
                                             <StackPanel HorizontalAlignment="Center">
                                                 <Border Style="{StaticResource TeamsPreviewNodeStyle}"
-                                                        BorderBrush="{StaticResource Teams.Leader}"
+                                                        BorderBrush="{DynamicResource Brush.Teams.Leader}"
                                                         HorizontalAlignment="Center">
                                                     <StackPanel HorizontalAlignment="Center">
-                                                        <Border Style="{StaticResource TeamsBadgeStyle}" Background="{StaticResource Teams.LeaderSoft}" HorizontalAlignment="Center">
-                                                            <TextBlock Text="Leader" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Teams.Leader}" />
+                                                        <Border Style="{StaticResource TeamsBadgeStyle}" Background="{DynamicResource Brush.Teams.LeaderSoft}" HorizontalAlignment="Center">
+                                                            <TextBlock Text="Leader" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Teams.Leader}" />
                                                         </Border>
                                                         <TextBlock Text="{Binding PreviewLeaderName}" FontWeight="SemiBold" Margin="0,6,0,0" HorizontalAlignment="Center" />
                                                     </StackPanel>
@@ -553,11 +545,11 @@
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate DataType="{x:Type vm:OrgPreviewNodeViewModel}">
                                                             <Border Style="{StaticResource TeamsPreviewNodeStyle}"
-                                                                    BorderBrush="{StaticResource Teams.Worker}"
+                                                                    BorderBrush="{DynamicResource Brush.Teams.Worker}"
                                                                     Margin="5">
                                                                 <StackPanel HorizontalAlignment="Center">
-                                                                    <Border Style="{StaticResource TeamsBadgeStyle}" Background="{StaticResource Teams.WorkerSoft}" HorizontalAlignment="Center">
-                                                                        <TextBlock Text="W" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Teams.Worker}" />
+                                                                    <Border Style="{StaticResource TeamsBadgeStyle}" Background="{DynamicResource Brush.Teams.WorkerSoft}" HorizontalAlignment="Center">
+                                                                        <TextBlock Text="W" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Teams.Worker}" />
                                                                     </Border>
                                                                     <TextBlock Text="{Binding Name}" Margin="0,6,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="120" />
                                                                 </StackPanel>

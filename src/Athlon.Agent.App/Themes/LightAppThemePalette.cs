@@ -9,8 +9,32 @@ public static class LightAppThemePalette
     {
         Kind = AppThemeKind.Light,
         Chrome = CreateChrome(),
+        Teams = CreateTeams(),
         Editor = CreateEditor(),
         FileIcons = CreateFileIcons(),
+    };
+
+    /// <summary>Matches <c>design/agent-teams/teams-config.html</c> light tokens.</summary>
+    private static UiTeamsColors CreateTeams() => new()
+    {
+        Leader = C("#7C3AED"),
+        LeaderSoft = Ca(0x1F, "#7C3AED"),
+        Worker = C("#0891B2"),
+        WorkerSoft = Ca(0x1F, "#0891B2"),
+        Success = C("#059669"),
+        SuccessSoft = Ca(0x1F, "#059669"),
+        Warn = C("#D97706"),
+        WarnSoft = Ca(0x1F, "#D97706"),
+        Error = C("#DC2626"),
+        ErrorSoft = Ca(0x1F, "#DC2626"),
+        ErrorBorder = C("#FCA5A5"),
+        AvatarWorkerStart = C("#0891B2"),
+        AvatarWorkerEnd = C("#2563EB"),
+        AvatarLeaderStart = C("#7C3AED"),
+        AvatarLeaderEnd = C("#4F46E5"),
+        OrgPreviewStart = Ca(0x1F, "#6366F1"),
+        OrgPreviewMid = Ca(0x14, "#0891B2"),
+        OrgPreviewEnd = Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF),
     };
 
     private static UiChromeColors CreateChrome() => new()

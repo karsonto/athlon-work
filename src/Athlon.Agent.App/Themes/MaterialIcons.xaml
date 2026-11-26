@@ -51,7 +51,9 @@
         <Setter Property="Foreground" Value="#FFFDE68A" />
         <Style.Triggers>
             <!-- Light theme: blue moon (switch to dark). -->
-            <DataTrigger Binding="{Binding IsLightTheme}" Value="True">
+            <!-- Resolve via Window so Chat (shell DC) and Teams (TeamsPageVm DC) both work. -->
+            <DataTrigger Binding="{Binding DataContext.IsLightTheme, RelativeSource={RelativeSource AncestorType=Window}}"
+                         Value="True">
                 <Setter Property="Kind" Value="WeatherNight" />
                 <Setter Property="Foreground" Value="#FF2563EB" />
             </DataTrigger>
