@@ -203,6 +203,16 @@ public sealed class ChatHtmlBuilderTests
     }
 
     [Fact]
+    public void BuildShellHtml_enables_atomic_replay_by_default()
+    {
+        var html = _builder.BuildShellHtml();
+        Assert.Contains("\"atomicReplay\":\"1\"", html, StringComparison.Ordinal);
+
+        var disabled = _builder.BuildShellHtml(atomicReplay: false);
+        Assert.Contains("\"atomicReplay\":\"0\"", disabled, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildShellHtml_uses_gated_coalesced_scrolling()
     {
         var surface = Surface();

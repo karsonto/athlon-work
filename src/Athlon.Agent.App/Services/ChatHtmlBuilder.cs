@@ -10,7 +10,10 @@ namespace Athlon.Agent.App.Services;
 /// <summary>构建 WebChatView 外壳 HTML；静态 shell CSS/JS 经 athlon.chat.assets 虚拟主机加载。</summary>
 public sealed class ChatHtmlBuilder
 {
-    public string BuildShellHtml(string? ssoDisplayName = null, bool ttsEnabled = false)
+    public string BuildShellHtml(
+        string? ssoDisplayName = null,
+        bool ttsEnabled = false,
+        bool atomicReplay = true)
     {
         var assets = ChatMarkdownAssets.VirtualBaseUrl;
         var cache = ChatMarkdownAssets.AssetCacheQuery;
@@ -30,7 +33,7 @@ public sealed class ChatHtmlBuilder
             "</div>" +
             $"<script src=\"{assets}highlight.min.js{cache}\"></script>" +
             "<script>" + BuildI18nBootstrapScript() + "</script>" +
-            "<script>" + BuildAssetConfigScript() + "</script>" +
+            "<script>" + BuildAssetConfigScript(atomicReplay) + "</script>" +
             "<script>" + BuildTtsConfigScript(ttsEnabled) + "</script>" +
             $"<script src=\"{assets}timeline-state.js{cache}\"></script>" +
             $"<script src=\"{assets}timeline-render.js{cache}\"></script>" +
@@ -63,10 +66,11 @@ public sealed class ChatHtmlBuilder
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls = false,
         string? ssoDisplayName = null,
-        bool ttsEnabled = false)
+        bool ttsEnabled = false,
+        bool atomicReplay = true)
     {
         const string footer = "</body></html>";
-        var shell = BuildShellHtml(ssoDisplayName, ttsEnabled);
+        var shell = BuildShellHtml(ssoDisplayName, ttsEnabled, atomicReplay);
         if (!shell.EndsWith(footer, StringComparison.Ordinal))
         {
             return shell;
@@ -106,13 +110,15 @@ public sealed class ChatHtmlBuilder
     /// Hands the timeline the lazy-load coordinates for the bundled Mermaid runtime plus the
     /// Mermaid theme name, so diagrams can render offline without touching the shell startup path.
     /// </summary>
-    private static string BuildAssetConfigScript() =>
+    private static string BuildAssetConfigScript(bool atomicReplay = true) =>
         "window.__chatAssets=" + JsonSerializer.Serialize(new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["mermaidBase"] = ChatMarkdownAssets.MermaidVirtualBaseUrl,
             ["mermaid"] = ChatMarkdownAssets.MermaidScriptFileName,
             ["cache"] = ChatMarkdownAssets.AssetCacheQuery,
             ["theme"] = ThemeHtmlStyles.GetMermaidPalette().MermaidTheme,
+            // "1" / "0" — timeline-state.js treats anything other than "0"/false as enabled.
+            ["atomicReplay"] = atomicReplay ? "1" : "0",
         }) + ";";
 
     /// <summary>

@@ -106,6 +106,28 @@ public sealed class SessionSnapshotProtocolTests
         Assert.DoesNotContain("sessionSnapshots.clear()", reset, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Atomic_replay_builds_offscreen_and_commits_with_replaceChildren()
+    {
+        var state = ReadChatAsset("timeline-state.js");
+        var render = ReadChatAsset("timeline-render.js");
+        var protocol = ReadChatAsset("timeline-protocol.js");
+
+        Assert.Contains("function isAtomicReplayEnabled(", state, StringComparison.Ordinal);
+        Assert.Contains("atomicReplay: null", state, StringComparison.Ordinal);
+        Assert.Contains("function resetTimelineStateOnly(", render, StringComparison.Ordinal);
+        Assert.Contains("if (state.atomicReplay)", render, StringComparison.Ordinal);
+        Assert.Contains("function replayEventsAtomic(", protocol, StringComparison.Ordinal);
+        Assert.Contains("function beginAtomicReplay(", protocol, StringComparison.Ordinal);
+        Assert.Contains("function commitAtomicReplay(", protocol, StringComparison.Ordinal);
+        Assert.Contains("function abandonAtomicReplay(", protocol, StringComparison.Ordinal);
+        Assert.Contains("root.replaceChildren.apply", protocol, StringComparison.Ordinal);
+        Assert.Contains("isAtomicReplayEnabled()", protocol, StringComparison.Ordinal);
+        // Legacy path remains for the Ui.ChatRenderAtomicReplay=false rollback.
+        Assert.Contains("function replayEvents(", protocol, StringComparison.Ordinal);
+        Assert.Contains("root.innerHTML = '';", render, StringComparison.Ordinal);
+    }
+
     private static string ExtractFunction(string source, string signature)
     {
         var start = source.IndexOf(signature, StringComparison.Ordinal);

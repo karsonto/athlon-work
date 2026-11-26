@@ -343,6 +343,13 @@ public sealed class UiSettings
     public bool PreserveSessionUiState { get; set; } = true;
 
     /// <summary>
+    /// Build authoritative chat replays off-screen and swap them in once, so turn-end / session
+    /// reloads do not blank <c>#messages</c> mid-render. False restores the legacy
+    /// <c>resetTimeline</c> path that clears the visible tree before replaying.
+    /// </summary>
+    public bool ChatRenderAtomicReplay { get; set; } = true;
+
+    /// <summary>
     /// Last durable chat session the user had open. Restored on cold start so the shell opens the
     /// previous conversation instead of an empty New Chat.
     /// </summary>

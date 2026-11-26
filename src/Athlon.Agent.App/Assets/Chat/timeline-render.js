@@ -166,18 +166,13 @@ function enhanceCodeBlocksNow(root) {
   });
 }
 
-function resetTimeline() {
-  // The mounted rows are being rebuilt from a replay, so a snapshot saved for this session is
-  // stale by definition. Other sessions' snapshots stay untouched — they are the per-session roots
-  // a later switchSession can swap back in.
-  invalidateSessionSnapshot(state.currentSessionId);
-  const root = document.getElementById('messages');
+/** Clears timeline bookkeeping without touching the visible #messages tree. */
+function resetTimelineStateOnly() {
   if (codeObserver) codeObserver.disconnect();
   // Drop any queued code blocks from a previous timeline; their nodes are about to be
   // removed, so flushing them later would be wasted work (guarded in enhanceOneCodeBlock).
   pendingEnhanceQueue.length = 0;
   enhanceScheduled = false;
-  root.innerHTML = '';
   state.entries.clear();
   state.liveTurn = 0;
   state.liveContentOrdinal = 0;
@@ -197,6 +192,22 @@ function resetTimeline() {
   }
   mermaidRenderRoots = [];
   mermaidSources = new WeakMap();
+}
+
+function resetTimeline() {
+  // The mounted rows are being rebuilt from a replay, so a snapshot saved for this session is
+  // stale by definition. Other sessions' snapshots stay untouched — they are the per-session roots
+  // a later switchSession can swap back in.
+  invalidateSessionSnapshot(state.currentSessionId);
+  // During atomic off-screen assembly the visible tree must stay put until commit; only the
+  // in-memory entry map / cursors are reset (batchTarget already points at the fragment).
+  if (state.atomicReplay) {
+    resetTimelineStateOnly();
+    return;
+  }
+  const root = document.getElementById('messages');
+  resetTimelineStateOnly();
+  if (root) root.innerHTML = '';
 }
 
 function beginBatch() {

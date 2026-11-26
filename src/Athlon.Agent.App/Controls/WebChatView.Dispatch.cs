@@ -10,6 +10,7 @@ using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Services.Chat;
 using Athlon.Agent.App.Services.Diagnostics;
+using Athlon.Agent.App.Services.Streaming;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -64,13 +65,80 @@ public partial class WebChatView
         int? responseDurationMs = null,
         IReadOnlyList<ImageAttachment>? browserScreenshots = null)
     {
-        PostTimelineEvent(ChatEventSerializer.SerializeStaticAssistantHtml(
-            message,
-            streaming,
-            responseDurationMs,
-            browserScreenshots: browserScreenshots));
-        return Task.CompletedTask;
+        var content = message.Content ?? string.Empty;
+        var decision = _assistantMarkdownCoalesce.TryBegin(message.MessageId, content, streaming);
+        switch (decision)
+        {
+            case CoalesceDecision.SkipUnchanged:
+                return Task.CompletedTask;
+            case CoalesceDecision.Queued:
+                // Keep the live ViewModel reference so a follow-up flush sees the latest Content.
+                _queuedAssistantMarkdown = new AssistantMarkdownQueueItem(
+                    message,
+                    streaming,
+                    responseDurationMs,
+                    browserScreenshots);
+                return Task.CompletedTask;
+            default:
+                _queuedAssistantMarkdown = null;
+                return PostAssistantMarkdownCoalescedAsync(
+                    message,
+                    streaming,
+                    responseDurationMs,
+                    browserScreenshots);
+        }
     }
+
+    private async Task PostAssistantMarkdownCoalescedAsync(
+        ChatMessageViewModel message,
+        bool streaming,
+        int? responseDurationMs,
+        IReadOnlyList<ImageAttachment>? browserScreenshots)
+    {
+        try
+        {
+            var json = ChatEventSerializer.SerializeStaticAssistantHtml(
+                message,
+                streaming,
+                responseDurationMs,
+                browserScreenshots: browserScreenshots);
+            await PostTimelineEventAsync(json).ConfigureAwait(true);
+        }
+        catch
+        {
+            _assistantMarkdownCoalesce.Fail();
+            _queuedAssistantMarkdown = null;
+            throw;
+        }
+
+        _assistantMarkdownCoalesce.Complete();
+        var queued = _queuedAssistantMarkdown;
+        _queuedAssistantMarkdown = null;
+        if (queued is null)
+        {
+            return;
+        }
+
+        var followDecision = _assistantMarkdownCoalesce.TryBegin(
+            queued.Message.MessageId,
+            queued.Message.Content ?? string.Empty,
+            queued.Streaming);
+        if (followDecision == CoalesceDecision.PostNow)
+        {
+            await PostAssistantMarkdownCoalescedAsync(
+                    queued.Message,
+                    queued.Streaming,
+                    queued.ResponseDurationMs,
+                    queued.BrowserScreenshots)
+                .ConfigureAwait(true);
+        }
+    }
+
+    private sealed record AssistantMarkdownQueueItem(
+        ChatMessageViewModel Message,
+        bool Streaming,
+        int? ResponseDurationMs,
+        IReadOnlyList<ImageAttachment>? BrowserScreenshots);
 
     public Task ApplyToolResultMarkdownAsync(ChatMessageViewModel message)
     {

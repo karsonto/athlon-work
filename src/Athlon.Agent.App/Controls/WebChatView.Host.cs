@@ -505,7 +505,10 @@ public partial class WebChatView
         {
             ChatWebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
             ChatWebView.NavigateToString(
-                _htmlBuilder.BuildShellHtml(ResolveSsoDisplayName(), TtsController?.Enabled ?? false));
+                _htmlBuilder.BuildShellHtml(
+                    ResolveSsoDisplayName(),
+                    TtsController?.Enabled ?? false,
+                    atomicReplay: ResolveAtomicReplayEnabled()));
             var success = await _documentReadyTcs.Task.ConfigureAwait(true);
             if (!success || generation != _navigationGeneration)
             {

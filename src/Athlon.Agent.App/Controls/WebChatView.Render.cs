@@ -130,8 +130,10 @@ public partial class WebChatView
                 "canRenderFalse",
                 $"visible={IsVisible} w={ActualWidth:0.##} h={ActualHeight:0.##} gen={expectedGeneration}");
 
-            // The drop is recorded above; this additionally reports it if it never recovers, which is
-            // the state the user describes as needing a session switch to clear.
+            // Keep _needsRender set so SizeChanged / IsVisibleChanged / the orphan watcher can
+            // retry once the viewport is large enough. Completing the barrier as unrendered lets
+            // live-event waiters fail fast instead of hanging for the timeout. Do not
+            // ScheduleRenderRetry here: while the WebView is still 2x2 that would spin.
             CompleteRenderGeneration(expectedGeneration, rendered: false);
             WatchForStalledRender(expectedGeneration);
             return;
@@ -249,6 +251,13 @@ public partial class WebChatView
                 + $"visible={IsVisible} w={ActualWidth:0.##} h={ActualHeight:0.##} "
                 + $"canRender={CanRender()} doc={_documentReady} init={_initialized} "
                 + $"msgs={_pendingMessages.Count}");
+
+            // If the viewport recovered while we were watching, retry instead of waiting for the
+            // user to switch sessions to clear the stalled surface.
+            if (CanRender())
+            {
+                ScheduleRenderRetry();
+            }
         });
     }
 

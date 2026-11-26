@@ -214,4 +214,18 @@ public partial class WebChatView
 
         return services.GetService<ICurrentSsoUserContext>()?.DisplayName;
     }
+
+    /// <summary>
+    /// Reads <c>Ui.ChatRenderAtomicReplay</c> (default true). Missing DI / settings falls back to
+    /// the safer atomic path rather than the legacy blanking reset.
+    /// </summary>
+    private static bool ResolveAtomicReplayEnabled()
+    {
+        if (Application.Current is not App { Services: { } services })
+        {
+            return true;
+        }
+
+        return services.GetService<AppSettings>()?.Ui.ChatRenderAtomicReplay ?? true;
+    }
 }

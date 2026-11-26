@@ -328,6 +328,104 @@ function applyThemeUpdate(highlightHref, tokensB64, syntaxB64) {
 }
 
 /**
+ * Discards an in-flight off-screen replay without touching the visible #messages tree.
+ * Used when a newer renderGeneration supersedes the assembly mid-batch.
+ */
+function abandonAtomicReplay() {
+  if (!state.atomicReplay) return;
+  state.batchTarget = null;
+  state.atomicReplay = null;
+  state.batching = false;
+  state.pendingEnhancementRoots = [];
+  state.trackReasoningDuration = true;
+  document.documentElement.classList.remove('replaying');
+}
+
+/**
+ * Starts (or restarts) an off-screen authoritative replay for the given render generation.
+ * Visible #messages stays mounted until <c>commitAtomicReplay</c>.
+ */
+function beginAtomicReplay(renderGeneration) {
+  abandonAtomicReplay();
+  beginBatch();
+  state.trackReasoningDuration = false;
+  state.replayStartAt = performance.now();
+  var fragment = document.createDocumentFragment();
+  state.batchTarget = fragment;
+  state.atomicReplay = {
+    fragment: fragment,
+    generation: Number.isInteger(renderGeneration) ? renderGeneration : null,
+    maxSeq: -1,
+    parseFailures: 0,
+    eventCount: 0
+  };
+  // Clears entry map / cursors and invalidates the mounted session snapshot; does not blank
+  // the on-screen tree (resetTimeline sees state.atomicReplay).
+  resetTimeline();
+}
+
+/** Feeds one replay/append batch into the off-screen fragment. */
+function appendToAtomicReplay(events) {
+  if (!state.atomicReplay) return;
+  var list = Array.isArray(events) ? events : [];
+  for (var i = 0; i < list.length; i++) {
+    try {
+      var event = typeof list[i] === 'string' ? JSON.parse(list[i]) : list[i];
+      if (event && typeof event.seq === 'number' && isFinite(event.seq) && event.seq > state.atomicReplay.maxSeq) {
+        state.atomicReplay.maxSeq = event.seq;
+      }
+      handleEvent(event);
+      state.atomicReplay.eventCount++;
+    } catch (e) {
+      state.atomicReplay.parseFailures++;
+      console.warn('replayEventsAtomic parse failed', e);
+    }
+  }
+}
+
+/**
+ * Swaps the assembled off-screen fragment into #messages in one replaceChildren call so the
+ * user never sees an empty timeline between reset and rebuild.
+ */
+function commitAtomicReplay() {
+  if (!state.atomicReplay) return;
+  var atomic = state.atomicReplay;
+  var root = document.getElementById('messages');
+  state.batchTarget = null;
+  if (root) {
+    // replaceChildren empties the live root and moves fragment children in one step.
+    if (typeof root.replaceChildren === 'function') {
+      root.replaceChildren.apply(root, Array.prototype.slice.call(atomic.fragment.childNodes));
+    } else {
+      root.innerHTML = '';
+      root.appendChild(atomic.fragment);
+    }
+  }
+  syncLiveCursorFromSeq(atomic.maxSeq);
+  state.trackReasoningDuration = true;
+  reportRenderIssue(
+    'replayApplied',
+    'events=' + atomic.eventCount
+      + ' rows=' + (root ? root.children.length : -1)
+      + ' parseFailed=' + atomic.parseFailures
+      + ' atomic=1');
+  state.atomicReplay = null;
+  endBatch(true);
+}
+
+/**
+ * Atomic multi-batch entry: first replay batch begins off-screen assembly; subsequent append
+ * batches keep writing to the same fragment; replayComplete commits once.
+ */
+function replayEventsAtomic(events, renderGeneration, replayComplete) {
+  beginAtomicReplay(renderGeneration);
+  appendToAtomicReplay(events);
+  if (replayComplete) {
+    commitAtomicReplay();
+  }
+}
+
+/**
  * Renders a full authoritative timeline. Every entry the events carry lands at its own seq, and
  * the live cursor is re-anchored afterwards so a mid-turn reload's next live event continues the
  * replay's numbering instead of landing in a stale turn band.
@@ -491,9 +589,32 @@ function handleWebMessage(message) {
   if (!command || !command.command) return;
   if (command.command === 'replay') {
     beginReplayScroll(command.sessionId);
-    replayEvents(Array.isArray(command.events) ? command.events : []);
+    if (isAtomicReplayEnabled()) {
+      replayEventsAtomic(
+        Array.isArray(command.events) ? command.events : [],
+        command.renderGeneration,
+        !!command.replayComplete);
+    } else {
+      abandonAtomicReplay();
+      replayEvents(Array.isArray(command.events) ? command.events : []);
+    }
   } else if (command.command === 'append') {
-    appendEvents(Array.isArray(command.events) ? command.events : []);
+    if (state.atomicReplay) {
+      // A newer generation's append must not commit into a stale off-screen tree; drop the
+      // assembly and keep the previous visible timeline until a matching replay arrives.
+      if (Number.isInteger(command.renderGeneration)
+          && state.atomicReplay.generation !== null
+          && command.renderGeneration !== state.atomicReplay.generation) {
+        abandonAtomicReplay();
+      } else {
+        appendToAtomicReplay(Array.isArray(command.events) ? command.events : []);
+        if (command.replayComplete) {
+          commitAtomicReplay();
+        }
+      }
+    } else {
+      appendEvents(Array.isArray(command.events) ? command.events : []);
+    }
   } else if (command.command === 'prepend') {
     prependEvents(
       Array.isArray(command.events) ? command.events : [],
@@ -501,12 +622,16 @@ function handleWebMessage(message) {
   } else if (command.command === 'event') {
     // Single real-time event on the same channel as replay. Shares handleEvent, so live and
     // replayed entries go through one renderer and one seq-based placement rule.
-    var immediate = Array.isArray(command.events) ? command.events : [];
-    for (var i = 0; i < immediate.length; i++) {
-      try {
-        var parsed = typeof immediate[i] === 'string' ? immediate[i] : JSON.stringify(immediate[i]);
-        handleEvent(typeof parsed === 'string' ? JSON.parse(parsed) : parsed);
-      } catch (e) { console.warn('event parse failed', e); }
+    // While an atomic off-screen assembly is open, getMessageRoot() points at the fragment —
+    // live patches would race the authoritative batches, so they are dropped until commit.
+    if (!state.atomicReplay) {
+      var immediate = Array.isArray(command.events) ? command.events : [];
+      for (var i = 0; i < immediate.length; i++) {
+        try {
+          var parsed = typeof immediate[i] === 'string' ? immediate[i] : JSON.stringify(immediate[i]);
+          handleEvent(typeof parsed === 'string' ? JSON.parse(parsed) : parsed);
+        } catch (e) { console.warn('event parse failed', e); }
+      }
     }
   } else if (command.command === 'historyAvailability') {
     setOlderMessagesAvailable(!!command.hasOlderMessages);
@@ -516,6 +641,9 @@ function handleWebMessage(message) {
   } else if (command.command === 'toolDetail') {
     applyToolDetailPayload(command);
   } else if (command.command === 'switchSession') {
+    // A pending off-screen assembly belongs to the previous render; drop it so the snapshot
+    // swap (or the follow-up replay) is not racing a stale fragment commit.
+    abandonAtomicReplay();
     // Fast path: swap a previously rendered session's DOM back in. A miss (or a revision mismatch)
     // tells C# to run the normal full replay instead.
     var restored = switchSessionSnapshot(command.sessionId, command.revision);
@@ -527,11 +655,17 @@ function handleWebMessage(message) {
   } else if (command.command === 'invalidateSession') {
     invalidateSessionSnapshot(command.sessionId);
   } else if (command.command === 'reset') {
+    abandonAtomicReplay();
     beginBatch();
     resetTimeline();
     endBatch(false);
   }
   if (command.replayComplete && Number.isInteger(command.renderGeneration)) {
+    // If an atomic assembly is somehow still open (e.g. empty trailing complete), commit now so
+    // the barrier is not left waiting on a never-swapped tree.
+    if (state.atomicReplay) {
+      commitAtomicReplay();
+    }
     // Restore a saved scroll position when switching back to a session; a cold session left
     // pendingRestoreTop null, so its normal scroll-to-bottom already ran during the last batch.
     if (state.pendingRestoreTop !== null) {

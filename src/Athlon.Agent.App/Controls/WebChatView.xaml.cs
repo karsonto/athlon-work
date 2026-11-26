@@ -10,6 +10,7 @@ using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Services.Chat;
 using Athlon.Agent.App.Services.Diagnostics;
+using Athlon.Agent.App.Services.Streaming;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -62,6 +63,8 @@ public partial class WebChatView : UserControl
     private bool _renderQueuedWhileInProgress;
     private int _themeApplyGeneration;
     private int _i18nApplyGeneration;
+    private readonly AssistantMarkdownCoalesceGate _assistantMarkdownCoalesce = new();
+    private AssistantMarkdownQueueItem? _queuedAssistantMarkdown;
 
     public WebChatView()
     {

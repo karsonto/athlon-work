@@ -43,8 +43,17 @@ const state = {
   // Content revision of the timeline currently mounted. C# sends the same fingerprint it caches
   // replay shards under, so a saved session DOM snapshot can be restored only while the content it
   // was rendered from is still current (any mismatch means the session changed -> replay instead).
-  renderedRevision: null
+  renderedRevision: null,
+  // Non-null while an atomic (off-screen) replay is being assembled across replay/append batches.
+  // The visible #messages tree stays mounted until commitAtomicReplay swaps in the fragment.
+  atomicReplay: null
 };
+
+/** Rollback switch: off when Ui.ChatRenderAtomicReplay is false (injected as "0"). */
+function isAtomicReplayEnabled() {
+  var cfg = window.__chatAssets || {};
+  return cfg.atomicReplay !== '0' && cfg.atomicReplay !== false && cfg.atomicReplay !== 0;
+}
 
 function t(key) {
   return (window.__chatI18n && window.__chatI18n[key]) || key;
@@ -1098,7 +1107,16 @@ function enhanceTeamTraceBubbles(root) {
 function applyMarkdownHtml(node, html, enhance) {
   if (!node) return;
   node.classList.add('md-root');
-  node.innerHTML = html || '';
+  var nextHtml = html || '';
+  // Streaming patches often re-post the same accumulated HTML; skipping identical writes avoids
+  // tearing down the bubble's child tree (and the layout it triggers) for no visible change.
+  if (node.dataset.mdHtml === nextHtml) {
+    if (enhance === false) return;
+    // Same markup, but a finalize pass still needs highlight / Mermaid.
+  } else {
+    node.dataset.mdHtml = nextHtml;
+    node.innerHTML = nextHtml;
+  }
   if (enhance === false) return;
   enhanceTeamTraceBubbles(node);
   if (state.batching) {
@@ -1123,14 +1141,21 @@ function applyAssistantHtml(messageId, html, createIfMissing, streaming, respons
   }
   if (!row) return;
   // Query content on the row itself — do not re-query document (breaks DocumentFragment batches).
-  applyMarkdownHtml(row.querySelector('.bubble > .message-content'), html, streaming !== true);
+  var contentNode = row.querySelector('.bubble > .message-content');
+  var nextHtml = html || '';
+  var sameHtml = !!(contentNode && contentNode.dataset.mdHtml === nextHtml);
+  applyMarkdownHtml(contentNode, nextHtml, streaming !== true);
   if (streaming !== true) {
     // The files-changed card take its own seq slot, so no reordering is needed here.
     setMessageMeta(row, formatResponseDuration(responseDurationMs));
     ensureDownloadButton(row);
   }
   updateEmptyStateVisibility();
-  scrollToBottom();
+  // Identical streaming patches still need scroll follow only when height may have changed;
+  // same HTML means no growth, so skip the layout-forcing scroll path.
+  if (!(streaming === true && sameHtml)) {
+    scrollToBottom();
+  }
 }
 
 const codeObserver = typeof IntersectionObserver === 'function'
