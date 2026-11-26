@@ -13,13 +13,18 @@ public static class DarkAppThemePalette
         FileIcons = CreateFileIcons(),
     };
 
-    /// <summary>Matches <c>design/agent-teams/teams-config.html</c> dark tokens.</summary>
+    /// <summary>
+    /// Dark SaaS neutrals + solid blue/teal. Matches <c>design/agent-teams/teams-config.html</c>.
+    /// </summary>
     private static UiTeamsColors CreateTeams() => new()
     {
-        Leader = C("#A78BFA"),
-        LeaderSoft = Ca(0x29, "#A78BFA"),
-        Worker = C("#22D3EE"),
-        WorkerSoft = Ca(0x24, "#22D3EE"),
+        Accent = C("#60A5FA"),
+        AccentHover = C("#93C5FD"),
+        AccentSoft = Ca(0x29, "#60A5FA"),
+        Leader = C("#60A5FA"),
+        LeaderSoft = Ca(0x29, "#60A5FA"),
+        Worker = C("#2DD4BF"),
+        WorkerSoft = Ca(0x24, "#2DD4BF"),
         Success = C("#34D399"),
         SuccessSoft = Ca(0x24, "#34D399"),
         Warn = C("#FBBF24"),
@@ -27,13 +32,9 @@ public static class DarkAppThemePalette
         Error = C("#F87171"),
         ErrorSoft = Ca(0x29, "#F87171"),
         ErrorBorder = Ca(0x80, "#F87171"),
-        AvatarWorkerStart = C("#22D3EE"),
-        AvatarWorkerEnd = C("#38BDF8"),
-        AvatarLeaderStart = C("#A78BFA"),
-        AvatarLeaderEnd = C("#818CF8"),
-        OrgPreviewStart = Ca(0x29, "#818CF8"),
-        OrgPreviewMid = Ca(0x24, "#22D3EE"),
-        OrgPreviewEnd = Color.FromArgb(0x00, 0x0B, 0x12, 0x20),
+        AvatarLeader = C("#2563EB"),
+        AvatarWorker = C("#0D9488"),
+        OrgPreview = C("#0F172A"),
     };
 
     private static UiChromeColors CreateChrome() => new()

@@ -13,19 +13,19 @@
       --muted: #64748B;
       --border: #E2E8F0;
       --border-strong: #CBD5E1;
-      --accent: #6366F1;
-      --accent-hover: #4F46E5;
-      --accent-soft: rgba(99, 102, 241, 0.12);
-      --accent-ring: rgba(99, 102, 241, 0.35);
+      --accent: #2563EB;
+      --accent-hover: #1D4ED8;
+      --accent-soft: rgba(37, 99, 235, 0.08);
+      --accent-ring: rgba(37, 99, 235, 0.28);
       --success: #059669;
       --success-soft: rgba(5, 150, 105, 0.12);
       --warn: #D97706;
       --warn-soft: rgba(217, 119, 6, 0.12);
       --danger: #DC2626;
-      --leader: #7C3AED;
-      --leader-soft: rgba(124, 58, 237, 0.12);
-      --worker: #0891B2;
-      --worker-soft: rgba(8, 145, 178, 0.12);
+      --leader: #1D4ED8;
+      --leader-soft: rgba(29, 78, 216, 0.08);
+      --worker: #0F766E;
+      --worker-soft: rgba(15, 118, 110, 0.08);
       --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
       --radius: 10px;
       --font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
@@ -39,19 +39,19 @@
       --muted: #94A3B8;
       --border: #334155;
       --border-strong: #475569;
-      --accent: #818CF8;
-      --accent-hover: #A5B4FC;
-      --accent-soft: rgba(129, 140, 248, 0.16);
-      --accent-ring: rgba(129, 140, 248, 0.4);
+      --accent: #60A5FA;
+      --accent-hover: #93C5FD;
+      --accent-soft: rgba(96, 165, 250, 0.16);
+      --accent-ring: rgba(96, 165, 250, 0.35);
       --success: #34D399;
       --success-soft: rgba(52, 211, 153, 0.14);
       --warn: #FBBF24;
       --warn-soft: rgba(251, 191, 36, 0.14);
       --danger: #F87171;
-      --leader: #A78BFA;
-      --leader-soft: rgba(167, 139, 250, 0.16);
-      --worker: #22D3EE;
-      --worker-soft: rgba(34, 211, 238, 0.14);
+      --leader: #60A5FA;
+      --leader-soft: rgba(96, 165, 250, 0.16);
+      --worker: #2DD4BF;
+      --worker-soft: rgba(45, 212, 191, 0.14);
       --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 12px 32px rgba(0,0,0,0.35);
     }
 
@@ -87,7 +87,7 @@
     }
     .nav-logo {
       width: 32px; height: 32px; border-radius: 8px;
-      background: linear-gradient(135deg, var(--accent), #4338CA);
+      background: var(--accent);
       color: #fff; display: grid; place-items: center;
       font-weight: 700; font-size: 12px; margin-bottom: 8px;
     }
@@ -253,8 +253,8 @@
       width: 28px; height: 28px; border-radius: 8px;
       display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff;
     }
-    .avatar.leader { background: linear-gradient(135deg, #7C3AED, #4F46E5); }
-    .avatar.worker { background: linear-gradient(135deg, #0891B2, #2563EB); }
+    .avatar.leader { background: var(--leader); }
+    .avatar.worker { background: var(--worker); }
     .caps {
       display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
     }
@@ -303,10 +303,7 @@
       border: 1px dashed var(--border-strong);
       border-radius: 10px;
       padding: 12px;
-      background:
-        radial-gradient(circle at 20% 20%, var(--accent-soft), transparent 45%),
-        radial-gradient(circle at 80% 0%, var(--worker-soft), transparent 40%),
-        var(--bg);
+      background: var(--bg);
     }
     .flow {
       display: flex; flex-direction: column; align-items: center; gap: 8px;
@@ -626,7 +623,7 @@
 
         <div class="footer-note">
           <span>打开方式：用浏览器打开本文件。相关：<a href="./index.html">设计稿索引</a> · <a href="./team-trace.html">Trace UI</a></span>
-          <span>Accent = Athlon Indigo #6366F1</span>
+          <span>Accent = Blue #2563EB · Leader #1D4ED8 · Worker #0F766E · no gradients</span>
         </div>
       </div>
     </main>

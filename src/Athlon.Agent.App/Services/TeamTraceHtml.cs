@@ -97,15 +97,15 @@ public static class TeamTraceHtml
 <title>@@TITLE@@</title>
 <style>
 :root, [data-theme="light"] {
-  --bg:#F1F5F9; --canvas:#EEF2FF; --shell:#FFFFFF; --panel:#FFFFFF; --fg:#0F172A; --muted:#64748B;
-  --border:#E2E8F0; --border-strong:#CBD5E1; --accent:#6366F1; --accent-hover:#4F46E5;
-  --accent-soft:rgba(99,102,241,.14); --accent-ring:rgba(99,102,241,.35);
+  --bg:#F1F5F9; --canvas:#F8FAFC; --shell:#FFFFFF; --panel:#FFFFFF; --fg:#0F172A; --muted:#64748B;
+  --border:#E2E8F0; --border-strong:#CBD5E1; --accent:#2563EB; --accent-hover:#1D4ED8;
+  --accent-soft:rgba(37,99,235,.08); --accent-ring:rgba(37,99,235,.28);
   --success:#059669; --success-soft:#ECFDF5; --success-border:#6EE7B7;
   --running:#2563EB; --running-soft:#EFF6FF; --running-border:#93C5FD;
   --waiting:#94A3B8; --waiting-soft:#F8FAFC;
   --error:#DC2626; --error-soft:#FEF2F2; --error-border:#FCA5A5;
-  --loop:#D97706; --loop-soft:#FFFBEB; --loop-border:#FCD34D; --leader:#7C3AED;
-  --dot:rgba(99,102,241,.18);
+  --loop:#D97706; --loop-soft:#FFFBEB; --loop-border:#FCD34D; --leader:#1D4ED8;
+  --dot:rgba(37,99,235,.12);
   --shadow:0 1px 2px rgba(15,23,42,.05), 0 10px 28px rgba(15,23,42,.08);
   --scroll-thumb:rgba(100,116,139,.45);
   --font:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","PingFang SC",system-ui,sans-serif;
@@ -113,14 +113,14 @@ public static class TeamTraceHtml
 }
 [data-theme="dark"] {
   --bg:#0B1220; --canvas:#111827; --shell:#0F172A; --panel:#1E293B; --fg:#F1F5F9; --muted:#94A3B8;
-  --border:#334155; --border-strong:#475569; --accent:#818CF8; --accent-hover:#A5B4FC;
-  --accent-soft:rgba(129,140,248,.16); --accent-ring:rgba(129,140,248,.4);
+  --border:#334155; --border-strong:#475569; --accent:#60A5FA; --accent-hover:#93C5FD;
+  --accent-soft:rgba(96,165,250,.16); --accent-ring:rgba(96,165,250,.35);
   --success:#34D399; --success-soft:rgba(52,211,153,.12); --success-border:rgba(52,211,153,.45);
   --running:#60A5FA; --running-soft:rgba(96,165,250,.12); --running-border:rgba(96,165,250,.45);
   --waiting:#64748B; --waiting-soft:rgba(100,116,139,.12);
   --error:#F87171; --error-soft:rgba(248,113,113,.12); --error-border:rgba(248,113,113,.45);
-  --loop:#FBBF24; --loop-soft:rgba(251,191,36,.12); --loop-border:rgba(251,191,36,.45); --leader:#A78BFA;
-  --dot:rgba(129,140,248,.12);
+  --loop:#FBBF24; --loop-soft:rgba(251,191,36,.12); --loop-border:rgba(251,191,36,.45); --leader:#60A5FA;
+  --dot:rgba(96,165,250,.12);
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 36px rgba(0,0,0,.35);
   --scroll-thumb:rgba(148,163,184,.4);
 }
@@ -158,7 +158,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .workspace{display:grid;grid-template-columns:1fr 380px;min-height:0}
 .workspace.drawer-closed{grid-template-columns:1fr 0fr}
 .workspace.drawer-closed .drawer{display:none}
-.canvas-wrap{position:relative;overflow:hidden;background:radial-gradient(circle at 1px 1px,var(--dot) 1px,transparent 0) 0 0/22px 22px,linear-gradient(180deg,color-mix(in srgb,var(--canvas) 70%,transparent),var(--bg))}
+.canvas-wrap{position:relative;overflow:hidden;background:radial-gradient(circle at 1px 1px,var(--dot) 1px,transparent 0) 0 0/22px 22px,var(--canvas)}
 .canvas-toolbar{position:absolute;top:12px;left:12px;z-index:5;display:flex;gap:6px;flex-wrap:wrap;background:var(--shell);border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:var(--shadow);max-width:calc(100% - 180px)}
 .canvas-toolbar .btn{padding:5px 9px}
 .hint-chip{align-self:center;font-size:11px;color:var(--muted);padding:0 6px}
@@ -266,7 +266,7 @@ svg.wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
             <defs>
               <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94A3B8"/></marker>
               <marker id="arrowDone" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#059669"/></marker>
-              <marker id="arrowActive" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#6366F1"/></marker>
+              <marker id="arrowActive" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#2563EB"/></marker>
               <marker id="arrowLoop" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#D97706"/></marker>
             </defs>
           </svg>

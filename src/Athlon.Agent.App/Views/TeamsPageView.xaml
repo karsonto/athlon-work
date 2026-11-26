@@ -123,14 +123,6 @@
                     </StackPanel>
 
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Command="{Binding DataContext.ToggleThemeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                ToolTip="{Binding DataContext.ThemeToggleToolTip, RelativeSource={RelativeSource AncestorType=Window}}"
-                                Style="{StaticResource HeaderIconButtonStyle}"
-                                Margin="0,0,8,0"
-                                VerticalAlignment="Center"
-                                AutomationProperties.Name="{Binding DataContext.ThemeToggleToolTip, RelativeSource={RelativeSource AncestorType=Window}}">
-                            <materialDesign:PackIcon Style="{StaticResource ThemeTogglePackIconStyle}" />
-                        </Button>
                         <Button Content="创建示例" Command="{Binding CreateSampleTeamCommand}"
                                 Style="{StaticResource TeamsSecondaryButtonStyle}" Margin="0,0,8,0" />
                         <Button Content="导入" Command="{Binding ImportTeamCommand}"

@@ -4,10 +4,13 @@ namespace Athlon.Agent.App.Themes;
 
 /// <summary>
 /// Agent Teams page semantic colors (aligned with <c>design/agent-teams/teams-config.html</c>).
-/// Keys map to <c>Brush.Teams.*</c> resources.
+/// Keys map to <c>Brush.Teams.*</c> resources. All fills are solid — no gradients.
 /// </summary>
 public sealed class UiTeamsColors
 {
+    public required Color Accent { get; init; }
+    public required Color AccentHover { get; init; }
+    public required Color AccentSoft { get; init; }
     public required Color Leader { get; init; }
     public required Color LeaderSoft { get; init; }
     public required Color Worker { get; init; }
@@ -19,11 +22,7 @@ public sealed class UiTeamsColors
     public required Color Error { get; init; }
     public required Color ErrorSoft { get; init; }
     public required Color ErrorBorder { get; init; }
-    public required Color AvatarWorkerStart { get; init; }
-    public required Color AvatarWorkerEnd { get; init; }
-    public required Color AvatarLeaderStart { get; init; }
-    public required Color AvatarLeaderEnd { get; init; }
-    public required Color OrgPreviewStart { get; init; }
-    public required Color OrgPreviewMid { get; init; }
-    public required Color OrgPreviewEnd { get; init; }
+    public required Color AvatarLeader { get; init; }
+    public required Color AvatarWorker { get; init; }
+    public required Color OrgPreview { get; init; }
 }

@@ -108,6 +108,9 @@ internal static class AppThemeResourceBuilder
             ["Brush.PreviewContentBackground"] = Brush(c.PreviewContentBackground),
             ["Brush.ScrollThumb"] = Brush(c.ScrollThumb, c.ScrollThumbOpacity),
             ["Brush.ChatBackground"] = Brush(c.ChatBackgroundTop),
+            ["Brush.Teams.Accent"] = Brush(teams.Accent),
+            ["Brush.Teams.AccentHover"] = Brush(teams.AccentHover),
+            ["Brush.Teams.AccentSoft"] = Brush(teams.AccentSoft),
             ["Brush.Teams.Leader"] = Brush(teams.Leader),
             ["Brush.Teams.LeaderSoft"] = Brush(teams.LeaderSoft),
             ["Brush.Teams.Worker"] = Brush(teams.Worker),
@@ -119,13 +122,9 @@ internal static class AppThemeResourceBuilder
             ["Brush.Teams.Error"] = Brush(teams.Error),
             ["Brush.Teams.ErrorSoft"] = Brush(teams.ErrorSoft),
             ["Brush.Teams.ErrorBorder"] = Brush(teams.ErrorBorder),
-            ["Brush.Teams.AvatarWorker"] = DiagonalGradient(teams.AvatarWorkerStart, teams.AvatarWorkerEnd),
-            ["Brush.Teams.AvatarLeader"] = DiagonalGradient(teams.AvatarLeaderStart, teams.AvatarLeaderEnd),
-            ["Brush.Teams.OrgPreview"] = DiagonalGradient(
-                teams.OrgPreviewStart,
-                teams.OrgPreviewMid,
-                teams.OrgPreviewEnd,
-                midOffset: 0.55),
+            ["Brush.Teams.AvatarWorker"] = Brush(teams.AvatarWorker),
+            ["Brush.Teams.AvatarLeader"] = Brush(teams.AvatarLeader),
+            ["Brush.Teams.OrgPreview"] = Brush(teams.OrgPreview),
         };
 
         // The app loads MaterialDesign's control styles without installing its theme, so the keys
@@ -184,41 +183,4 @@ internal static class AppThemeResourceBuilder
 
     private static SolidColorBrush Brush(Color color, double? opacity = null) =>
         AppThemeColor.ToFrozenBrush(color, opacity);
-
-    private static LinearGradientBrush DiagonalGradient(Color start, Color end)
-    {
-        var brush = new LinearGradientBrush
-        {
-            StartPoint = new Point(0, 0),
-            EndPoint = new Point(1, 1),
-            GradientStops =
-            {
-                new GradientStop(start, 0),
-                new GradientStop(end, 1),
-            },
-        };
-        brush.Freeze();
-        return brush;
-    }
-
-    private static LinearGradientBrush DiagonalGradient(
-        Color start,
-        Color mid,
-        Color end,
-        double midOffset)
-    {
-        var brush = new LinearGradientBrush
-        {
-            StartPoint = new Point(0, 0),
-            EndPoint = new Point(1, 1),
-            GradientStops =
-            {
-                new GradientStop(start, 0),
-                new GradientStop(mid, midOffset),
-                new GradientStop(end, 1),
-            },
-        };
-        brush.Freeze();
-        return brush;
-    }
 }
