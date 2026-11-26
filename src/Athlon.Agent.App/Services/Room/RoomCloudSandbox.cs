@@ -446,7 +446,9 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
     {
         await PushKindAsync(sessionId, "workspace", workspaceRoot, onlyTopLevelNames: null, cancellationToken)
             .ConfigureAwait(false);
-        await PushKindAsync(sessionId, "skills", skillsRoot, skillNames, cancellationToken)
+        // Only room-agent checked Skills — never push the entire local skills catalog.
+        var selectedFolders = CloudWorkspaceSync.ResolveSelectedSkillFolders(skillsRoot, skillNames);
+        await PushKindAsync(sessionId, "skills", skillsRoot, selectedFolders, cancellationToken)
             .ConfigureAwait(false);
     }
 

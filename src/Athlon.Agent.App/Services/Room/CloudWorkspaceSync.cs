@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Athlon.Agent.Skills;
 
 namespace Athlon.Agent.App.Services.Room;
 
@@ -55,7 +56,8 @@ internal static class CloudWorkspaceSync
         {
             var root = Path.GetFullPath(hostRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             IEnumerable<string> topEntries = Directory.EnumerateFileSystemEntries(root);
-            if (onlyTopLevelNames is { Count: > 0 })
+            // null => include all; empty list => include nothing (selected-skills sync).
+            if (onlyTopLevelNames is not null)
             {
                 var allow = new HashSet<string>(onlyTopLevelNames, StringComparer.OrdinalIgnoreCase);
                 topEntries = topEntries.Where(p => allow.Contains(Path.GetFileName(p)));
@@ -186,9 +188,47 @@ internal static class CloudWorkspaceSync
     }
 
     /// <summary>
+    /// Map room-agent selected skill <c>name</c>s (frontmatter) to on-disk top-level folder names.
+    /// Empty / null selection ⇒ empty list (sync no skills). Never means “all skills”.
+    /// </summary>
+    public static IReadOnlyList<string> ResolveSelectedSkillFolders(
+        string skillsRoot,
+        IReadOnlyList<string>? selectedSkillNames)
+    {
+        if (selectedSkillNames is null || selectedSkillNames.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var nameToFolder = SkillFileSystemHelper.GetSkillNameToFolderMap(skillsRoot);
+        var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in selectedSkillNames)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                continue;
+            }
+
+            var name = raw.Trim();
+            if (nameToFolder.TryGetValue(name, out var folder) && !string.IsNullOrWhiteSpace(folder))
+            {
+                folders.Add(folder);
+                continue;
+            }
+
+            var direct = Path.Combine(skillsRoot, name);
+            if (SkillFileSystemHelper.HasSkillFile(direct))
+            {
+                folders.Add(name);
+            }
+        }
+
+        return folders.ToArray();
+    }
+
+    /// <summary>
     /// Build the client's <c>desired</c> manifest for push sync.
-    /// When <paramref name="onlyTopLevelNames"/> is set (skills), only those top-level trees are included;
-    /// the control plane treats this as the full desired tree for that kind (extras on staging are removed).
+    /// <paramref name="onlyTopLevelNames"/>: null = all entries; non-null (incl. empty) = only those top-level trees.
     /// </summary>
     public static List<CloudFileManifestEntry> BuildManifest(
         string hostRoot,
@@ -202,7 +242,7 @@ internal static class CloudWorkspaceSync
 
         var root = Path.GetFullPath(hostRoot);
         IEnumerable<string> files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories);
-        if (onlyTopLevelNames is { Count: > 0 })
+        if (onlyTopLevelNames is not null)
         {
             var allow = new HashSet<string>(onlyTopLevelNames, StringComparer.OrdinalIgnoreCase);
             files = files.Where(f =>
