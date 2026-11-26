@@ -50,29 +50,36 @@ internal static class CloudWorkspaceSync
             Directory.CreateDirectory(hostRoot);
         }
 
-        var ms = new MemoryStream();
-        using (var gzip = new GZipStream(ms, CompressionLevel.SmallestSize, leaveOpen: true))
-        using (var writer = new TarWriter(gzip, leaveOpen: true))
+        var root = Path.GetFullPath(hostRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        IEnumerable<string> topEntries = Directory.EnumerateFileSystemEntries(root);
+        // null => include all; empty list => include nothing (selected-skills sync).
+        if (onlyTopLevelNames is not null)
         {
-            var root = Path.GetFullPath(hostRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            IEnumerable<string> topEntries = Directory.EnumerateFileSystemEntries(root);
-            // null => include all; empty list => include nothing (selected-skills sync).
-            if (onlyTopLevelNames is not null)
-            {
-                var allow = new HashSet<string>(onlyTopLevelNames, StringComparer.OrdinalIgnoreCase);
-                topEntries = topEntries.Where(p => allow.Contains(Path.GetFileName(p)));
-            }
-
-            foreach (var entryPath in topEntries)
-            {
-                WriteEntryRecursive(writer, root, entryPath);
-            }
+            var allow = new HashSet<string>(onlyTopLevelNames, StringComparer.OrdinalIgnoreCase);
+            topEntries = topEntries.Where(p => allow.Contains(Path.GetFileName(p)));
         }
 
-        // TarWriter Dispose writes two 512-byte EOF records; gzip footer must be present.
-        if (ms.Length == 0)
+        // Materialize so an empty filter does not depend on TarWriter EOF quirks on Windows
+        // (empty TarWriter+GZip can leave a 0-length stream there).
+        var entryList = topEntries.ToList();
+        var ms = new MemoryStream();
+        using (var gzip = new GZipStream(ms, CompressionLevel.Fastest, leaveOpen: true))
         {
-            throw new InvalidOperationException("PackDirectoryTarGz produced an empty archive.");
+            if (entryList.Count == 0)
+            {
+                // Valid empty ustar: two 512-byte zero blocks.
+                var eof = new byte[512];
+                gzip.Write(eof);
+                gzip.Write(eof);
+            }
+            else
+            {
+                using var writer = new TarWriter(gzip, leaveOpen: true);
+                foreach (var entryPath in entryList)
+                {
+                    WriteEntryRecursive(writer, root, entryPath);
+                }
+            }
         }
 
         ms.Position = 0;
