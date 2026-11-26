@@ -35,4 +35,17 @@ public sealed class RunningSessionPaletteTests
 
         Assert.True(indices.Count > 1);
     }
+
+    [Fact]
+    public void GetColorIndex_is_deterministic_for_known_ids()
+    {
+        // Pinned FNV-1a % 8 values — must not depend on process-randomized string.GetHashCode.
+        Assert.Equal(4, RunningSessionPalette.GetColorIndex("run-a"));
+        Assert.Equal(5, RunningSessionPalette.GetColorIndex("run-b"));
+        Assert.Equal(4, RunningSessionPalette.GetColorIndex("run-1"));
+        Assert.Equal(5, RunningSessionPalette.GetColorIndex("run-2"));
+        Assert.NotEqual(
+            RunningSessionPalette.GetBrushResourceKey("run-a"),
+            RunningSessionPalette.GetBrushResourceKey("run-b"));
+    }
 }
