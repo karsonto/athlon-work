@@ -14,6 +14,7 @@ import { AthlonIcon } from "./AthlonIcon";
 import { ComposerBar } from "./ComposerBar";
 import { HtmlPreviewModal } from "./HtmlPreviewModal";
 import { MessageBubble } from "./MessageBubble";
+import { ThemeToggleButton } from "./ThemeToggleButton";
 
 interface ChatPaneProps {
   tab: RoomTab;
@@ -28,6 +29,8 @@ interface ChatPaneProps {
   members?: RoomPresenceMember[];
   agentTraces?: Record<string, AgentTraceStep[]>;
   stoppingAgent?: boolean;
+  isDarkMode: boolean;
+  onToggleTheme: () => void;
   onDraftChange: (v: string) => void;
   onSend: () => void;
   onPickFiles: (files: FileList | File[] | null) => void;
@@ -59,6 +62,8 @@ export function ChatPane({
   members = [],
   agentTraces,
   stoppingAgent,
+  isDarkMode,
+  onToggleTheme,
   onDraftChange,
   onSend,
   onPickFiles,
@@ -121,6 +126,7 @@ export function ChatPane({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <ThemeToggleButton isDarkMode={isDarkMode} onToggle={onToggleTheme} />
           <div className="relative" ref={membersRef}>
             <button
               type="button"

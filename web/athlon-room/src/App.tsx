@@ -27,6 +27,7 @@ import {
   removeRecentRoom,
   saveRecentRoom,
 } from "./lib/recentRooms";
+import { applyDarkMode, readStoredDarkMode } from "./lib/theme";
 import type {
   AgentTraceStep,
   PendingFile,
@@ -46,6 +47,7 @@ import { MentionToast, type MentionToastItem } from "./components/MentionToast";
 import { RoomAgentSettingsDialog } from "./components/RoomAgentSettingsDialog";
 import { RoomSettingsDialog } from "./components/RoomSettingsDialog";
 import { RoomSidebar, roomKey } from "./components/RoomSidebar";
+import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import {
   messageMentionsSender,
   previewMentionBody,
@@ -91,9 +93,18 @@ function sameOriginBase(baseUrl: string): boolean {
 }
 
 export default function App() {
+  const [isDarkMode, setIsDarkMode] = useState(() => readStoredDarkMode());
   const [senderId, setSenderId] = useState("");
   const [nickname, setNickname] = useState(() => localStorage.getItem(NICK_KEY) ?? "");
   const [joined, setJoined] = useState(false);
+
+  useEffect(() => {
+    applyDarkMode(isDarkMode);
+  }, [isDarkMode]);
+
+  const toggleTheme = useCallback(() => {
+    setIsDarkMode((prev) => !prev);
+  }, []);
   const [rooms, setRooms] = useState<RoomTab[]>([]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Record<string, SessionBundle>>({});
@@ -880,7 +891,10 @@ export default function App() {
 
   if (!joined) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#f1f5f9] p-6 dark:bg-[#0f0f10]">
+      <div className="relative flex h-full items-center justify-center bg-[#f1f5f9] p-6 dark:bg-[#0f0f10]">
+        <div className="absolute top-4 right-4">
+          <ThemeToggleButton isDarkMode={isDarkMode} onToggle={toggleTheme} />
+        </div>
         <form
           onSubmit={onJoinNick}
           className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-sky-100/70 dark:border-zinc-800 dark:bg-[#1f1f22] dark:shadow-none"
@@ -949,6 +963,8 @@ export default function App() {
         onOpenSettings={(t) => void openRoomSettings(t)}
         onOpenAgentCaps={(t) => void openAgentCaps(t)}
         canCreateLocal={canCreateLocal}
+        isDarkMode={isDarkMode}
+        onToggleTheme={toggleTheme}
       />
 
       {activeTab ? (
@@ -965,6 +981,8 @@ export default function App() {
           members={activeSession.members}
           agentTraces={activeSession.agentTraces}
           stoppingAgent={stoppingAgent}
+          isDarkMode={isDarkMode}
+          onToggleTheme={toggleTheme}
           onDraftChange={onDraftChange}
           onSend={() => void onSend()}
           onPickFiles={onPickFiles}
@@ -978,7 +996,10 @@ export default function App() {
           }
         />
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <div className="relative flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+          <div className="absolute top-4 right-4">
+            <ThemeToggleButton isDarkMode={isDarkMode} onToggle={toggleTheme} />
+          </div>
           <p className="text-sm text-slate-500 dark:text-zinc-400">选择或创建一个团队房间开始协作</p>
           {shellError ? <p className="text-sm text-red-500">{shellError}</p> : null}
           <div className="flex gap-2">

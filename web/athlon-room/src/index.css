@@ -41,6 +41,12 @@ body {
   color-scheme: dark;
 }
 
+.dark body,
+html.dark body {
+  background: #0f0f10;
+  color: #f4f4f5;
+}
+
 button,
 input,
 textarea,
