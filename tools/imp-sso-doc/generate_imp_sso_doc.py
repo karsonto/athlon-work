@@ -96,7 +96,7 @@ def build_document() -> Document:
     add_heading(document, "1. 概述")
     add_paragraph(
         document,
-        "Athlon Agent 作为企业级 WPF 桌面应用，通过 IMP（ICBC Asia）SSO 实现统一身份认证。"
+        "Athlon Agent 作为企业级 WPF 桌面应用，通过 IMP SSO 实现统一身份认证。"
         "本实现严格遵循 IMP/SsoFilter 实际协议（ssotoken + check_ssotoken），不采用 OAuth 2.0 模型。",
     )
     add_bullets(
@@ -129,7 +129,8 @@ def build_document() -> Document:
         '{\n'
         '  "Sso": {\n'
         '    "Enabled": false,\n'
-        '    "ImpDomain": "imp.icbcasiauat.com",\n'
+        '    "ImpDomain": "imp.example.com",\n'
+        '    "ImpPathBase": "/imp",\n'
         '    "AppId": "252",\n'
         '    "Msg": "123456789",\n'
         '    "Version": "20251127",\n'
@@ -146,7 +147,8 @@ def build_document() -> Document:
         ["配置项", "说明"],
         [
             ["Enabled", "是否启用 IMP SSO，默认 false"],
-            ["ImpDomain", "IMP 域名，UAT 默认 imp.icbcasiauat.com，生产切换为正式域名"],
+            ["ImpDomain", "IMP 域名，按实际环境配置"],
+            ["ImpPathBase", "IMP 站点路径前缀，默认 /imp"],
             ["AppId", "IMP 子应用 ID（impappid）"],
             ["Msg", "IMP 子应用标识，用于 index.html 的 msg 参数"],
             ["Version", "check_ssotoken 接口版本号"],
@@ -198,8 +200,8 @@ def build_document() -> Document:
         document,
         ["端点", "何时调用"],
         [
-            ["/icbcasia/imp/index.html?toLogin=true&appId={AppId}&msg={Msg}#/login", "无有效缓存或已过期时打开浏览器"],
-            ["/icbcasia/imp/check_ssotoken", "收到 /sso/complete 回调后调用一次"],
+            ["{ImpPathBase}/index.html?toLogin=true&appId={AppId}&msg={Msg}#/login", "无有效缓存或已过期时打开浏览器"],
+            ["{ImpPathBase}/check_ssotoken", "收到 /sso/complete 回调后调用一次"],
             ["GET localhost:{CallbackPort}/sso/auth", "IMP 重定向后浏览器请求认证页"],
             ["POST localhost:{CallbackPort}/sso/complete", "认证页 JS 解析 hash 后回传 JSON"],
         ],
@@ -207,7 +209,7 @@ def build_document() -> Document:
 
     add_heading(document, "5.2 check_ssotoken 请求", level=2)
     document.add_paragraph(
-        "POST https://{ImpDomain}/icbcasia/imp/check_ssotoken?version={Version}\n"
+        "POST https://{ImpDomain}{ImpPathBase}/check_ssotoken?version={Version}\n"
         "Content-Type: application/x-www-form-urlencoded\n\n"
         "ssotoken={token}&impappid={AppId}&dse_sessionId={token}&requestip={localIp}",
         style="Intense Quote",

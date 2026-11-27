@@ -99,7 +99,8 @@ public sealed class ImpSsoAuthServiceMappingTests
         var service = new ImpSsoAuthService(http);
         var settings = new SsoSettings
         {
-            ImpDomain = "imp.icbcasiauat.com",
+            ImpDomain = "imp.example.com",
+            ImpPathBase = "/imp",
             AppId = "252",
             Msg = "123456789"
         };
@@ -107,7 +108,7 @@ public sealed class ImpSsoAuthServiceMappingTests
         var url = service.BuildImpLoginUrl(settings);
 
         Assert.Equal(
-            "https://imp.icbcasiauat.com/icbcasia/imp/index.html?toLogin=true&appId=252&msg=123456789#/login",
+            "https://imp.example.com/imp/index.html?toLogin=true&appId=252&msg=123456789#/login",
             url);
     }
 

@@ -221,7 +221,8 @@ public static class ImpSsoStartupGate
                 Strings.Get("Common_ProductName"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            OpenUrl($"https://{settings.ImpDomain}/icbcasia/imp/index.html?noRoleForSubApp=true");
+            var pathBase = ImpSsoAuthService.NormalizeImpPathBase(settings.ImpPathBase);
+            OpenUrl($"https://{settings.ImpDomain}{pathBase}/index.html?noRoleForSubApp=true");
             return false;
         }
 

@@ -4,7 +4,10 @@ public sealed class SsoSettings
 {
     public bool Enabled { get; set; }
 
-    public string ImpDomain { get; set; } = "imp.icbcasiauat.com";
+    public string ImpDomain { get; set; } = "imp.example.com";
+
+    /// <summary>IMP 站点路径前缀，例如 /imp。</summary>
+    public string ImpPathBase { get; set; } = "/imp";
 
     public string AppId { get; set; } = "252";
 

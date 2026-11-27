@@ -10,7 +10,8 @@ public sealed class ImpSsoAuthService(HttpClient httpClient) : IImpSsoAuthServic
     {
         var appId = Uri.EscapeDataString(settings.AppId);
         var msg = Uri.EscapeDataString(settings.Msg);
-        return $"https://{settings.ImpDomain}/icbcasia/imp/index.html" +
+        var pathBase = NormalizeImpPathBase(settings.ImpPathBase);
+        return $"https://{settings.ImpDomain}{pathBase}/index.html" +
                $"?toLogin=true&appId={appId}&msg={msg}#/login";
     }
 
@@ -77,8 +78,9 @@ public sealed class ImpSsoAuthService(HttpClient httpClient) : IImpSsoAuthServic
         CancellationToken cancellationToken)
     {
         var requestIp = ResolveRequestIp();
+        var pathBase = NormalizeImpPathBase(settings.ImpPathBase);
         var url =
-            $"https://{settings.ImpDomain}/icbcasia/imp/check_ssotoken?version={Uri.EscapeDataString(settings.Version)}";
+            $"https://{settings.ImpDomain}{pathBase}/check_ssotoken?version={Uri.EscapeDataString(settings.Version)}";
         var body =
             $"ssotoken={Uri.EscapeDataString(ssoToken)}" +
             $"&impappid={Uri.EscapeDataString(settings.AppId)}" +
@@ -114,5 +116,16 @@ public sealed class ImpSsoAuthService(HttpClient httpClient) : IImpSsoAuthServic
         }
 
         return "127.0.0.1";
+    }
+
+    internal static string NormalizeImpPathBase(string? pathBase)
+    {
+        if (string.IsNullOrWhiteSpace(pathBase))
+        {
+            return "/imp";
+        }
+
+        var normalized = pathBase.Trim().TrimEnd('/');
+        return normalized.StartsWith('/') ? normalized : "/" + normalized;
     }
 }
