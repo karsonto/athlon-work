@@ -124,9 +124,9 @@ public sealed class AppThemeResourceBuilderTests
 
             var leader = Assert.IsType<SolidColorBrush>(root["Brush.Teams.Leader"]);
             Assert.Equal(palette.Teams.Leader, leader.Color);
-            Assert.IsType<LinearGradientBrush>(root["Brush.Teams.AvatarLeader"]);
-            Assert.IsType<LinearGradientBrush>(root["Brush.Teams.AvatarWorker"]);
-            Assert.IsType<LinearGradientBrush>(root["Brush.Teams.OrgPreview"]);
+            Assert.IsType<SolidColorBrush>(root["Brush.Teams.AvatarLeader"]);
+            Assert.IsType<SolidColorBrush>(root["Brush.Teams.AvatarWorker"]);
+            Assert.IsType<SolidColorBrush>(root["Brush.Teams.OrgPreview"]);
             Assert.IsType<SolidColorBrush>(root["Brush.Teams.Worker"]);
             Assert.IsType<SolidColorBrush>(root["Brush.Teams.ErrorBorder"]);
         });

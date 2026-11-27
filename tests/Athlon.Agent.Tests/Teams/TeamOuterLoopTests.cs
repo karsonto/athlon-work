@@ -172,10 +172,10 @@ public sealed class TeamOuterLoopTests : IDisposable
                 "## Result\nstatus: completed\naccomplished:\n- work",
                 AgentSession.Create("mbr")));
 
-        // Progress callbacks can arrive on thread-pool threads after completion races;
-        // ConcurrentBag + snapshot avoids "Collection was modified" flakes.
+        // System.Progress<T> can post via SynchronizationContext and drop the final report
+        // before the test snapshots; use a synchronous reporter so every Report is visible.
         var reports = new ConcurrentBag<TeamRunProgress>();
-        var progress = new Progress<TeamRunProgress>(reports.Add);
+        var progress = new ImmediateProgress<TeamRunProgress>(reports.Add);
         var orch = CreateOrchestrator(executor);
         var began = await orch.BeginAsync(new TeamTaskStartRequest
         {
@@ -671,6 +671,11 @@ public sealed class TeamOuterLoopTests : IDisposable
 
             return await OnWorker(task, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private sealed class ImmediateProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
     }
 
     private sealed class NoOpLogger : IAppLogger

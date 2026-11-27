@@ -426,10 +426,11 @@ public sealed class ChatHtmlBuilderTests
         var surface = Surface();
 
         AssertContainsJs(surface, "case 'STATIC_ASSISTANT_HTML':");
+        AssertContainsJs(surface, "case 'ASSISTANT_STREAM_TEXT':");
         Assert.Contains("event.streaming === true", surface, StringComparison.Ordinal);
-        Assert.Contains("streaming !== true", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "applyAssistantStreamText(");
         AssertContainsJs(surface, "case 'TEXT_MESSAGE_CONTENT':");
-        // Live text display comes from STATIC_ASSISTANT_HTML, not plain textContent deltas.
+        // Live text display comes from ASSISTANT_STREAM_TEXT; Markdown finalize via STATIC_ASSISTANT_HTML.
         Assert.DoesNotContain(
             "appendMessage('assistant'",
             surface,

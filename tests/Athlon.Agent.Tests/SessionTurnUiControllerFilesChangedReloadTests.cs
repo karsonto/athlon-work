@@ -10,8 +10,9 @@ namespace Athlon.Agent.Tests;
 /// <summary>
 /// INV-3: while a turn still owns live FILES_CHANGED / TURN_ACTIVITY cards, a refresh-style
 /// reload is suppressed instead of re-rendering. A full replay mid-turn is what stacked a second
-/// files card next to the live one. The turn-end authoritative replay is what renders the
-/// canonical surface, so a suppressed refresh needs no deferred flush.
+/// files card next to the live one. Default turn-end skips authoritative replay
+/// (<see cref="SessionTurnUiController.ChatRenderTurnEndReplay"/> = false), so a suppressed
+/// refresh is not flushed at FinalizeTurn either.
 /// </summary>
 [Collection(TestCollections.Sta)]
 [Trait("Category", TestCategories.UsesSta)]
@@ -54,7 +55,41 @@ public sealed class SessionTurnUiControllerFilesChangedReloadTests
             timedOut: false,
             turnTimeoutMinutes: 30));
 
-        // Turn end renders the canonical surface exactly once.
+        // Default: no turn-end authoritative SyncChatView — live surface stays as sealed.
+        Assert.Equal(0, Volatile.Read(ref reloadCount));
+    }
+
+    [Fact]
+    public async Task FinalizeTurn_with_turn_end_replay_reloads_once()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var reloadCount = 0;
+        var ui = new SessionTurnUiController(dispatcher)
+        {
+            ChatRenderTurnEndReplay = true
+        };
+        ui.ReloadChatViewOverride = () =>
+        {
+            Interlocked.Increment(ref reloadCount);
+            return Task.CompletedTask;
+        };
+        ui.SetDisplayed(true);
+
+        var session = AgentSession.Create("turn-end-replay");
+        var callbacks = ui.BuildCallbacks(new LiveAgentSession(session));
+
+        await dispatcher.InvokeAsync(() => ui.ResetForTurn());
+        await EmitFileWrite(callbacks, "call-write-replay", "src/App.tsx");
+        await EmitPendingActivityTool(callbacks, "call-read-replay", "file_read", "src/Other.cs");
+        Assert.True(await dispatcher.InvokeAsync(() => ui.HasLiveFileEdits));
+
+        await dispatcher.InvokeAsync(() => ui.FinalizeTurn(
+            session,
+            [ChatMessage.Create(MessageRole.User, "edit it")],
+            cancelled: false,
+            timedOut: false,
+            turnTimeoutMinutes: 30));
+
         Assert.Equal(1, Volatile.Read(ref reloadCount));
     }
 
@@ -127,22 +162,21 @@ public sealed class SessionTurnUiControllerFilesChangedReloadTests
         await ui.RefreshDisplayForSettingsAsync();
         Assert.Equal(0, Volatile.Read(ref reloadCount));
 
-        // Turn end renders the canonical surface exactly once — the suppressed refresh above is
-        // not queued behind it (which would double-render).
+        // Default FinalizeTurn does not SyncChatView — the suppressed refresh is not flushed.
         await dispatcher.InvokeAsync(() => ui.FinalizeTurn(
             session,
             Array.Empty<ChatMessage>(),
             cancelled: false,
             timedOut: false,
             turnTimeoutMinutes: 30));
-        Assert.Equal(1, Volatile.Read(ref reloadCount));
+        Assert.Equal(0, Volatile.Read(ref reloadCount));
 
         // A later turn's refresh is suppressed on its own merits; nothing leaks from the first turn.
         await dispatcher.InvokeAsync(() => ui.ResetForTurn());
         await EmitPendingActivityTool(callbacks, "call-read-4", "file_read", "src/Another.cs");
         await ui.RefreshDisplayForSettingsAsync();
 
-        Assert.Equal(1, Volatile.Read(ref reloadCount));
+        Assert.Equal(0, Volatile.Read(ref reloadCount));
     }
 
     /// <summary>
