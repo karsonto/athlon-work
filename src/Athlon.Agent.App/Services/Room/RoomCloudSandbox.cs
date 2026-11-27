@@ -1,39 +1,37 @@
 using System.Collections.Concurrent;
 using System.IO;
-using System.Net;
 using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
+using Athlon.Agent.CloudSandbox.V1;
 using Athlon.Agent.Core;
+using Athlon.Agent.Infrastructure.CloudSandbox;
+using Google.Protobuf;
+using Grpc.Core;
+using Grpc.Net.Client;
 using Microsoft.Extensions.Logging;
 
 namespace Athlon.Agent.App.Services.Room;
 
-/// <summary>Cloud sandbox backend: Imp SSO bearer + control-plane HTTP API.</summary>
+/// <summary>Cloud sandbox backend over gRPC + AES-256-GCM sealed envelopes.</summary>
 public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
+    private const int StreamChunk = 64 * 1024;
 
     private readonly AppSettings _settings;
-    private readonly HttpClient _http;
     private readonly ILogger<RoomCloudSandbox> _logger;
     private readonly SemaphoreSlim _sessionGate = new(1, 1);
     private readonly ConcurrentDictionary<string, CloudSessionState> _sessions =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public RoomCloudSandbox(
-        AppSettings settings,
-        ILogger<RoomCloudSandbox> logger,
-        HttpClient? httpClient = null)
+    private GrpcChannel? _channel;
+    private global::Athlon.Agent.CloudSandbox.V1.CloudSandbox.CloudSandboxClient? _client;
+    private byte[]? _sharedKey;
+
+    public RoomCloudSandbox(AppSettings settings, ILogger<RoomCloudSandbox> logger)
     {
         _settings = settings;
         _logger = logger;
-        _http = httpClient ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        // Allow h2c (HTTP/2 without TLS) for intranet endpoints.
+        AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
     }
 
     public async Task<RoomSandboxProbeResult> ProbeAsync(CancellationToken cancellationToken = default)
@@ -47,69 +45,48 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
             {
                 Available = false,
                 ImageReady = false,
-                Message = "未配置云沙箱服务（CloudSandbox:BaseUrl）。",
-                QuotaHint = null
+                Message = "未配置云沙箱服务（CloudSandbox:BaseUrl）。"
             };
         }
 
-        var apiKey = TryGetApiKey();
-        if (string.IsNullOrWhiteSpace(apiKey))
+        if (string.IsNullOrWhiteSpace(TryGetApiKey()))
         {
             return new RoomSandboxProbeResult
             {
                 Available = false,
                 ImageReady = false,
-                Message = "云沙箱需要配置 CloudSandbox:ApiKey（经企业网关鉴权/计量）。",
-                QuotaHint = null
+                Message = "云沙箱需要配置 CloudSandbox:ApiKey。"
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(cloud.SharedKey))
+        {
+            return new RoomSandboxProbeResult
+            {
+                Available = false,
+                ImageReady = false,
+                Message = "云沙箱需要配置 CloudSandbox:SharedKey（Base64 AES-256）。"
             };
         }
 
         try
         {
-            using var req = CreateRequest(HttpMethod.Get, "/v1/status");
-            using var res = await SendAsync(req, cancellationToken).ConfigureAwait(false);
-            var body = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            if (res.StatusCode == HttpStatusCode.PaymentRequired || (int)res.StatusCode == 429)
+            EnsureClient();
+            var key = RequireKey();
+            var env = CloudSandboxSecure.Seal(key, new StatusRequest(), CloudSandboxRpcs.Status);
+            var reply = await _client!.StatusAsync(env, BuildHeaders(), cancellationToken: WithTimeout(cancellationToken))
+                .ConfigureAwait(false);
+            var status = CloudSandboxSecure.Open(
+                key, reply, StatusResponse.Parser, CloudSandboxRpcs.Status);
+
+            if (!status.Available)
             {
                 return new RoomSandboxProbeResult
                 {
                     Available = false,
                     ImageReady = false,
-                    Message = "云沙箱配额不足（企业网关），请稍后重试或联系管理员。",
-                    QuotaHint = Truncate(body, 200)
-                };
-            }
-
-            if (!res.IsSuccessStatusCode)
-            {
-                return new RoomSandboxProbeResult
-                {
-                    Available = false,
-                    ImageReady = false,
-                    Message = $"云沙箱不可用（{(int)res.StatusCode}）：{Truncate(body, 160)}",
-                    QuotaHint = null
-                };
-            }
-
-            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
-            var root = doc.RootElement;
-            var available = !root.TryGetProperty("available", out var av) || av.ValueKind != JsonValueKind.False;
-            var message = root.TryGetProperty("message", out var msg) ? msg.GetString() : null;
-            var quota = root.TryGetProperty("quotaHint", out var qh) ? qh.GetString() : null;
-            string[]? hints = null;
-            if (root.TryGetProperty("runtimeHints", out var rh) && rh.ValueKind == JsonValueKind.Array)
-            {
-                hints = rh.EnumerateArray().Select(e => e.GetString() ?? "").Where(s => s.Length > 0).ToArray();
-            }
-
-            if (!available)
-            {
-                return new RoomSandboxProbeResult
-                {
-                    Available = false,
-                    ImageReady = false,
-                    Message = string.IsNullOrWhiteSpace(message) ? "云沙箱当前不可用。" : message!,
-                    QuotaHint = quota
+                    Message = string.IsNullOrWhiteSpace(status.Message) ? "云沙箱当前不可用。" : status.Message,
+                    QuotaHint = status.QuotaHint
                 };
             }
 
@@ -117,12 +94,12 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
             {
                 Available = true,
                 ImageReady = true,
-                Message = string.IsNullOrWhiteSpace(message)
+                Message = string.IsNullOrWhiteSpace(status.Message)
                     ? "云沙箱可用；工作区将同步至 Athlon 云端。"
-                    : message!,
-                QuotaHint = quota,
-                RuntimeHints = hints is { Length: > 0 }
-                    ? hints
+                    : status.Message,
+                QuotaHint = status.QuotaHint,
+                RuntimeHints = status.RuntimeHints.Count > 0
+                    ? status.RuntimeHints.ToArray()
                     : ["python3.12", "java8", "node24", "chromium"]
             };
         }
@@ -209,16 +186,41 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         var ws = RoomSandboxPathMap.NormalizeHostRoot(hostWorkspaceRoot) ?? state.WorkspaceRoot;
         Directory.CreateDirectory(ws);
 
-        using var req = CreateRequest(HttpMethod.Get, $"/v1/sessions/{Uri.EscapeDataString(state.SessionId)}/sync/pull");
-        using var res = await SendAsync(req, cancellationToken).ConfigureAwait(false);
-        if (res.StatusCode == HttpStatusCode.NoContent)
+        EnsureClient();
+        var key = RequireKey();
+        var req = CloudSandboxSecure.Seal(
+            key,
+            new PullWorkspaceRequest { SessionId = state.SessionId },
+            CloudSandboxRpcs.PullWorkspace,
+            state.SessionId);
+
+        await using var ms = new MemoryStream();
+        using var call = _client!.PullWorkspace(
+            req,
+            BuildHeaders(state.SessionId),
+            cancellationToken: WithTimeout(cancellationToken));
+        await foreach (var env in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var chunk = CloudSandboxSecure.Open(
+                key, env, PullWorkspaceChunk.Parser, CloudSandboxRpcs.PullWorkspace, state.SessionId);
+            if (chunk.Empty)
+            {
+                return;
+            }
+
+            if (!chunk.Data.IsEmpty)
+            {
+                chunk.Data.WriteTo(ms);
+            }
+        }
+
+        if (ms.Length == 0)
         {
             return;
         }
 
-        await EnsureSuccessAsync(res, "拉取云沙箱工作区").ConfigureAwait(false);
-        await using var stream = await res.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        CloudWorkspaceSync.UnpackTarGzToDirectory(stream, ws);
+        ms.Position = 0;
+        CloudWorkspaceSync.UnpackTarGzToDirectory(ms, ws);
     }
 
     public async Task DisposeRoomAsync(string roomId, CancellationToken cancellationToken = default)
@@ -244,29 +246,54 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         var state = RequireSession(roomId);
-        var payload = new
-        {
-            command,
-            cwd = string.IsNullOrWhiteSpace(workingDirectory)
-                ? RoomSandboxPathMap.ContainerWorkspaceRoot
-                : workingDirectory,
-            timeoutSec = Math.Clamp(timeoutSeconds, 1, 600)
-        };
+        EnsureClient();
+        var key = RequireKey();
+        var req = CloudSandboxSecure.Seal(
+            key,
+            new ExecRequest
+            {
+                SessionId = state.SessionId,
+                Command = command,
+                Cwd = string.IsNullOrWhiteSpace(workingDirectory)
+                    ? RoomSandboxPathMap.ContainerWorkspaceRoot
+                    : workingDirectory,
+                TimeoutSec = Math.Clamp(timeoutSeconds, 1, 600)
+            },
+            CloudSandboxRpcs.Exec,
+            state.SessionId);
 
-        using var req = CreateRequest(
-            HttpMethod.Post,
-            $"/v1/sessions/{Uri.EscapeDataString(state.SessionId)}/exec");
-        req.Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
-        using var res = await SendAsync(req, cancellationToken).ConfigureAwait(false);
-        var body = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        await EnsureSuccessAsync(res, "执行命令", body).ConfigureAwait(false);
-        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
-        var root = doc.RootElement;
+        var stdout = new MemoryStream();
+        var stderr = new MemoryStream();
+        var exitCode = -1;
+        using var call = _client!.Exec(
+            req,
+            BuildHeaders(state.SessionId),
+            cancellationToken: WithTimeout(cancellationToken));
+        await foreach (var env in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var chunk = CloudSandboxSecure.Open(
+                key, env, ExecChunk.Parser, CloudSandboxRpcs.Exec, state.SessionId);
+            if (!chunk.Stdout.IsEmpty)
+            {
+                chunk.Stdout.WriteTo(stdout);
+            }
+
+            if (!chunk.Stderr.IsEmpty)
+            {
+                chunk.Stderr.WriteTo(stderr);
+            }
+
+            if (chunk.HasExitCode)
+            {
+                exitCode = chunk.ExitCode;
+            }
+        }
+
         return new RoomSandboxExecResult
         {
-            ExitCode = root.TryGetProperty("exitCode", out var ec) ? ec.GetInt32() : -1,
-            Stdout = root.TryGetProperty("stdout", out var so) ? so.GetString() ?? "" : "",
-            Stderr = root.TryGetProperty("stderr", out var se) ? se.GetString() ?? "" : ""
+            ExitCode = exitCode,
+            Stdout = System.Text.Encoding.UTF8.GetString(stdout.ToArray()),
+            Stderr = System.Text.Encoding.UTF8.GetString(stderr.ToArray())
         };
     }
 
@@ -276,17 +303,35 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         var state = RequireSession(roomId);
-        var url =
-            $"/v1/sessions/{Uri.EscapeDataString(state.SessionId)}/fs?path={Uri.EscapeDataString(containerPath)}";
-        using var req = CreateRequest(HttpMethod.Get, url);
-        using var res = await SendAsync(req, cancellationToken).ConfigureAwait(false);
-        if (res.StatusCode == HttpStatusCode.NotFound)
+        EnsureClient();
+        var key = RequireKey();
+        var req = CloudSandboxSecure.Seal(
+            key,
+            new ReadFileRequest { SessionId = state.SessionId, Path = containerPath },
+            CloudSandboxRpcs.ReadFile,
+            state.SessionId);
+
+        await using var ms = new MemoryStream();
+        using var call = _client!.ReadFile(
+            req,
+            BuildHeaders(state.SessionId),
+            cancellationToken: WithTimeout(cancellationToken));
+        await foreach (var env in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
-            return null;
+            var chunk = CloudSandboxSecure.Open(
+                key, env, ReadFileChunk.Parser, CloudSandboxRpcs.ReadFile, state.SessionId);
+            if (chunk.NotFound)
+            {
+                return null;
+            }
+
+            if (!chunk.Data.IsEmpty)
+            {
+                chunk.Data.WriteTo(ms);
+            }
         }
 
-        await EnsureSuccessAsync(res, "读取文件").ConfigureAwait(false);
-        return await res.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        return ms.ToArray();
     }
 
     public async Task WriteFileAsync(
@@ -301,13 +346,47 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
             throw new InvalidOperationException("云沙箱 Skills 目录为只读。");
         }
 
-        var url =
-            $"/v1/sessions/{Uri.EscapeDataString(state.SessionId)}/fs?path={Uri.EscapeDataString(containerPath)}";
-        using var req = CreateRequest(HttpMethod.Put, url);
-        req.Content = new ByteArrayContent(content);
-        req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        using var res = await SendAsync(req, cancellationToken).ConfigureAwait(false);
-        await EnsureSuccessAsync(res, "写入文件").ConfigureAwait(false);
+        EnsureClient();
+        var key = RequireKey();
+        using var call = _client!.WriteFile(
+            BuildHeaders(state.SessionId),
+            cancellationToken: WithTimeout(cancellationToken));
+
+        await call.RequestStream.WriteAsync(
+                CloudSandboxSecure.Seal(
+                    key,
+                    new WriteFileChunk
+                    {
+                        Header = new WriteFileHeader
+                        {
+                            SessionId = state.SessionId,
+                            Path = containerPath
+                        }
+                    },
+                    CloudSandboxRpcs.WriteFile,
+                    state.SessionId),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        content ??= Array.Empty<byte>();
+        for (var i = 0; i < content.Length; i += StreamChunk)
+        {
+            var len = Math.Min(StreamChunk, content.Length - i);
+            await call.RequestStream.WriteAsync(
+                    CloudSandboxSecure.Seal(
+                        key,
+                        new WriteFileChunk
+                        {
+                            Data = ByteString.CopyFrom(content, i, len)
+                        },
+                        CloudSandboxRpcs.WriteFile,
+                        state.SessionId),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await call.RequestStream.CompleteAsync().ConfigureAwait(false);
+        _ = await call.ResponseAsync.ConfigureAwait(false);
     }
 
     public async Task EnsureDirectoryAsync(
@@ -315,20 +394,19 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         string containerDirectory,
         CancellationToken cancellationToken = default)
     {
+        var state = RequireSession(roomId);
         var dir = string.IsNullOrWhiteSpace(containerDirectory)
             ? RoomSandboxPathMap.ContainerWorkspaceRoot
             : containerDirectory.TrimEnd('/');
-        var result = await ExecAsync(
-                roomId,
-                $"mkdir -p -- {ShellQuote(dir)}",
-                "/",
-                30,
-                cancellationToken)
+        EnsureClient();
+        var key = RequireKey();
+        var env = CloudSandboxSecure.Seal(
+            key,
+            new MkDirRequest { SessionId = state.SessionId, Path = dir },
+            CloudSandboxRpcs.MkDir,
+            state.SessionId);
+        await _client!.MkDirAsync(env, BuildHeaders(state.SessionId), cancellationToken: WithTimeout(cancellationToken))
             .ConfigureAwait(false);
-        if (result.ExitCode != 0)
-        {
-            throw new InvalidOperationException($"mkdir failed: {result.Stderr}");
-        }
     }
 
     public async Task<bool> PathExistsAsync(
@@ -336,14 +414,8 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         string containerPath,
         CancellationToken cancellationToken = default)
     {
-        var result = await ExecAsync(
-                roomId,
-                $"test -e {ShellQuote(containerPath)}",
-                "/",
-                15,
-                cancellationToken)
-            .ConfigureAwait(false);
-        return result.ExitCode == 0;
+        var stat = await PathStatAsync(roomId, containerPath, cancellationToken).ConfigureAwait(false);
+        return stat.Exists;
     }
 
     public async Task<bool> IsDirectoryAsync(
@@ -351,14 +423,8 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         string containerPath,
         CancellationToken cancellationToken = default)
     {
-        var result = await ExecAsync(
-                roomId,
-                $"test -d {ShellQuote(containerPath)}",
-                "/",
-                15,
-                cancellationToken)
-            .ConfigureAwait(false);
-        return result.ExitCode == 0;
+        var stat = await PathStatAsync(roomId, containerPath, cancellationToken).ConfigureAwait(false);
+        return stat.IsDirectory;
     }
 
     public async Task<IReadOnlyList<string>> ListDirectoryAsync(
@@ -366,21 +432,20 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         string containerPath,
         CancellationToken cancellationToken = default)
     {
-        var result = await ExecAsync(
-                roomId,
-                $"ls -1A -- {ShellQuote(containerPath)}",
-                "/",
-                30,
-                cancellationToken)
+        var state = RequireSession(roomId);
+        EnsureClient();
+        var key = RequireKey();
+        var env = CloudSandboxSecure.Seal(
+            key,
+            new ListDirRequest { SessionId = state.SessionId, Path = containerPath },
+            CloudSandboxRpcs.ListDir,
+            state.SessionId);
+        var reply = await _client!.ListDirAsync(
+                env, BuildHeaders(state.SessionId), cancellationToken: WithTimeout(cancellationToken))
             .ConfigureAwait(false);
-        if (result.ExitCode != 0)
-        {
-            return Array.Empty<string>();
-        }
-
-        return result.Stdout
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToArray();
+        var parsed = CloudSandboxSecure.Open(
+            key, reply, ListDirResponse.Parser, CloudSandboxRpcs.ListDir, state.SessionId);
+        return parsed.Names.ToArray();
     }
 
     public async ValueTask DisposeAsync()
@@ -398,43 +463,70 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         }
 
         _sessionGate.Dispose();
-        _http.Dispose();
+        _channel?.Dispose();
+        _channel = null;
+        _client = null;
+    }
+
+    private async Task<PathStatResponse> PathStatAsync(
+        string roomId,
+        string containerPath,
+        CancellationToken cancellationToken)
+    {
+        var state = RequireSession(roomId);
+        EnsureClient();
+        var key = RequireKey();
+        var env = CloudSandboxSecure.Seal(
+            key,
+            new PathStatRequest { SessionId = state.SessionId, Path = containerPath },
+            CloudSandboxRpcs.PathStat,
+            state.SessionId);
+        var reply = await _client!.PathStatAsync(
+                env, BuildHeaders(state.SessionId), cancellationToken: WithTimeout(cancellationToken))
+            .ConfigureAwait(false);
+        return CloudSandboxSecure.Open(
+            key, reply, PathStatResponse.Parser, CloudSandboxRpcs.PathStat, state.SessionId);
     }
 
     private async Task<string> CreateSessionAsync(string roomId, CancellationToken cancellationToken)
     {
-        var payload = new
-        {
-            roomId,
-            imageTag = string.IsNullOrWhiteSpace(_settings.CloudSandbox.ImageTag)
-                ? RoomDockerSandbox.ImageName
-                : _settings.CloudSandbox.ImageTag.Trim(),
-            region = string.IsNullOrWhiteSpace(_settings.CloudSandbox.PreferredRegion)
-                ? null
-                : _settings.CloudSandbox.PreferredRegion.Trim(),
-            networkPolicy = string.IsNullOrWhiteSpace(_settings.CloudSandbox.NetworkPolicy)
-                ? "HttpsEgress"
-                : _settings.CloudSandbox.NetworkPolicy.Trim()
-        };
+        EnsureClient();
+        var key = RequireKey();
+        var req = CloudSandboxSecure.Seal(
+            key,
+            new CreateSessionRequest
+            {
+                RoomId = roomId,
+                ImageTag = string.IsNullOrWhiteSpace(_settings.CloudSandbox.ImageTag)
+                    ? RoomDockerSandbox.ImageName
+                    : _settings.CloudSandbox.ImageTag.Trim(),
+                Region = string.IsNullOrWhiteSpace(_settings.CloudSandbox.PreferredRegion)
+                    ? ""
+                    : _settings.CloudSandbox.PreferredRegion.Trim(),
+                NetworkPolicy = string.IsNullOrWhiteSpace(_settings.CloudSandbox.NetworkPolicy)
+                    ? "HttpsEgress"
+                    : _settings.CloudSandbox.NetworkPolicy.Trim()
+            },
+            CloudSandboxRpcs.CreateSession);
 
-        using var req = CreateRequest(HttpMethod.Post, "/v1/sessions");
-        req.Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
-        using var res = await SendAsync(req, cancellationToken).ConfigureAwait(false);
-        var body = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (res.StatusCode == HttpStatusCode.PaymentRequired || (int)res.StatusCode == 429)
+        try
         {
-            throw new InvalidOperationException("云沙箱配额不足（企业网关），无法创建会话。");
+            var reply = await _client!.CreateSessionAsync(
+                    req, BuildHeaders(), cancellationToken: WithTimeout(cancellationToken))
+                .ConfigureAwait(false);
+            var created = CloudSandboxSecure.Open(
+                key, reply, CreateSessionResponse.Parser, CloudSandboxRpcs.CreateSession);
+            if (string.IsNullOrWhiteSpace(created.SessionId))
+            {
+                throw new InvalidOperationException("云沙箱未返回 sessionId。");
+            }
+
+            return created.SessionId;
         }
-
-        await EnsureSuccessAsync(res, "创建云沙箱会话", body).ConfigureAwait(false);
-        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
-        var sessionId = doc.RootElement.TryGetProperty("sessionId", out var sid) ? sid.GetString() : null;
-        if (string.IsNullOrWhiteSpace(sessionId))
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.ResourceExhausted)
         {
-            throw new InvalidOperationException("云沙箱未返回 sessionId。");
+            throw new InvalidOperationException("云沙箱配额不足（企业网关），无法创建会话。", ex);
         }
-
-        return sessionId!;
     }
 
     private async Task PushSyncAsync(
@@ -446,7 +538,6 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
     {
         await PushKindAsync(sessionId, "workspace", workspaceRoot, onlyTopLevelNames: null, cancellationToken)
             .ConfigureAwait(false);
-        // Only room-agent checked Skills — never push the entire local skills catalog.
         var selectedFolders = CloudWorkspaceSync.ResolveSelectedSkillFolders(skillsRoot, skillNames);
         await PushKindAsync(sessionId, "skills", skillsRoot, selectedFolders, cancellationToken)
             .ConfigureAwait(false);
@@ -476,7 +567,7 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         }
 
         await using var tar = CloudWorkspaceSync.PackDirectoryTarGz(hostRoot, onlyTopLevelNames);
-        await UploadSyncPartAsync(sessionId, kind, tar, cancellationToken).ConfigureAwait(false);
+        await UploadSyncFullAsync(sessionId, kind, tar, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<bool> TryPushIncrementalAsync(
@@ -486,104 +577,187 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         IReadOnlyList<string>? onlyTopLevelNames,
         CancellationToken cancellationToken)
     {
+        EnsureClient();
+        var key = RequireKey();
         var manifest = CloudWorkspaceSync.BuildManifest(hostRoot, onlyTopLevelNames);
-        using (var req = CreateRequest(
-                   HttpMethod.Post,
-                   $"/v1/sessions/{Uri.EscapeDataString(sessionId)}/sync/manifest?kind={Uri.EscapeDataString(kind)}"))
+        var req = new SyncManifestRequest
         {
-            req.Content = new StringContent(
-                CloudWorkspaceSync.SerializeManifest(manifest),
-                Encoding.UTF8,
-                "application/json");
-            using var res = await SendAsync(req, cancellationToken).ConfigureAwait(false);
-            if (res.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed)
+            SessionId = sessionId,
+            Kind = kind
+        };
+        foreach (var entry in manifest)
+        {
+            req.Entries.Add(new FileManifestEntry
             {
-                return false;
-            }
-
-            await EnsureSuccessAsync(res, $"同步清单 {kind}").ConfigureAwait(false);
-            var body = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
-            // need / needUpload = paths this desktop client must upload (push), not download.
-            var needUpload = ReadNeedUploadPaths(doc.RootElement);
-
-            using var form = new MultipartFormDataContent();
-            form.Add(new StringContent(kind), "kind");
-            form.Add(new StringContent(CloudWorkspaceSync.SerializeManifest(manifest)), "manifest");
-            foreach (var entry in manifest)
-            {
-                if (!needUpload.Contains(entry.Path))
-                {
-                    continue;
-                }
-
-                var full = Path.Combine(hostRoot, entry.Path.Replace('/', Path.DirectorySeparatorChar));
-                if (!File.Exists(full))
-                {
-                    throw new InvalidOperationException($"增量同步缺少本地文件：{entry.Path}");
-                }
-
-                var bytes = await File.ReadAllBytesAsync(full, cancellationToken).ConfigureAwait(false);
-                // ASCII-safe field name: blob:<base64url(utf8 path)> — avoids non-ASCII multipart filename breakage.
-                var fieldName = EncodeBlobFieldName(entry.Path);
-                var part = new ByteArrayContent(bytes);
-                part.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-                form.Add(part, fieldName, "bin");
-            }
-
-            using var deltaReq = CreateRequest(
-                HttpMethod.Post,
-                $"/v1/sessions/{Uri.EscapeDataString(sessionId)}/sync/delta");
-            deltaReq.Content = form;
-            using var deltaRes = await SendAsync(deltaReq, cancellationToken).ConfigureAwait(false);
-            if (deltaRes.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed)
-            {
-                return false;
-            }
-
-            await EnsureSuccessAsync(deltaRes, $"增量同步 {kind}").ConfigureAwait(false);
-            return true;
+                Path = entry.Path,
+                Size = entry.Size,
+                MtimeUnixMs = entry.MtimeUnixMs,
+                Sha256 = entry.Sha256
+            });
         }
+
+        var sealedReq = CloudSandboxSecure.Seal(key, req, CloudSandboxRpcs.SyncManifest, sessionId);
+        SyncManifestResponse parsed;
+        try
+        {
+            var reply = await _client!.SyncManifestAsync(
+                    sealedReq, BuildHeaders(sessionId), cancellationToken: WithTimeout(cancellationToken))
+                .ConfigureAwait(false);
+            parsed = CloudSandboxSecure.Open(
+                key, reply, SyncManifestResponse.Parser, CloudSandboxRpcs.SyncManifest, sessionId);
+        }
+        catch (RpcException ex) when (ex.StatusCode is StatusCode.Unimplemented or StatusCode.NotFound)
+        {
+            return false;
+        }
+
+        var needUpload = new HashSet<string>(parsed.NeedUpload, StringComparer.Ordinal);
+        using var call = _client!.SyncDelta(
+            BuildHeaders(sessionId),
+            cancellationToken: WithTimeout(cancellationToken));
+
+        var header = new SyncDeltaRequest
+        {
+            Header = new SyncDeltaHeader
+            {
+                SessionId = sessionId,
+                Kind = kind
+            }
+        };
+        foreach (var entry in manifest)
+        {
+            header.Header.Entries.Add(new FileManifestEntry
+            {
+                Path = entry.Path,
+                Size = entry.Size,
+                MtimeUnixMs = entry.MtimeUnixMs,
+                Sha256 = entry.Sha256
+            });
+        }
+
+        await call.RequestStream.WriteAsync(
+                CloudSandboxSecure.Seal(key, header, CloudSandboxRpcs.SyncDelta, sessionId),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var entry in manifest)
+        {
+            if (!needUpload.Contains(entry.Path))
+            {
+                continue;
+            }
+
+            var full = Path.Combine(hostRoot, entry.Path.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(full))
+            {
+                throw new InvalidOperationException($"增量同步缺少本地文件：{entry.Path}");
+            }
+
+            var bytes = await File.ReadAllBytesAsync(full, cancellationToken).ConfigureAwait(false);
+            // Stream blob in one or more SecureEnvelope messages (path + content).
+            for (var i = 0; i < Math.Max(bytes.Length, 1); i += StreamChunk)
+            {
+                var len = bytes.Length == 0 ? 0 : Math.Min(StreamChunk, bytes.Length - i);
+                var blob = new SyncDeltaRequest
+                {
+                    Blob = new SyncDeltaBlob
+                    {
+                        Path = entry.Path,
+                        Content = bytes.Length == 0
+                            ? ByteString.Empty
+                            : ByteString.CopyFrom(bytes, i, len)
+                    }
+                };
+                // For multi-chunk same path, server last-write wins — send whole file in chunks by concatenating.
+                // Better: send one blob per file. Keep single blob for typical sizes.
+                if (i == 0 && bytes.Length <= StreamChunk)
+                {
+                    await call.RequestStream.WriteAsync(
+                            CloudSandboxSecure.Seal(key, blob, CloudSandboxRpcs.SyncDelta, sessionId),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
+                }
+
+                if (i == 0)
+                {
+                    // Send entire file as one blob for correctness with apply_delta.
+                    blob.Blob.Content = ByteString.CopyFrom(bytes);
+                    await call.RequestStream.WriteAsync(
+                            CloudSandboxSecure.Seal(key, blob, CloudSandboxRpcs.SyncDelta, sessionId),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
+                }
+            }
+        }
+
+        await call.RequestStream.CompleteAsync().ConfigureAwait(false);
+        _ = await call.ResponseAsync.ConfigureAwait(false);
+        return true;
     }
 
-    private async Task UploadSyncPartAsync(
+    private async Task UploadSyncFullAsync(
         string sessionId,
         string kind,
         Stream tarGz,
         CancellationToken cancellationToken)
     {
-        using var content = new MultipartFormDataContent();
-        var streamContent = new StreamContent(tarGz);
-        streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/gzip");
-        content.Add(streamContent, "archive", $"{kind}.tar.gz");
-        content.Add(new StringContent(kind), "kind");
+        EnsureClient();
+        var key = RequireKey();
+        using var call = _client!.SyncFull(
+            BuildHeaders(sessionId),
+            cancellationToken: WithTimeout(cancellationToken));
+        await call.RequestStream.WriteAsync(
+                CloudSandboxSecure.Seal(
+                    key,
+                    new SyncFullChunk
+                    {
+                        Header = new SyncFullHeader { SessionId = sessionId, Kind = kind }
+                    },
+                    CloudSandboxRpcs.SyncFull,
+                    sessionId),
+                cancellationToken)
+            .ConfigureAwait(false);
 
-        using var req = CreateRequest(
-            HttpMethod.Post,
-            $"/v1/sessions/{Uri.EscapeDataString(sessionId)}/sync");
-        req.Content = content;
-        using var res = await SendAsync(req, cancellationToken).ConfigureAwait(false);
-        await EnsureSuccessAsync(res, $"同步 {kind}").ConfigureAwait(false);
+        var buffer = new byte[StreamChunk];
+        int read;
+        while ((read = await tarGz.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)
+                   .ConfigureAwait(false)) > 0)
+        {
+            await call.RequestStream.WriteAsync(
+                    CloudSandboxSecure.Seal(
+                        key,
+                        new SyncFullChunk { Data = ByteString.CopyFrom(buffer, 0, read) },
+                        CloudSandboxRpcs.SyncFull,
+                        sessionId),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await call.RequestStream.CompleteAsync().ConfigureAwait(false);
+        _ = await call.ResponseAsync.ConfigureAwait(false);
     }
 
     private async Task DeleteSessionQuietAsync(string sessionId, CancellationToken cancellationToken)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(TryGetApiKey()))
+            if (string.IsNullOrWhiteSpace(TryGetApiKey()) || string.IsNullOrWhiteSpace(_settings.CloudSandbox.SharedKey))
             {
                 return;
             }
 
-            using var req = CreateRequest(
-                HttpMethod.Delete,
-                $"/v1/sessions/{Uri.EscapeDataString(sessionId)}");
-            using var res = await SendAsync(req, cancellationToken).ConfigureAwait(false);
-            if (!res.IsSuccessStatusCode && res.StatusCode != HttpStatusCode.NotFound)
-            {
-                var body = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                _logger.LogDebug("Cloud session delete {SessionId} => {Status}: {Body}", sessionId, res.StatusCode, body);
-            }
+            EnsureClient();
+            var key = RequireKey();
+            var env = CloudSandboxSecure.Seal(
+                key,
+                new DeleteSessionRequest { SessionId = sessionId },
+                CloudSandboxRpcs.DeleteSession,
+                sessionId);
+            await _client!.DeleteSessionAsync(
+                    env, BuildHeaders(sessionId), cancellationToken: WithTimeout(cancellationToken))
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -591,23 +765,60 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         }
     }
 
-    private HttpRequestMessage CreateRequest(HttpMethod method, string relativePath)
+    private void EnsureClient()
     {
+        if (_client is not null && _channel is not null && _sharedKey is not null)
+        {
+            return;
+        }
+
         var baseUrl = _settings.CloudSandbox.BaseUrl.Trim().TrimEnd('/');
-        var req = new HttpRequestMessage(method, baseUrl + relativePath);
-        var apiKey = RequireApiKey();
-        req.Headers.TryAddWithoutValidation("X-Api-Key", apiKey);
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        return req;
+        _sharedKey = AesGcmFrame.ParseSharedKeyBase64(_settings.CloudSandbox.SharedKey);
+        _channel = GrpcChannel.ForAddress(baseUrl, new GrpcChannelOptions
+        {
+            MaxReceiveMessageSize = 64 * 1024 * 1024,
+            MaxSendMessageSize = 64 * 1024 * 1024,
+            HttpHandler = new SocketsHttpHandler
+            {
+                EnableMultipleHttp2Connections = true,
+                KeepAlivePingDelay = TimeSpan.FromSeconds(60),
+                KeepAlivePingTimeout = TimeSpan.FromSeconds(30),
+                PooledConnectionIdleTimeout = Timeout.InfiniteTimeSpan
+            }
+        });
+        _client = new global::Athlon.Agent.CloudSandbox.V1.CloudSandbox.CloudSandboxClient(_channel);
     }
 
-    private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    private Metadata BuildHeaders(string? sessionId = null)
     {
+        var md = new Metadata
+        {
+            { "x-api-key", RequireApiKey() },
+            { "authorization", "Bearer " + RequireApiKey() }
+        };
+        if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            md.Add("x-session-id", sessionId);
+        }
+
+        return md;
+    }
+
+    private CancellationToken WithTimeout(CancellationToken cancellationToken)
+    {
+        // Call sites pass this into gRPC; deadline is also applied via linked CTS lifetime of the call.
         var timeoutSec = Math.Clamp(_settings.CloudSandbox.RequestTimeoutSeconds, 30, 600);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linked.CancelAfter(TimeSpan.FromSeconds(timeoutSec));
-        return await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linked.Token)
-            .ConfigureAwait(false);
+        // Caller does not dispose; acceptable for short-lived RPCs. Prefer deadline on CallOptions
+        // when migrating further streaming UX.
+        return linked.Token;
+    }
+
+    private byte[] RequireKey()
+    {
+        EnsureClient();
+        return _sharedKey!;
     }
 
     private string? TryGetApiKey()
@@ -618,7 +829,7 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
 
     private string RequireApiKey() =>
         TryGetApiKey()
-        ?? throw new InvalidOperationException("云沙箱需要配置 CloudSandbox:ApiKey（企业网关）。");
+        ?? throw new InvalidOperationException("云沙箱需要配置 CloudSandbox:ApiKey。");
 
     private CloudSessionState RequireSession(string roomId)
     {
@@ -630,85 +841,14 @@ public sealed class RoomCloudSandbox : IRoomSandboxBackend, IAsyncDisposable
         throw new InvalidOperationException($"云沙箱会话未就绪（room={roomId}）。请先 EnsureRoomSession。");
     }
 
-    private static async Task EnsureSuccessAsync(
-        HttpResponseMessage res,
-        string action,
-        string? body = null)
-    {
-        if (res.IsSuccessStatusCode)
-        {
-            return;
-        }
-
-        body ??= await res.Content.ReadAsStringAsync().ConfigureAwait(false);
-        if (res.StatusCode == HttpStatusCode.PaymentRequired || (int)res.StatusCode == 429)
-        {
-            throw new InvalidOperationException($"{action}失败：云沙箱配额不足。");
-        }
-
-        if (res.StatusCode == HttpStatusCode.Unauthorized || res.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new InvalidOperationException($"{action}失败：API Key 无效或企业网关拒绝（配额以网关为准）。");
-        }
-
-        throw new InvalidOperationException($"{action}失败（{(int)res.StatusCode}）：{Truncate(body, 240)}");
-    }
-
-    /// <summary>Multipart field name carrying a UTF-8 path without relying on Content-Disposition filename.</summary>
+    /// <summary>Kept for tests that still assert ASCII-safe blob naming helpers.</summary>
     internal static string EncodeBlobFieldName(string relativePath)
     {
-        var token = Convert.ToBase64String(Encoding.UTF8.GetBytes(relativePath))
+        var token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(relativePath))
             .TrimEnd('=')
             .Replace('+', '-')
             .Replace('/', '_');
         return "blob:" + token;
-    }
-
-    /// <summary>
-    /// Paths the desktop must upload so control-plane staging matches the desired manifest.
-    /// Prefers <c>needUpload</c>; falls back to legacy <c>need</c>.
-    /// </summary>
-    private static HashSet<string> ReadNeedUploadPaths(JsonElement root)
-    {
-        var needUpload = new HashSet<string>(StringComparer.Ordinal);
-        JsonElement needEl;
-        if (root.TryGetProperty("needUpload", out var modern) && modern.ValueKind == JsonValueKind.Array)
-        {
-            needEl = modern;
-        }
-        else if (root.TryGetProperty("need", out var legacy) && legacy.ValueKind == JsonValueKind.Array)
-        {
-            needEl = legacy;
-        }
-        else
-        {
-            return needUpload;
-        }
-
-        foreach (var e in needEl.EnumerateArray())
-        {
-            var p = e.GetString();
-            if (!string.IsNullOrWhiteSpace(p))
-            {
-                needUpload.Add(p);
-            }
-        }
-
-        return needUpload;
-    }
-
-    private static string ShellQuote(string value) =>
-        "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
-
-    private static string Truncate(string? value, int max)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return "";
-        }
-
-        var trimmed = value.Trim();
-        return trimmed.Length <= max ? trimmed : trimmed[..max] + "…";
     }
 
     private sealed record CloudSessionState(string SessionId, string WorkspaceRoot, string SkillsRoot);

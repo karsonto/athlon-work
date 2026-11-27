@@ -1,21 +1,40 @@
 # Cloud Sandbox contract (desktop)
 
-OpenAPI: [v1.yaml](./v1.yaml)
+Proto (source of truth): copied from `athlon-cloud-sandbox/proto/athlon/cloud_sandbox/v1/sandbox.proto`
+into [`src/Athlon.Agent.Infrastructure/CloudSandbox/Proto/sandbox.proto`](../../src/Athlon.Agent.Infrastructure/CloudSandbox/Proto/sandbox.proto).
 
-Control plane lives in the separate repo `athlon-cloud-sandbox`.
-Desktop settings: `CloudSandbox:BaseUrl`, `CloudSandbox:ApiKey`, optional `PreferredRegion` / `NetworkPolicy` / `PreferIncrementalSync`.
+Control plane lives in the separate repo `athlon-cloud-sandbox` and speaks **gRPC** on port **9090** (h2c).
+Every request/response is wrapped in `SecureEnvelope` and sealed with **AES-256-GCM** using a shared key.
 
-Auth and metering are handled by the enterprise API gateway. This desktop client does not implement quota ledgers.
+## Desktop settings
 
-## Sync manifest (push-only)
+| Key | Meaning |
+|-----|---------|
+| `CloudSandbox:BaseUrl` | gRPC base URL, e.g. `http://cloud-sandbox.corp.local:9090` |
+| `CloudSandbox:ApiKey` | Caller identity (`x-api-key` / Bearer metadata) |
+| `CloudSandbox:SharedKey` | Base64 32-byte AES-256 key (required) |
+| `PreferredRegion` / `NetworkPolicy` / `PreferIncrementalSync` | unchanged |
 
-This is **not** an Athlon Skill package manifest. It describes files the desktop wants on the control-plane staging area.
+`IsConfigured` requires BaseUrl + ApiKey + SharedKey.
 
-1. Desktop builds a **desired** manifest: `{ path, size, mtimeUnixMs, sha256 }[]`.
-2. `POST /v1/sessions/{id}/sync/manifest` — server compares desired to **current staging**.
-3. Response `need` / `needUpload` = paths the **desktop must upload** (sha missing or changed). `mtimeUnixMs` is ignored for decisions.
-4. `POST /v1/sessions/{id}/sync/delta` — full desired manifest + blobs for `needUpload`; staging extras are deleted.
-   Blob parts use ASCII-safe field names `blob:<base64url(utf8 path)>` (not Content-Disposition filename), so non-ASCII names like `POC白皮书翻译版.pdf` survive multipart.
-5. Full `POST /v1/sessions/{id}/sync` (tar.gz) **replaces** staging the same way (clear + extract).
+## Encryption frame
 
-When skills are filtered by selected names, the filtered tree is the full desired set for `kind=skills` (unselected skills are removed from staging).
+```
+version(1)=0x01 | nonce(12) | ciphertext | tag(16)
+AAD = "<full_rpc_method>|<session_id>"
+```
+
+Session-scoped RPCs also send `x-session-id` metadata matching the AAD session id.
+`Status` / `CreateSession` use an empty session id in AAD.
+
+## Sync (push-only)
+
+Same semantics as before, over gRPC:
+
+1. Desktop builds desired manifest `{ path, size, mtimeUnixMs, sha256 }[]`.
+2. `SyncManifest` → `need_upload` paths the desktop must send.
+3. `SyncDelta` client-stream: header + blobs (full file per path).
+4. `SyncFull` client-stream: header + tar.gz chunks (fallback).
+5. `PullWorkspace` server-stream: tar.gz chunks after a turn.
+
+This sync manifest is unrelated to Athlon Skill package manifests.

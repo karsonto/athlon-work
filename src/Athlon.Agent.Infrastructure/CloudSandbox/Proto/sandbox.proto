@@ -1,0 +1,209 @@
+syntax = "proto3";
+
+package athlon.cloud_sandbox.v1;
+
+option csharp_namespace = "Athlon.Agent.CloudSandbox.V1";
+
+// Wire type for every RPC: AES-256-GCM sealed inner protobuf.
+// Frame layout: version(1)=0x01 | nonce(12) | ciphertext | tag(16)
+// AAD = "<full_rpc_method>|<session_id>" (session_id empty when N/A).
+message SecureEnvelope {
+  bytes frame = 1;
+}
+
+// ---- Inner plaintext messages (never sent unencrypted on the wire) ----
+
+message StatusRequest {}
+
+message RegionInfo {
+  string id = 1;
+  string display_name = 2;
+  bool available = 3;
+  string image_registry_prefix = 4;
+  int32 pool_ready = 5;
+}
+
+message StatusResponse {
+  bool available = 1;
+  string message = 2;
+  int32 pool_ready = 3;
+  optional int32 cold_start_p95_ms = 4;
+  optional double pool_hit_rate = 5;
+  repeated string runtime_hints = 6;
+  optional string image_digest = 7;
+  string default_region = 8;
+  repeated RegionInfo regions = 9;
+  repeated string network_policies = 10;
+  optional string quota_hint = 11;
+}
+
+message ListRegionsRequest {}
+
+message ListRegionsResponse {
+  repeated RegionInfo regions = 1;
+}
+
+message CreateSessionRequest {
+  string room_id = 1;
+  string image_tag = 2;
+  string region = 3;
+  string network_policy = 4;
+}
+
+message CreateSessionResponse {
+  string session_id = 1;
+  string region = 2;
+  string resolved_image = 3;
+  optional string image_digest = 4;
+  bool from_warm_pool = 5;
+  string network_policy = 6;
+}
+
+message DeleteSessionRequest {
+  string session_id = 1;
+}
+
+message DeleteSessionResponse {}
+
+message FileManifestEntry {
+  string path = 1;
+  int64 size = 2;
+  int64 mtime_unix_ms = 3;
+  string sha256 = 4;
+}
+
+message SyncManifestRequest {
+  string session_id = 1;
+  string kind = 2; // workspace | skills
+  repeated FileManifestEntry entries = 3;
+}
+
+message SyncManifestResponse {
+  repeated string need_upload = 1;
+  int32 current_count = 2;
+}
+
+// First stream message for SyncDelta; subsequent messages are SyncDeltaBlob.
+message SyncDeltaHeader {
+  string session_id = 1;
+  string kind = 2;
+  repeated FileManifestEntry entries = 3;
+}
+
+message SyncDeltaBlob {
+  string path = 1;
+  bytes content = 2;
+}
+
+message SyncDeltaRequest {
+  oneof payload {
+    SyncDeltaHeader header = 1;
+    SyncDeltaBlob blob = 2;
+  }
+}
+
+message SyncDeltaResponse {}
+
+// First chunk carries header; remaining chunks are raw tar.gz bytes.
+message SyncFullHeader {
+  string session_id = 1;
+  string kind = 2;
+}
+
+message SyncFullChunk {
+  oneof payload {
+    SyncFullHeader header = 1;
+    bytes data = 2;
+  }
+}
+
+message SyncFullResponse {}
+
+message PullWorkspaceRequest {
+  string session_id = 1;
+}
+
+message PullWorkspaceChunk {
+  bytes data = 1;
+  bool empty = 2; // true when no changes / empty archive signal
+}
+
+message ExecRequest {
+  string session_id = 1;
+  string command = 2;
+  string cwd = 3;
+  int32 timeout_sec = 4;
+}
+
+message ExecChunk {
+  bytes stdout = 1;
+  bytes stderr = 2;
+  optional int32 exit_code = 3; // set on final chunk
+}
+
+message ReadFileRequest {
+  string session_id = 1;
+  string path = 2;
+}
+
+message ReadFileChunk {
+  bytes data = 1;
+  bool not_found = 2;
+}
+
+message WriteFileHeader {
+  string session_id = 1;
+  string path = 2;
+}
+
+message WriteFileChunk {
+  oneof payload {
+    WriteFileHeader header = 1;
+    bytes data = 2;
+  }
+}
+
+message WriteFileResponse {}
+
+message PathStatRequest {
+  string session_id = 1;
+  string path = 2;
+}
+
+message PathStatResponse {
+  bool exists = 1;
+  bool is_directory = 2;
+}
+
+message ListDirRequest {
+  string session_id = 1;
+  string path = 2;
+}
+
+message ListDirResponse {
+  repeated string names = 1;
+}
+
+message MkDirRequest {
+  string session_id = 1;
+  string path = 2;
+}
+
+message MkDirResponse {}
+
+service CloudSandbox {
+  rpc Status(SecureEnvelope) returns (SecureEnvelope);
+  rpc ListRegions(SecureEnvelope) returns (SecureEnvelope);
+  rpc CreateSession(SecureEnvelope) returns (SecureEnvelope);
+  rpc DeleteSession(SecureEnvelope) returns (SecureEnvelope);
+  rpc SyncManifest(SecureEnvelope) returns (SecureEnvelope);
+  rpc SyncDelta(stream SecureEnvelope) returns (SecureEnvelope);
+  rpc SyncFull(stream SecureEnvelope) returns (SecureEnvelope);
+  rpc PullWorkspace(SecureEnvelope) returns (stream SecureEnvelope);
+  rpc Exec(SecureEnvelope) returns (stream SecureEnvelope);
+  rpc ReadFile(SecureEnvelope) returns (stream SecureEnvelope);
+  rpc WriteFile(stream SecureEnvelope) returns (SecureEnvelope);
+  rpc PathStat(SecureEnvelope) returns (SecureEnvelope);
+  rpc ListDir(SecureEnvelope) returns (SecureEnvelope);
+  rpc MkDir(SecureEnvelope) returns (SecureEnvelope);
+}
