@@ -1251,44 +1251,57 @@ function applyMarkdownHtml(node, html, enhance) {
   }
 }
 
+function enhanceStreamMarkdownRoot(node, enhance) {
+  if (!node || enhance === false) return;
+  enhanceTeamTraceBubbles(node);
+  if (state.batching) state.pendingEnhancementRoots.push(node);
+  else {
+    enhanceCodeBlocksNow(node);
+    scheduleMermaidRender(node);
+  }
+}
+
 function crossfadeStreamLinesToMarkdown(contentNode, html, enhance) {
   if (!contentNode) return;
   var reduceMotion = prefersReducedStreamMotion();
-  var lines = contentNode.querySelector('.stream-lines');
   var nextHtml = html || '';
+  // Idempotent: a second finalize must refresh the entering layer, not stack another copy.
+  var existingMd = contentNode.querySelector('.stream-md-enter');
+  if (existingMd) {
+    contentNode.dataset.streamDone = '1';
+    delete contentNode.dataset.streamActive;
+    contentNode.dataset.mdHtml = nextHtml;
+    existingMd.innerHTML = nextHtml;
+    enhanceStreamMarkdownRoot(existingMd, enhance);
+    return;
+  }
+  if (contentNode.dataset.streamDone === '1' && !contentNode.querySelector('.stream-lines')) {
+    applyMarkdownHtml(contentNode, nextHtml, enhance !== false);
+    return;
+  }
 
+  var lines = contentNode.querySelector('.stream-lines');
   contentNode.dataset.streamDone = '1';
   delete contentNode.dataset.streamActive;
   contentNode.dataset.mdHtml = nextHtml;
 
   if (!lines || reduceMotion) {
+    contentNode.classList.remove('is-stream-crossfading');
     contentNode.innerHTML = nextHtml;
     contentNode.classList.add('md-root');
-    if (enhance !== false) {
-      enhanceTeamTraceBubbles(contentNode);
-      if (state.batching) state.pendingEnhancementRoots.push(contentNode);
-      else {
-        enhanceCodeBlocksNow(contentNode);
-        scheduleMermaidRender(contentNode);
-      }
-    }
+    enhanceStreamMarkdownRoot(contentNode, enhance);
     return;
   }
 
+  // Overlay: lines fade out in-place while Markdown owns layout height — never stack two
+  // full copies of the reply as sibling blocks (that reads as "duplicate output").
+  contentNode.classList.add('is-stream-crossfading', 'md-root');
   var md = document.createElement('div');
   md.className = 'md-root stream-md-enter';
   md.innerHTML = nextHtml;
   lines.classList.add('stream-lines-exit');
   contentNode.appendChild(md);
-
-  if (enhance !== false) {
-    enhanceTeamTraceBubbles(md);
-    if (state.batching) state.pendingEnhancementRoots.push(md);
-    else {
-      enhanceCodeBlocksNow(md);
-      scheduleMermaidRender(md);
-    }
-  }
+  enhanceStreamMarkdownRoot(md, enhance);
 
   window.setTimeout(function () {
     if (!contentNode.isConnected) return;
@@ -1296,6 +1309,7 @@ function crossfadeStreamLinesToMarkdown(contentNode, html, enhance) {
     // Flatten: move md children into contentNode so selectors stay `.message-content`.
     while (md.firstChild) contentNode.insertBefore(md.firstChild, md);
     if (md.parentNode === contentNode) contentNode.removeChild(md);
+    contentNode.classList.remove('is-stream-crossfading');
     contentNode.classList.add('md-root');
   }, STREAM_MD_CROSSFADE_MS);
 }
@@ -1319,6 +1333,7 @@ function applyAssistantHtml(messageId, html, createIfMissing, streaming, respons
   var contentNode = row.querySelector('.bubble > .message-content');
   var nextHtml = html || '';
   var hasStreamLines = !!(contentNode && contentNode.querySelector('.stream-lines'));
+  var midCrossfade = !!(contentNode && contentNode.querySelector('.stream-md-enter'));
 
   if (streaming === true) {
     // Legacy streaming HTML path (tests / old hosts): fall back to plain markdown patch.
@@ -1329,7 +1344,8 @@ function applyAssistantHtml(messageId, html, createIfMissing, streaming, respons
     return;
   }
 
-  if (hasStreamLines) {
+  // Finalize: crossfade once from the line layer; later STATIC_ASSISTANT_HTML is idempotent.
+  if (hasStreamLines || midCrossfade) {
     crossfadeStreamLinesToMarkdown(contentNode, nextHtml, true);
   } else {
     applyMarkdownHtml(contentNode, nextHtml, true);

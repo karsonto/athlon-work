@@ -145,9 +145,14 @@ public sealed class SessionSnapshotProtocolTests
         Assert.Contains("host.insertBefore(line, pendingEl)", state, StringComparison.Ordinal);
         // JSON null seq must not skip nextLiveContentSeq.
         Assert.Contains("typeof seq === 'number' && isFinite(seq)", state, StringComparison.Ordinal);
+        // Finalize crossfade must overlay (not stack) and stay idempotent on re-entry.
+        Assert.Contains("is-stream-crossfading", state, StringComparison.Ordinal);
+        Assert.Contains("querySelector('.stream-md-enter')", state, StringComparison.Ordinal);
         Assert.Contains("@keyframes streamLineReveal", css, StringComparison.Ordinal);
         Assert.Contains(".stream-line.is-pending", css, StringComparison.Ordinal);
         Assert.Contains(".stream-lines-exit", css, StringComparison.Ordinal);
+        Assert.Contains(".message-content.is-stream-crossfading", css, StringComparison.Ordinal);
+        Assert.Contains("@keyframes streamMdReveal", css, StringComparison.Ordinal);
     }
 
     private static string ExtractFunction(string source, string signature)

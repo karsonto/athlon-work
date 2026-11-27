@@ -1161,13 +1161,28 @@ a.team-trace-bubble::before {
   opacity: 0.72;
   filter: blur(1.5px);
 }
+/* Finalize: overlay the fading line layer on Markdown so the reply is not duplicated in layout. */
+.message-content.is-stream-crossfading {
+  position: relative;
+}
 .stream-lines-exit {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
   opacity: 0;
   filter: blur(3px);
   pointer-events: none;
+  z-index: 1;
 }
 .stream-md-enter {
-  animation: streamLineReveal 200ms ease-out both;
+  position: relative;
+  z-index: 0;
+  animation: streamMdReveal 200ms ease-out both;
+}
+@keyframes streamMdReveal {
+  from { opacity: 0; filter: blur(3px); }
+  to { opacity: 1; filter: blur(0); }
 }
 @media (prefers-reduced-motion: reduce) {
   .stream-line-enter,
