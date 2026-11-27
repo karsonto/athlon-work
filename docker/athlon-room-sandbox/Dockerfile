@@ -5,6 +5,7 @@ FROM python:3.12-slim-bookworm
 ARG TARGETARCH
 
 ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Shanghai \
     JAVA_HOME=/opt/java/openjdk \
     PATH="/opt/java/openjdk/bin:/usr/local/bin:${PATH}" \
     ATHLON_CHROME_BIN=chromium \
@@ -14,8 +15,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl gnupg git bash coreutils findutils grep sed gawk xz-utils \
+        ca-certificates curl gnupg git bash coreutils findutils grep sed gawk xz-utils tzdata \
         chromium fonts-liberation fonts-noto-core \
+    && ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && echo Asia/Shanghai >/etc/timezone \
     && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && mkdir -p /opt/java /opt/athlon \

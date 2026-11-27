@@ -204,6 +204,7 @@ public sealed class RoomDockerSandbox : IRoomDockerSandbox, IAsyncDisposable
                     "HOME=/tmp/athlon-home",
                     "JAVA_HOME=/opt/java/openjdk",
                     "LANG=C.UTF-8",
+                    "TZ=Asia/Shanghai",
                     "ATHLON_CHROME_BIN=chromium",
                     "ATHLON_CDP=http://127.0.0.1:9222",
                     "ATHLON_CHROME_PROFILE=/tmp/athlon-chrome"
