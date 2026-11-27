@@ -62,10 +62,25 @@ public sealed class AppStartupIntegrationTest
         Assert.Contains(services, d => d.ServiceType == typeof(ISessionHost));
         Assert.Contains(services, d => d.ServiceType == typeof(INavigationService));
 
-        using var provider = services.BuildServiceProvider();
-        var chatPage = provider.GetRequiredService<ChatPageViewModel>();
-        var settings = provider.GetRequiredService<SettingsViewModel>();
-        Assert.NotNull(chatPage);
-        Assert.NotNull(settings);
+        var provider = services.BuildServiceProvider();
+        try
+        {
+            var chatPage = provider.GetRequiredService<ChatPageViewModel>();
+            var settings = provider.GetRequiredService<SettingsViewModel>();
+            Assert.NotNull(chatPage);
+            Assert.NotNull(settings);
+        }
+        finally
+        {
+            // RoomCloudSandbox is IAsyncDisposable-only; sync Dispose throws once the graph creates it.
+            if (provider is IAsyncDisposable asyncDisposable)
+            {
+                asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            else
+            {
+                provider.Dispose();
+            }
+        }
     }
 }
