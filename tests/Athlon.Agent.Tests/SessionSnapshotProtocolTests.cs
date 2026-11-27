@@ -141,6 +141,10 @@ public sealed class SessionSnapshotProtocolTests
         Assert.Contains("function crossfadeStreamLinesToMarkdown(", state, StringComparison.Ordinal);
         Assert.Contains("stream-line-enter", state, StringComparison.Ordinal);
         Assert.Contains("prefers-reduced-motion", state, StringComparison.Ordinal);
+        // New complete lines must insert before the blur pending tail (not append after it).
+        Assert.Contains("host.insertBefore(line, pendingEl)", state, StringComparison.Ordinal);
+        // JSON null seq must not skip nextLiveContentSeq.
+        Assert.Contains("typeof seq === 'number' && isFinite(seq)", state, StringComparison.Ordinal);
         Assert.Contains("@keyframes streamLineReveal", css, StringComparison.Ordinal);
         Assert.Contains(".stream-line.is-pending", css, StringComparison.Ordinal);
         Assert.Contains(".stream-lines-exit", css, StringComparison.Ordinal);

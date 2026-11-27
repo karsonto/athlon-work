@@ -1161,13 +1161,16 @@ function ensureStreamLinesHost(contentNode) {
  */
 function applyAssistantStreamText(messageId, text, createIfMissing, seq) {
   var row = findAssistantBubbleRow(messageId);
+  // JSON null must not win over nextLiveContentSeq — otherwise the bubble has no data-seq and
+  // later activity/files cards with real seqs can sort after it.
+  var placeSeq = (typeof seq === 'number' && isFinite(seq)) ? seq : undefined;
   if (!row && createIfMissing) {
     row = createAssistantRow(messageId);
-    registerEntry('msg:' + messageId, row, seq === undefined ? nextLiveContentSeq() : seq);
+    registerEntry('msg:' + messageId, row, placeSeq === undefined ? nextLiveContentSeq() : placeSeq);
     state.assistantStarted[messageId] = true;
     state.currentAssistantEl = row;
-  } else if (row && seq !== undefined) {
-    insertBySeq(row, seq);
+  } else if (row && placeSeq !== undefined) {
+    insertBySeq(row, placeSeq);
   }
   if (!row) return;
 
@@ -1181,14 +1184,18 @@ function applyAssistantStreamText(messageId, text, createIfMissing, seq) {
 
   var split = splitStreamVisualLines(text);
   var reduceMotion = prefersReducedStreamMotion();
+  var pendingEl = host.querySelector('.stream-line.is-pending');
   var existingComplete = host.querySelectorAll('.stream-line:not(.is-pending)');
   var already = existingComplete.length;
 
+  // Insert new complete lines *before* the pending blur fragment so the soft-focus tail
+  // always stays at the bottom of the stream host.
   for (var i = already; i < split.complete.length; i++) {
     var line = document.createElement('div');
     line.className = 'stream-line' + (reduceMotion ? '' : ' stream-line-enter');
     line.textContent = split.complete[i];
-    host.appendChild(line);
+    if (pendingEl) host.insertBefore(line, pendingEl);
+    else host.appendChild(line);
   }
 
   // Drop surplus complete lines if the host sent a shorter snapshot (rare).
@@ -1198,11 +1205,14 @@ function applyAssistantStreamText(messageId, text, createIfMissing, seq) {
     completeNodes = host.querySelectorAll('.stream-line:not(.is-pending)');
   }
 
-  var pendingEl = host.querySelector('.stream-line.is-pending');
+  pendingEl = host.querySelector('.stream-line.is-pending');
   if (split.pending) {
     if (!pendingEl) {
       pendingEl = document.createElement('div');
       pendingEl.className = 'stream-line is-pending';
+      host.appendChild(pendingEl);
+    } else if (pendingEl.nextSibling) {
+      // Keep the blur tail last even if an earlier path appended after it.
       host.appendChild(pendingEl);
     }
     if (pendingEl.textContent !== split.pending) {
@@ -1292,15 +1302,17 @@ function crossfadeStreamLinesToMarkdown(contentNode, html, enhance) {
 
 function applyAssistantHtml(messageId, html, createIfMissing, streaming, responseDurationMs, seq) {
   let row = findAssistantBubbleRow(messageId);
+  // Treat JSON null like "missing" so live finalize still claims a content slot.
+  var placeSeq = (typeof seq === 'number' && isFinite(seq)) ? seq : undefined;
   if (!row && createIfMissing) {
     row = createAssistantRow(messageId);
     // A live assistant bubble claims the next content slot; a replayed one carries its seq so it
     // lands in the same place the streamed bubble occupied.
-    registerEntry('msg:' + messageId, row, seq === undefined ? nextLiveContentSeq() : seq);
+    registerEntry('msg:' + messageId, row, placeSeq === undefined ? nextLiveContentSeq() : placeSeq);
     state.assistantStarted[messageId] = true;
     state.currentAssistantEl = row;
-  } else if (row && seq !== undefined) {
-    insertBySeq(row, seq);
+  } else if (row && placeSeq !== undefined) {
+    insertBySeq(row, placeSeq);
   }
   if (!row) return;
   // Query content on the row itself — do not re-query document (breaks DocumentFragment batches).
