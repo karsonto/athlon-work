@@ -165,7 +165,10 @@ public sealed class ChatDocumentAttachmentExtractor : IChatDocumentAttachmentExt
 
     private static void ResizeJpegInPlace(string path, int maxDimension, int quality)
     {
-        using var input = SKBitmap.Decode(path);
+        // Decode from bytes so Skia does not keep a Windows exclusive lock on `path`
+        // while we rewrite the same file (CI flake: IOException "used by another process").
+        var originalBytes = File.ReadAllBytes(path);
+        using var input = SKBitmap.Decode(originalBytes);
         if (input is null)
         {
             return;
@@ -174,6 +177,7 @@ public sealed class ChatDocumentAttachmentExtractor : IChatDocumentAttachmentExt
         var scale = Math.Min(1.0, maxDimension / (double)Math.Max(input.Width, input.Height));
         SKBitmap bitmap = input;
         SKBitmap? scaled = null;
+        SKData? encoded = null;
         try
         {
             if (scale < 0.999)
@@ -188,18 +192,22 @@ public sealed class ChatDocumentAttachmentExtractor : IChatDocumentAttachmentExt
             }
 
             using var image = SKImage.FromBitmap(bitmap);
-            using var data = image.Encode(SKEncodedImageFormat.Jpeg, quality);
-            if (data is null)
+            encoded = image.Encode(SKEncodedImageFormat.Jpeg, quality);
+            if (encoded is null)
             {
                 return;
             }
-
-            using var output = File.Open(path, FileMode.Create, FileAccess.Write);
-            data.SaveTo(output);
         }
         finally
         {
             scaled?.Dispose();
+        }
+
+        // Bitmaps are released before truncate/rewrite so the destination path is free.
+        using (encoded)
+        using (var output = File.Open(path, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            encoded.SaveTo(output);
         }
     }
 
