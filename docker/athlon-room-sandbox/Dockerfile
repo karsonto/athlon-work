@@ -1,5 +1,8 @@
-# Athlon room sandbox: Python 3.12 + JDK 8 + Node 24 + Chromium (linux/amd64)
+# Athlon room sandbox: Python 3.12 + JDK 8 + Node 24 + Chromium
+# CI publishes karsonto/athlon-room-sandbox:2 (linux/amd64 + linux/arm64).
 FROM python:3.12-slim-bookworm
+
+ARG TARGETARCH
 
 ENV DEBIAN_FRONTEND=noninteractive \
     JAVA_HOME=/opt/java/openjdk \
@@ -16,7 +19,20 @@ RUN apt-get update \
     && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && mkdir -p /opt/java /opt/athlon \
-    && curl -fsSL "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u432-b06/OpenJDK8U-jdk_x64_linux_hotspot_8u432b06.tar.gz" \
+    && arch="$TARGETARCH" \
+    && if [ -z "$arch" ]; then \
+         case "$(uname -m)" in \
+           x86_64) arch=amd64 ;; \
+           aarch64|arm64) arch=arm64 ;; \
+           *) arch=amd64 ;; \
+         esac; \
+       fi \
+    && case "$arch" in \
+         amd64) jdk_arch=x64 ;; \
+         arm64) jdk_arch=aarch64 ;; \
+         *) jdk_arch=x64 ;; \
+       esac \
+    && curl -fsSL "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u432-b06/OpenJDK8U-jdk_${jdk_arch}_linux_hotspot_8u432b06.tar.gz" \
         | tar -xz -C /opt/java \
     && ln -s /opt/java/jdk8u432-b06 /opt/java/openjdk \
     && pip install --no-cache-dir numpy pandas openpyxl python-docx Pillow websocket-client \
